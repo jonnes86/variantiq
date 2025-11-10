@@ -2,25 +2,15 @@
   "name": "variant-iq",
   "private": true,
   "scripts": {
-    "build": "remix vite:build",
-    "dev": "shopify app dev",
-    "config:link": "shopify app config link",
-    "generate": "shopify app generate",
-    "deploy": "shopify app deploy",
-    "config:use": "shopify app config use",
-    "env": "shopify app env",
-    "start": "remix-serve ./build/server/index.js",
-    "docker-start": "npm run setup && npm run start",
-    "setup": "prisma generate && prisma migrate deploy",
-    "lint": "eslint --cache --cache-location ./node_modules/.cache/eslint .",
-    "shopify": "shopify",
-    "prisma": "prisma",
-    "graphql-codegen": "graphql-codegen",
-    "vite": "vite"
-  },
+	"dev": "prisma db push && shopify app dev",
+	"build": "remix vite:build",
+	"start": "prisma migrate deploy && node server.js",
+	"postinstall": "prisma generate",
+	"migrate:deploy": "prisma migrate deploy"
+},
   "type": "module",
   "engines": {
-    "node": "^18.20 || ^20.10 || >=21.0.0"
+	"node": ">=20.10.0"
   },
   "dependencies": {
     "@prisma/client": "^6.19.0",

@@ -8,27 +8,45 @@ datasource db {
 }
 
 model Session {
-  id        String   @id @default(cuid())
-  shop      String   @index
-  data      Json
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            String   @id
+  shop          String
+  state         String
+  isOnline      Boolean  @default(false)
+  scope         String?
+  expires       DateTime?
+  accessToken   String   @default("")
+  userId        BigInt?
+  firstName     String?
+  lastName      String?
+  email         String?
+  accountOwner  Boolean? @default(false)
+  locale        String?
+  collaborator  Boolean? @default(false)
+  emailVerified Boolean? @default(false)
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([shop])
 }
+
 
 model Template {
   id        String   @id @default(cuid())
-  shop      String   @index
+  shop      String
   name      String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   fields    Field[]
   rules     Rule[]
   links     ProductTemplateLink[]
+
+  @@index([shop])
 }
 
 model Field {
   id          String   @id @default(cuid())
-  templateId  String   @index
+  templateId  String
   type        String   // text | select | radio | checkbox
   name        String
   label       String
@@ -36,23 +54,31 @@ model Field {
   required    Boolean  @default(false)
   sort        Int      @default(0)
   template    Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId])
 }
 
 model Rule {
   id          String   @id @default(cuid())
-  templateId  String   @index
+  templateId  String
   expression  String   // your DSL/JSON for conditions
   action      String   // show | hide | require | disable | limit
   payloadJson Json?
   sort        Int      @default(0)
   template    Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId])
 }
 
 model ProductTemplateLink {
   id          String   @id @default(cuid())
-  shop        String   @index
-  productGid  String   @index // gid://shopify/Product/...
-  templateId  String   @index
+  shop        String
+  productGid  String   // gid://shopify/Product/...
+  templateId  String
   template    Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
   createdAt   DateTime @default(now())
+
+  @@index([shop])
+  @@index([productGid])
+  @@index([templateId])
 }
