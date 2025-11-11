@@ -1,3 +1,8 @@
 .cache
 build
 node_modules
+node_modules
+.git
+.shopify
+**/*.log
+**/.DS_Store
