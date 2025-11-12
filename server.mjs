@@ -4,6 +4,8 @@ import { createRequestHandler } from "@remix-run/node";
 import * as build from "./build/server/index.js";
 
 const handler = createRequestHandler({ build, mode: process.env.NODE_ENV });
+const PORT = process.env.PORT || 8080;
+const HOST = "0.0.0.0";  // Add this line
 
 createServer(async (req, res) => {
   try {
@@ -12,7 +14,6 @@ createServer(async (req, res) => {
       method: req.method,
       headers: req.headers,
       body: req.method !== "GET" && req.method !== "HEAD" ? req : undefined,
-      // Node 20 supports fetch streams; duplex hint avoids a warning.
       duplex: "half",
     });
 
@@ -38,6 +39,6 @@ createServer(async (req, res) => {
     res.statusCode = 500;
     res.end("Server error");
   }
-}).listen(process.env.PORT || 8080, () => {
-  console.log(`✅ Remix server listening on ${process.env.PORT || 3000}`);
+}).listen(PORT, HOST, () => {  // Change this line - add HOST
+  console.log(`✅ Remix server listening on ${HOST}:${PORT}`);  // Update log
 });
