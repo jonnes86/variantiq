@@ -2,11 +2,11 @@
 import pkg from "@prisma/client";
 const { PrismaClient } = pkg;
 
-let prisma: PrismaClient;
+let prisma: InstanceType<typeof PrismaClient>;
 
 declare global {
   // eslint-disable-next-line no-var
-  var __prisma: PrismaClient | undefined;
+  var __prisma: InstanceType<typeof PrismaClient> | undefined;
 }
 
 if (process.env.NODE_ENV === "production") {
@@ -16,4 +16,5 @@ if (process.env.NODE_ENV === "production") {
   global.__prisma = prisma;
 }
 
-export { prisma };
+export { prisma };         // named export
+export default prisma;     // default export to match existing imports
