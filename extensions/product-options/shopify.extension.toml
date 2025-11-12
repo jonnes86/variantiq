@@ -1,3 +1,12 @@
-extensions = [
-  { type = "theme", handle = "product-options" }
-]
+name = "product-options"
+
+uid = "c91bbac7-35ce-bbfe-5fe9-fdf4653564c68cd829f3"
+
+type = "theme"
+metafields = []
+
+[extension_points.product]
+
+[[extensions]]
+type = "theme"
+handle = "product-options"
