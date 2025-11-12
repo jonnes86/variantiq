@@ -1,11 +1,21 @@
 // server.mjs
 import { createServer } from "node:http";
 import { createRequestHandler } from "@remix-run/node";
-import * as build from "./build/server/index.js";
+
+const PORT = process.env.PORT || 8080;
+const HOST = "0.0.0.0";
+
+// Import the build dynamically with better error handling
+let build;
+try {
+  build = await import("./build/server/index.js");
+} catch (error) {
+  console.error("Failed to load build:", error);
+  console.error("Build path:", "./build/server/index.js");
+  process.exit(1);
+}
 
 const handler = createRequestHandler({ build, mode: process.env.NODE_ENV });
-const PORT = process.env.PORT || 8080;
-const HOST = "0.0.0.0";  // Add this line
 
 createServer(async (req, res) => {
   try {
@@ -39,6 +49,6 @@ createServer(async (req, res) => {
     res.statusCode = 500;
     res.end("Server error");
   }
-}).listen(PORT, HOST, () => {  // Change this line - add HOST
-  console.log(`✅ Remix server listening on ${HOST}:${PORT}`);  // Update log
+}).listen(PORT, HOST, () => {
+  console.log(`✅ Remix server listening on ${HOST}:${PORT}`);
 });
