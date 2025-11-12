@@ -38,6 +38,6 @@ createServer(async (req, res) => {
     res.statusCode = 500;
     res.end("Server error");
   }
-}).listen(process.env.PORT || 3000, () => {
+}).listen(process.env.PORT || 8080, () => {
   console.log(`✅ Remix server listening on ${process.env.PORT || 3000}`);
 });
