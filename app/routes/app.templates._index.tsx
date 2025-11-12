@@ -3,6 +3,7 @@ import { useLoaderData, Form } from "@remix-run/react";
 import { Page, Card, Text, TextField, Button, BlockStack, InlineGrid } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 import { prisma } from "../db.server";
+import { useState } from "react";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const { session } = await authenticate.admin(request);
@@ -24,36 +25,59 @@ export async function action({ request }: ActionFunctionArgs) {
 
 export default function TemplatesIndex() {
   const { templates } = useLoaderData<typeof loader>();
+  const [templateName, setTemplateName] = useState("");
+  
   return (
-    <Page title="Templates" primaryAction={{ content: "New Template", url: "#create" }}>
-      <Card id="create">
-        <BlockStack gap="400">
-          <Text as="h2" variant="headingMd">Create a new template</Text>
-          <Form method="post">
-            <InlineGrid columns={["1fr", "auto"]} gap="200">
-              <TextField label="Name" name="name" autoComplete="off" />
-              <Button submit>Save</Button>
-            </InlineGrid>
-          </Form>
-        </BlockStack>
-      </Card>
+    <Page title="Templates">
+      <BlockStack gap="400">
+        <Card>
+          <BlockStack gap="400">
+            <Text as="h2" variant="headingMd">Create a new template</Text>
+            <Form method="post">
+              <InlineGrid columns={["1fr", "auto"]} gap="200">
+                <TextField 
+                  label="Name" 
+                  name="name" 
+                  value={templateName}
+                  onChange={setTemplateName}
+                  autoComplete="off"
+                  placeholder="e.g., T-Shirt Customization"
+                />
+                <Button submit disabled={!templateName.trim()}>Create Template</Button>
+              </InlineGrid>
+            </Form>
+          </BlockStack>
+        </Card>
 
-      <Card>
-        <BlockStack gap="200">
-          <Text as="h2" variant="headingMd">Your templates</Text>
-          {templates.length === 0 ? (
-            <Text as="p" tone="subdued">No templates yet — create your first one above.</Text>
-          ) : (
-            <ul style={{margin:0, paddingLeft: "1rem"}}>
-              {templates.map((t: any) => (
-                <li key={t.id}>
-                  <a href={`/app/templates/${t.id}`}>{t.name}</a> &middot; updated {new Date(t.updatedAt).toLocaleString()}
-                </li>
-              ))}
-            </ul>
-          )}
-        </BlockStack>
-      </Card>
+        <Card>
+          <BlockStack gap="200">
+            <Text as="h2" variant="headingMd">Your templates</Text>
+            {templates.length === 0 ? (
+              <Text as="p" tone="subdued">No templates yet — create your first one above.</Text>
+            ) : (
+              <BlockStack gap="300">
+                {templates.map((t: any) => (
+                  <Card key={t.id}>
+                    <InlineGrid columns={["1fr", "auto"]} gap="200">
+                      <BlockStack gap="100">
+                        <Text as="h3" variant="headingMd">
+                          <a href={`/app/templates/${t.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+                            {t.name}
+                          </a>
+                        </Text>
+                        <Text as="p" tone="subdued" variant="bodySm">
+                          Updated {new Date(t.updatedAt).toLocaleDateString()}
+                        </Text>
+                      </BlockStack>
+                      <Button url={`/app/templates/${t.id}`}>Edit</Button>
+                    </InlineGrid>
+                  </Card>
+                ))}
+              </BlockStack>
+            )}
+          </BlockStack>
+        </Card>
+      </BlockStack>
     </Page>
   );
 }
