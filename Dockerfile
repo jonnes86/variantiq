@@ -21,13 +21,9 @@ WORKDIR /app
 ENV NODE_ENV=production
 RUN addgroup -S nodejs && adduser -S nodeuser -G nodejs
 
-# Copy from build stage
 COPY --from=build /app/build ./build
 COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/server.mjs ./server.mjs
 COPY --from=build /app/package.json ./package.json
-
-# Copy prisma from source (not from build)
 COPY prisma ./prisma
 
 EXPOSE 8080
