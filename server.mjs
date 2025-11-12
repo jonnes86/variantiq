@@ -9,6 +9,10 @@ const HOST = "0.0.0.0";
 let buildModule;
 try {
   buildModule = await import("./build/server/index.js");
+  console.log("Build module keys:", Object.keys(buildModule));
+  console.log("Has default?", !!buildModule.default);
+  console.log("Build module.default keys:", buildModule.default ? Object.keys(buildModule.default) : "no default");
+  console.log("Routes:", buildModule.default?.routes || buildModule.routes);
 } catch (error) {
   console.error("Failed to load build:", error);
   process.exit(1);
@@ -16,6 +20,9 @@ try {
 
 // Use .default to get the actual build
 const build = buildModule.default || buildModule;
+
+console.log("Final build object keys:", Object.keys(build));
+console.log("Final build.routes:", build.routes);
 
 const handler = createRequestHandler({ build, mode: process.env.NODE_ENV });
 
