@@ -24,3 +24,5 @@ database.sqlite
 .shopify/*
 .shopify.lock
 /.shopify/
+*.zip
+build/
