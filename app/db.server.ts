@@ -1,19 +1,19 @@
 // app/db.server.ts
-import { PrismaClient } from "@prisma/client";
+import pkg from "@prisma/client";
+const { PrismaClient } = pkg;
 
 let prisma: PrismaClient;
 
 declare global {
   // eslint-disable-next-line no-var
-  var __db: PrismaClient | undefined;
+  var __prisma: PrismaClient | undefined;
 }
 
 if (process.env.NODE_ENV === "production") {
   prisma = new PrismaClient();
 } else {
-  if (!global.__db) global.__db = new PrismaClient();
-  prisma = global.__db;
+  prisma = global.__prisma ?? new PrismaClient();
+  global.__prisma = prisma;
 }
 
 export { prisma };
-export default prisma; // <-- default export to match your import
