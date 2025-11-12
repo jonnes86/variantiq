@@ -1,26 +1,40 @@
-# ---- build stage ----
+# ---------- deps ----------
+FROM node:20-alpine AS deps
+WORKDIR /app
+ENV CI=1
+# only package manifests first
+COPY package.json package-lock.json ./
+# don't run postinstall yet (prisma generate)
+RUN npm ci --ignore-scripts
+
+# ---------- build ----------
 FROM node:20-alpine AS build
 WORKDIR /app
 ENV NODE_ENV=production
-# ensure postinstall doesn't run before prisma/schema exists
-COPY package.json package-lock.json ./
-RUN npm ci
+# use the deps node_modules
+COPY --from=deps /app/node_modules ./node_modules
+# copy prisma first so we can generate the client
 COPY prisma ./prisma
 RUN npx prisma generate
+# now copy the rest and build
 COPY . .
 RUN npm run build
 
-# ---- runtime stage ----
+# ---------- runtime ----------
 FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
-ENV HOST=0.0.0.0
-# Railway sets PORT, don't hardcode
-COPY --from=build /app/node_modules ./node_modules
+# optional non-root user
+RUN addgroup -S nodejs && adduser -S nodeuser -G nodejs
+# bring only what we need to run
 COPY --from=build /app/build ./build
 COPY --from=build /app/prisma ./prisma
-# If you keep any public assets:
-# COPY --from=build /app/public ./public
+COPY --from=deps  /app/node_modules ./node_modules
+COPY package.json ./
 
-# Start: apply DB migrations then run the server
-CMD ["sh", "-c", "node -v && npm run start"]
+EXPOSE 3000
+# simple healthcheck hitting your /healthz route
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 CMD node -e "require('http').get('http://localhost:3000/healthz', r => process.exit(r.statusCode===200?0:1)).on('error', ()=>process.exit(1))"
+
+# run migrations then serve Remix build
+CMD ["sh","-lc","prisma migrate deploy && remix-serve ./build/server/index.js"]
