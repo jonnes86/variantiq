@@ -17,13 +17,12 @@ RUN npm run build
 FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
-# bring in prod deps
 COPY --from=deps /app/node_modules ./node_modules
-# bring in built assets + public + server entry
 COPY --from=build /app/build ./build
 COPY --from=build /app/public ./public
-COPY --from=build /app/server.mjs ./server.mjs
 COPY package*.json ./
+EXPOSE 8080
+CMD ["npm","start"]
 
 EXPOSE 3000
 CMD ["npm","start"]
