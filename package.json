@@ -4,7 +4,7 @@
   "scripts": {
     "dev": "prisma db push && shopify app dev",
     "build": "remix vite:build",
-    "start": "prisma migrate deploy && node server.mjs",
+    "start": "prisma migrate deploy && remix-serve ./build/server/index.js",
     "postinstall": "prisma generate",
     "migrate:deploy": "prisma migrate deploy"
   },

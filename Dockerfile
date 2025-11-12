@@ -1,22 +1,26 @@
-FROM node:20-alpine
-
+# ---- build stage ----
+FROM node:20-alpine AS build
 WORKDIR /app
-
-# Copy only package files first for better layer caching
-COPY package.json package-lock.json* ./
-
-# ✅ Copy Prisma schema EARLY so postinstall (prisma generate) can run successfully
+ENV NODE_ENV=production
+# ensure postinstall doesn't run before prisma/schema exists
+COPY package.json package-lock.json ./
+RUN npm ci
 COPY prisma ./prisma
-
-# Install production deps (postinstall will run and find the schema)
-RUN npm ci --omit=dev && npm cache clean --force
-
-# Copy the rest of the app
+RUN npx prisma generate
 COPY . .
-
-# Build the app (client + server)
 RUN npm run build
 
+# ---- runtime stage ----
+FROM node:20-alpine AS runner
+WORKDIR /app
 ENV NODE_ENV=production
-EXPOSE 3000
-CMD ["npm", "start"]
+ENV HOST=0.0.0.0
+# Railway sets PORT, don't hardcode
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/build ./build
+COPY --from=build /app/prisma ./prisma
+# If you keep any public assets:
+# COPY --from=build /app/public ./public
+
+# Start: apply DB migrations then run the server
+CMD ["sh", "-c", "node -v && npm run start"]
