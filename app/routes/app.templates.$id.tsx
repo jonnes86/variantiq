@@ -92,10 +92,12 @@ export default function TemplateDetail() {
   const submit = useSubmit();
   const [showAddField, setShowAddField] = useState(false);
   const [editingField, setEditingField] = useState<string | null>(null);
+  const [templateName, setTemplateName] = useState(template.name);
 
   return (
     <Page 
       title={template.name}
+      backAction={{ url: "/app/templates" }}
       secondaryActions={[
         { content: "Rules", url: `/app/templates/${template.id}/rules` },
         { content: "Link to Products", url: `/app/templates/${template.id}/products` }
@@ -108,7 +110,13 @@ export default function TemplateDetail() {
             <Text as="h2" variant="headingMd">Template Settings</Text>
             <Form method="post">
               <InlineGrid columns={["1fr", "auto"]} gap="200">
-                <TextField label="Template name" name="name" defaultValue={template.name} autoComplete="off" />
+                <TextField 
+                  label="Template name" 
+                  name="name" 
+                  value={templateName}
+                  onChange={setTemplateName}
+                  autoComplete="off" 
+                />
                 <ButtonGroup>
                   <Button submit name="_intent" value="rename">Save</Button>
                   <Button tone="critical" variant="secondary" submit name="_intent" value="delete">Delete</Button>
@@ -198,6 +206,8 @@ export default function TemplateDetail() {
 
 function AddFieldForm() {
   const [fieldType, setFieldType] = useState("text");
+  const [fieldName, setFieldName] = useState("");
+  const [fieldLabel, setFieldLabel] = useState("");
   const [options, setOptions] = useState("");
 
   const needsOptions = ["select", "radio", "checkbox"].includes(fieldType);
@@ -224,6 +234,8 @@ function AddFieldForm() {
           <TextField
             label="Field Name (internal)"
             name="fieldName"
+            value={fieldName}
+            onChange={setFieldName}
             placeholder="e.g., custom_text, color_choice"
             helpText="Used for data storage - no spaces, lowercase recommended"
             autoComplete="off"
@@ -233,6 +245,8 @@ function AddFieldForm() {
           <TextField
             label="Label (shown to customer)"
             name="label"
+            value={fieldLabel}
+            onChange={setFieldLabel}
             placeholder="e.g., Custom Engraving, Choose Color"
             autoComplete="off"
             required
@@ -267,6 +281,7 @@ function AddFieldForm() {
 }
 
 function EditFieldForm({ field, onCancel }: { field: any; onCancel: () => void }) {
+  const [fieldLabel, setFieldLabel] = useState(field.label);
   const [options, setOptions] = useState(
     field.optionsJson ? (field.optionsJson as string[]).join('\n') : ''
   );
@@ -281,7 +296,8 @@ function EditFieldForm({ field, onCancel }: { field: any; onCancel: () => void }
         <TextField
           label="Label"
           name="label"
-          defaultValue={field.label}
+          value={fieldLabel}
+          onChange={setFieldLabel}
           autoComplete="off"
           required
         />
