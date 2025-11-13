@@ -4,7 +4,7 @@ import { Page, Card, TextField, Button, BlockStack, InlineGrid, ButtonGroup, Sel
 import { DeleteIcon, EditIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
 import { prisma } from "../db.server";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
   const { session } = await authenticate.admin(request);
@@ -40,7 +40,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
     const type = String(form.get("type"));
     const name = String(form.get("fieldName") || "").trim();
     const label = String(form.get("label") || "").trim();
-    const required = form.get("required") === "true"; // Changed from "on" to "true"
+    const required = form.get("required") === "on";
     const optionsJson = form.get("options") ? JSON.parse(String(form.get("options"))) : null;
 
     if (name && label) {
@@ -74,7 +74,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
   if (intent === "updateField") {
     const fieldId = String(form.get("fieldId"));
     const label = String(form.get("label") || "").trim();
-    const required = form.get("required") === "true"; // Changed from "on" to "true"
+    const required = form.get("required") === "on";
     const optionsJson = form.get("options") ? JSON.parse(String(form.get("options"))) : null;
 
     await prisma.field.update({
@@ -94,11 +94,6 @@ export default function TemplateDetail() {
   const [editingField, setEditingField] = useState<string | null>(null);
   const [templateName, setTemplateName] = useState(template.name);
 
-  // Sync state when template changes
-  useEffect(() => {
-    setTemplateName(template.name);
-  }, [template.name]);
-
   return (
     <Page 
       title={template.name}
@@ -114,7 +109,7 @@ export default function TemplateDetail() {
           <BlockStack gap="400">
             <Text as="h2" variant="headingMd">Template Settings</Text>
             <Form method="post">
-              <BlockStack gap="300">
+              <InlineGrid columns={["1fr", "auto"]} gap="200">
                 <TextField 
                   label="Template name" 
                   name="name" 
@@ -122,20 +117,11 @@ export default function TemplateDetail() {
                   onChange={setTemplateName}
                   autoComplete="off" 
                 />
-                <InlineStack gap="200">
-                  <Button 
-                    submit 
-                    name="_intent" 
-                    value="rename"
-                    disabled={!templateName.trim() || templateName === template.name}
-                  >
-                    Save Changes
-                  </Button>
-                  <Button tone="critical" variant="secondary" submit name="_intent" value="delete">
-                    Delete Template
-                  </Button>
-                </InlineStack>
-              </BlockStack>
+                <ButtonGroup>
+                  <Button submit name="_intent" value="rename">Save</Button>
+                  <Button tone="critical" variant="secondary" submit name="_intent" value="delete">Delete</Button>
+                </ButtonGroup>
+              </InlineGrid>
             </Form>
           </BlockStack>
         </Card>
@@ -223,7 +209,6 @@ function AddFieldForm() {
   const [fieldName, setFieldName] = useState("");
   const [fieldLabel, setFieldLabel] = useState("");
   const [options, setOptions] = useState("");
-  const [isRequired, setIsRequired] = useState(false); // ✅ Controlled state
 
   const needsOptions = ["select", "radio", "checkbox"].includes(fieldType);
 
@@ -280,14 +265,7 @@ function AddFieldForm() {
             />
           )}
 
-          <Checkbox 
-            label="Required field" 
-            checked={isRequired}
-            onChange={setIsRequired}
-          />
-          
-          {/* Hidden input to send the boolean value */}
-          <input type="hidden" name="required" value={isRequired ? "true" : "false"} />
+          <Checkbox label="Required field" name="required" />
 
           <input 
             type="hidden" 
@@ -295,14 +273,7 @@ function AddFieldForm() {
             value={needsOptions ? JSON.stringify(options.split('\n').filter(o => o.trim())) : ""} 
           />
 
-          <Button 
-            submit 
-            name="_intent" 
-            value="addField"
-            disabled={!fieldName.trim() || !fieldLabel.trim() || (needsOptions && !options.trim())}
-          >
-            Add Field
-          </Button>
+          <Button submit name="_intent" value="addField">Add Field</Button>
         </BlockStack>
       </Form>
     </Card>
@@ -314,7 +285,6 @@ function EditFieldForm({ field, onCancel }: { field: any; onCancel: () => void }
   const [options, setOptions] = useState(
     field.optionsJson ? (field.optionsJson as string[]).join('\n') : ''
   );
-  const [isRequired, setIsRequired] = useState(field.required); // ✅ Controlled state
 
   const needsOptions = ["select", "radio", "checkbox"].includes(field.type);
 
@@ -343,14 +313,7 @@ function EditFieldForm({ field, onCancel }: { field: any; onCancel: () => void }
           />
         )}
 
-        <Checkbox 
-          label="Required field" 
-          checked={isRequired}
-          onChange={setIsRequired}
-        />
-        
-        {/* Hidden input to send the boolean value */}
-        <input type="hidden" name="required" value={isRequired ? "true" : "false"} />
+        <Checkbox label="Required field" name="required" defaultChecked={field.required} />
 
         <input 
           type="hidden" 
