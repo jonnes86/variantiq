@@ -1,6 +1,6 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
-client_id = "6f762f74cc3ea50af8d79354bdeb6ca0"
+client_id = "e5c349a3bb6593cf3d485ca1e29148f4"
 name = "VariantIQ"
 application_url = "https://variantiq-production.up.railway.app"
 embedded = true
