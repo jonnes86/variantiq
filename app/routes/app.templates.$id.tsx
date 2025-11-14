@@ -21,66 +21,100 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 }
 
 export async function action({ request, params }: ActionFunctionArgs) {
+  console.log("🔵 ACTION CALLED");
+  
   const { session } = await authenticate.admin(request);
+  console.log("🔵 Shop:", session.shop);
+  
   const form = await request.formData();
+  console.log("🔵 Form entries:");
+  for (const [key, value] of form.entries()) {
+    console.log(`  ${key}: "${value}"`);
+  }
+  
   const intent = String(form.get("_intent") || "");
+  console.log("🔵 Intent:", intent);
 
   if (intent === "rename") {
+    console.log("🟢 RENAME branch");
     const name = String(form.get("name") || "").trim();
     if (name) await prisma.template.update({ where: { id: params.id! }, data: { name } });
     return redirect(`/app/templates/${params.id}`);
   }
 
   if (intent === "delete") {
+    console.log("🔴 DELETE branch");
     await prisma.template.delete({ where: { id: params.id! } });
     return redirect("/app/templates");
   }
 
   if (intent === "addField") {
+    console.log("🟡 ADD FIELD branch");
     const type = String(form.get("type"));
-  const name = String(form.get("fieldName") || "").trim();
-  const label = String(form.get("label") || "").trim();
-  const required = form.get("required") === "true";
-  const optionsRaw = form.get("options");
-  
-  let optionsJson = null;
-  if (optionsRaw && String(optionsRaw).trim() && String(optionsRaw) !== "[]") {
-    try {
-      optionsJson = JSON.parse(String(optionsRaw));
-    } catch (e) {
-      console.error("Failed to parse options JSON:", e);
-    }
-  }
-
-  if (name && label) {
-    const maxSort = await prisma.field.findFirst({
-      where: { templateId: params.id! },
-      orderBy: { sort: 'desc' },
-      select: { sort: true }
-    });
-
-    await prisma.field.create({
-      data: {
-        templateId: params.id!,
-        type,
-        name,
-        label,
-        required,
-        optionsJson,
-        sort: (maxSort?.sort || 0) + 1
+    const name = String(form.get("fieldName") || "").trim();
+    const label = String(form.get("label") || "").trim();
+    const required = form.get("required") === "true";
+    const optionsRaw = form.get("options");
+    
+    console.log("  type:", type);
+    console.log("  name:", name);
+    console.log("  label:", label);
+    console.log("  required:", required);
+    console.log("  optionsRaw:", optionsRaw);
+    console.log("  name && label check:", !!(name && label));
+    
+    let optionsJson = null;
+    if (optionsRaw && String(optionsRaw).trim() && String(optionsRaw) !== "[]") {
+      try {
+        optionsJson = JSON.parse(String(optionsRaw));
+        console.log("  optionsJson parsed:", optionsJson);
+      } catch (e) {
+        console.error("  Failed to parse options:", e);
       }
-    });
+    }
+
+    if (name && label) {
+      console.log("  ✅ Validation passed");
+      try {
+        const maxSort = await prisma.field.findFirst({
+          where: { templateId: params.id! },
+          orderBy: { sort: 'desc' },
+          select: { sort: true }
+        });
+        console.log("  maxSort:", maxSort);
+
+        const fieldData = {
+          templateId: params.id!,
+          type,
+          name,
+          label,
+          required,
+          optionsJson,
+          sort: (maxSort?.sort || 0) + 1
+        };
+        console.log("  Creating field with data:", JSON.stringify(fieldData));
+
+        const created = await prisma.field.create({ data: fieldData });
+        console.log("  ✅ Field created! ID:", created.id);
+      } catch (error) {
+        console.error("  ❌ Error creating field:", error);
+        throw error;
+      }
+    } else {
+      console.log("  ❌ Validation failed - name or label missing");
+    }
+    return redirect(`/app/templates/${params.id}`);
   }
-  return redirect(`/app/templates/${params.id}`);
-}
 
   if (intent === "deleteField") {
+    console.log("🟠 DELETE FIELD branch");
     const fieldId = String(form.get("fieldId"));
     await prisma.field.delete({ where: { id: fieldId } });
     return redirect(`/app/templates/${params.id}`);
   }
 
   if (intent === "updateField") {
+    console.log("🟣 UPDATE FIELD branch");
     const fieldId = String(form.get("fieldId"));
     const label = String(form.get("label") || "").trim();
     const required = form.get("required") === "true";
@@ -102,6 +136,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
     return redirect(`/app/templates/${params.id}`);
   }
 
+  console.log("⚪ No intent matched, redirecting");
   return redirect(`/app/templates/${params.id}`);
 }
 
