@@ -40,8 +40,17 @@ export async function action({ request, params }: ActionFunctionArgs) {
     const type = String(form.get("type"));
     const name = String(form.get("fieldName") || "").trim();
     const label = String(form.get("label") || "").trim();
-    const required = form.get("required") === "true"; // ✅ Changed to read "true" string
-    const optionsJson = form.get("options") ? JSON.parse(String(form.get("options"))) : null;
+    const required = form.get("required") === "true";
+    const optionsRaw = form.get("options");
+    
+    let optionsJson = null;
+    if (optionsRaw && String(optionsRaw).trim() && String(optionsRaw) !== "[]") {
+      try {
+        optionsJson = JSON.parse(String(optionsRaw));
+      } catch (e) {
+        console.error("Failed to parse options JSON:", e);
+      }
+    }
 
     if (name && label) {
       const maxSort = await prisma.field.findFirst({
@@ -74,8 +83,17 @@ export async function action({ request, params }: ActionFunctionArgs) {
   if (intent === "updateField") {
     const fieldId = String(form.get("fieldId"));
     const label = String(form.get("label") || "").trim();
-    const required = form.get("required") === "true"; // ✅ Changed to read "true" string
-    const optionsJson = form.get("options") ? JSON.parse(String(form.get("options"))) : null;
+    const required = form.get("required") === "true";
+    const optionsRaw = form.get("options");
+    
+    let optionsJson = null;
+    if (optionsRaw && String(optionsRaw).trim() && String(optionsRaw) !== "[]") {
+      try {
+        optionsJson = JSON.parse(String(optionsRaw));
+      } catch (e) {
+        console.error("Failed to parse options JSON:", e);
+      }
+    }
 
     await prisma.field.update({
       where: { id: fieldId },
@@ -94,7 +112,6 @@ export default function TemplateDetail() {
   const [editingField, setEditingField] = useState<string | null>(null);
   const [templateName, setTemplateName] = useState(template.name);
 
-  // ✅ Sync state when template changes (e.g., after save)
   useEffect(() => {
     setTemplateName(template.name);
   }, [template.name]);
@@ -223,9 +240,10 @@ function AddFieldForm() {
   const [fieldName, setFieldName] = useState("");
   const [fieldLabel, setFieldLabel] = useState("");
   const [options, setOptions] = useState("");
-  const [isRequired, setIsRequired] = useState(false); // ✅ Controlled state
+  const [isRequired, setIsRequired] = useState(false);
 
   const needsOptions = ["select", "radio", "checkbox"].includes(fieldType);
+  const canSubmit = fieldName.trim() && fieldLabel.trim() && (!needsOptions || options.trim());
 
   return (
     <Card background="bg-surface-secondary">
@@ -254,7 +272,6 @@ function AddFieldForm() {
             placeholder="e.g., custom_text, color_choice"
             helpText="Used for data storage - no spaces, lowercase recommended"
             autoComplete="off"
-            required
           />
 
           <TextField
@@ -264,7 +281,6 @@ function AddFieldForm() {
             onChange={setFieldLabel}
             placeholder="e.g., Custom Engraving, Choose Color"
             autoComplete="off"
-            required
           />
 
           {needsOptions && (
@@ -276,18 +292,15 @@ function AddFieldForm() {
               onChange={setOptions}
               placeholder="Red&#10;Blue&#10;Green"
               helpText="Enter each option on a new line"
-              required
             />
           )}
 
-          {/* ✅ Controlled Checkbox */}
           <Checkbox 
             label="Required field" 
             checked={isRequired}
             onChange={setIsRequired}
           />
           
-          {/* ✅ Hidden input to pass boolean as string */}
           <input type="hidden" name="required" value={isRequired ? "true" : "false"} />
 
           <input
@@ -296,7 +309,14 @@ function AddFieldForm() {
             value={needsOptions ? JSON.stringify(options.split('\n').filter(o => o.trim())) : ""}
           />
 
-          <Button submit name="_intent" value="addField">Add Field</Button>
+          <Button 
+            submit 
+            name="_intent" 
+            value="addField"
+            disabled={!canSubmit}
+          >
+            Add Field
+          </Button>
         </BlockStack>
       </Form>
     </Card>
@@ -308,9 +328,10 @@ function EditFieldForm({ field, onCancel }: { field: any; onCancel: () => void }
   const [options, setOptions] = useState(
     field.optionsJson ? (field.optionsJson as string[]).join('\n') : ''
   );
-  const [isRequired, setIsRequired] = useState(field.required); // ✅ Controlled state with initial value
+  const [isRequired, setIsRequired] = useState(field.required);
 
   const needsOptions = ["select", "radio", "checkbox"].includes(field.type);
+  const canSubmit = fieldLabel.trim() && (!needsOptions || options.trim());
 
   return (
     <Form method="post">
@@ -323,7 +344,6 @@ function EditFieldForm({ field, onCancel }: { field: any; onCancel: () => void }
           value={fieldLabel}
           onChange={setFieldLabel}
           autoComplete="off"
-          required
         />
 
         {needsOptions && (
@@ -333,18 +353,15 @@ function EditFieldForm({ field, onCancel }: { field: any; onCancel: () => void }
             multiline={4}
             value={options}
             onChange={setOptions}
-            required
           />
         )}
 
-        {/* ✅ Controlled Checkbox */}
         <Checkbox 
           label="Required field" 
           checked={isRequired}
           onChange={setIsRequired}
         />
         
-        {/* ✅ Hidden input to pass boolean as string */}
         <input type="hidden" name="required" value={isRequired ? "true" : "false"} />
 
         <input
@@ -354,7 +371,14 @@ function EditFieldForm({ field, onCancel }: { field: any; onCancel: () => void }
         />
 
         <ButtonGroup>
-          <Button submit name="_intent" value="updateField">Save Changes</Button>
+          <Button 
+            submit 
+            name="_intent" 
+            value="updateField"
+            disabled={!canSubmit}
+          >
+            Save Changes
+          </Button>
           <Button onClick={onCancel}>Cancel</Button>
         </ButtonGroup>
       </BlockStack>
