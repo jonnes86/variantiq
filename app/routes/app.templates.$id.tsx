@@ -38,41 +38,41 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
   if (intent === "addField") {
     const type = String(form.get("type"));
-    const name = String(form.get("fieldName") || "").trim();
-    const label = String(form.get("label") || "").trim();
-    const required = form.get("required") === "true";
-    const optionsRaw = form.get("options");
-    
-    let optionsJson = null;
-    if (optionsRaw && String(optionsRaw).trim() && String(optionsRaw) !== "[]") {
-      try {
-        optionsJson = JSON.parse(String(optionsRaw));
-      } catch (e) {
-        console.error("Failed to parse options JSON:", e);
-      }
+  const name = String(form.get("fieldName") || "").trim();
+  const label = String(form.get("label") || "").trim();
+  const required = form.get("required") === "true";
+  const optionsRaw = form.get("options");
+  
+  let optionsJson = null;
+  if (optionsRaw && String(optionsRaw).trim() && String(optionsRaw) !== "[]") {
+    try {
+      optionsJson = JSON.parse(String(optionsRaw));
+    } catch (e) {
+      console.error("Failed to parse options JSON:", e);
     }
-
-    if (name && label) {
-      const maxSort = await prisma.field.findFirst({
-        where: { templateId: params.id! },
-        orderBy: { sort: 'desc' },
-        select: { sort: true }
-      });
-
-      await prisma.field.create({
-        data: {
-          templateId: params.id!,
-          type,
-          name,
-          label,
-          required,
-          optionsJson,
-          sort: (maxSort?.sort || 0) + 1
-        }
-      });
-    }
-    return redirect(`/app/templates/${params.id}`);
   }
+
+  if (name && label) {
+    const maxSort = await prisma.field.findFirst({
+      where: { templateId: params.id! },
+      orderBy: { sort: 'desc' },
+      select: { sort: true }
+    });
+
+    await prisma.field.create({
+      data: {
+        templateId: params.id!,
+        type,
+        name,
+        label,
+        required,
+        optionsJson,
+        sort: (maxSort?.sort || 0) + 1
+      }
+    });
+  }
+  return redirect(`/app/templates/${params.id}`);
+}
 
   if (intent === "deleteField") {
     const fieldId = String(form.get("fieldId"));
