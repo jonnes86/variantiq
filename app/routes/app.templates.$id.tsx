@@ -276,19 +276,33 @@ function AddFieldForm() {
   const [fieldLabel, setFieldLabel] = useState("");
   const [options, setOptions] = useState("");
   const [isRequired, setIsRequired] = useState(false);
+  const submit = useSubmit();
 
   const needsOptions = ["select", "radio", "checkbox"].includes(fieldType);
   const canSubmit = fieldName.trim() && fieldLabel.trim() && (!needsOptions || options.trim());
 
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    const formData = new FormData();
+    formData.append("_intent", "addField");
+    formData.append("type", fieldType);
+    formData.append("fieldName", fieldName);
+    formData.append("label", fieldLabel);
+    formData.append("required", isRequired ? "true" : "false");
+    formData.append("options", needsOptions ? JSON.stringify(options.split('\n').filter(o => o.trim())) : "");
+    
+    submit(formData, { method: "post" });
+  };
+
   return (
     <Card background="bg-surface-secondary">
-      <Form method="post">
+      <form onSubmit={handleSubmit}>
         <BlockStack gap="400">
           <Text as="h3" variant="headingMd">Add New Field</Text>
 
           <Select
             label="Field Type"
-            name="type"
             value={fieldType}
             onChange={setFieldType}
             options={[
@@ -301,7 +315,6 @@ function AddFieldForm() {
 
           <TextField
             label="Field Name (internal)"
-            name="fieldName"
             value={fieldName}
             onChange={setFieldName}
             placeholder="e.g., custom_text, color_choice"
@@ -311,7 +324,6 @@ function AddFieldForm() {
 
           <TextField
             label="Label (shown to customer)"
-            name="label"
             value={fieldLabel}
             onChange={setFieldLabel}
             placeholder="e.g., Custom Engraving, Choose Color"
@@ -321,7 +333,6 @@ function AddFieldForm() {
           {needsOptions && (
             <TextField
               label="Options (one per line)"
-              name="optionsRaw"
               multiline={4}
               value={options}
               onChange={setOptions}
@@ -335,25 +346,15 @@ function AddFieldForm() {
             checked={isRequired}
             onChange={setIsRequired}
           />
-          
-          <input type="hidden" name="required" value={isRequired ? "true" : "false"} />
-
-          <input
-            type="hidden"
-            name="options"
-            value={needsOptions ? JSON.stringify(options.split('\n').filter(o => o.trim())) : ""}
-          />
 
           <Button 
-            submit 
-            name="_intent" 
-            value="addField"
+            submit
             disabled={!canSubmit}
           >
             Add Field
           </Button>
         </BlockStack>
-      </Form>
+      </form>
     </Card>
   );
 }
