@@ -4,16 +4,16 @@ import { Page, Card, TextField, Button, BlockStack, InlineGrid, ButtonGroup, Sel
 import { DeleteIcon, EditIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
 import { prisma } from "../db.server";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
   const { session } = await authenticate.admin(request);
   const template = await prisma.template.findFirst({
     where: { id: params.id!, shop: session.shop },
-    include: { 
+    include: {
       fields: { orderBy: { sort: 'asc' } },
       rules: { orderBy: { sort: 'asc' } },
-      links: true 
+      links: true
     },
   });
   if (!template) throw new Response("Not found", { status: 404 });
@@ -40,7 +40,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
     const type = String(form.get("type"));
     const name = String(form.get("fieldName") || "").trim();
     const label = String(form.get("label") || "").trim();
-    const required = form.get("required") === "on";
+    const required = form.get("required") === "true"; // ✅ Changed to read "true" string
     const optionsJson = form.get("options") ? JSON.parse(String(form.get("options"))) : null;
 
     if (name && label) {
@@ -49,7 +49,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
         orderBy: { sort: 'desc' },
         select: { sort: true }
       });
-      
+
       await prisma.field.create({
         data: {
           templateId: params.id!,
@@ -74,7 +74,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
   if (intent === "updateField") {
     const fieldId = String(form.get("fieldId"));
     const label = String(form.get("label") || "").trim();
-    const required = form.get("required") === "on";
+    const required = form.get("required") === "true"; // ✅ Changed to read "true" string
     const optionsJson = form.get("options") ? JSON.parse(String(form.get("options"))) : null;
 
     await prisma.field.update({
@@ -94,8 +94,13 @@ export default function TemplateDetail() {
   const [editingField, setEditingField] = useState<string | null>(null);
   const [templateName, setTemplateName] = useState(template.name);
 
+  // ✅ Sync state when template changes (e.g., after save)
+  useEffect(() => {
+    setTemplateName(template.name);
+  }, [template.name]);
+
   return (
-    <Page 
+    <Page
       title={template.name}
       backAction={{ url: "/app/templates" }}
       secondaryActions={[
@@ -109,19 +114,28 @@ export default function TemplateDetail() {
           <BlockStack gap="400">
             <Text as="h2" variant="headingMd">Template Settings</Text>
             <Form method="post">
-              <InlineGrid columns={["1fr", "auto"]} gap="200">
-                <TextField 
-                  label="Template name" 
-                  name="name" 
+              <BlockStack gap="300">
+                <TextField
+                  label="Template name"
+                  name="name"
                   value={templateName}
                   onChange={setTemplateName}
-                  autoComplete="off" 
+                  autoComplete="off"
                 />
-                <ButtonGroup>
-                  <Button submit name="_intent" value="rename">Save</Button>
-                  <Button tone="critical" variant="secondary" submit name="_intent" value="delete">Delete</Button>
-                </ButtonGroup>
-              </InlineGrid>
+                <InlineStack gap="200">
+                  <Button 
+                    submit 
+                    name="_intent" 
+                    value="rename"
+                    disabled={!templateName.trim() || templateName === template.name}
+                  >
+                    Save Changes
+                  </Button>
+                  <Button tone="critical" variant="secondary" submit name="_intent" value="delete">
+                    Delete Template
+                  </Button>
+                </InlineStack>
+              </BlockStack>
             </Form>
           </BlockStack>
         </Card>
@@ -169,11 +183,11 @@ export default function TemplateDetail() {
                           <Button icon={EditIcon} onClick={() => setEditingField(field.id)} />
                           <Form method="post">
                             <input type="hidden" name="fieldId" value={field.id} />
-                            <Button 
-                              icon={DeleteIcon} 
-                              tone="critical" 
-                              submit 
-                              name="_intent" 
+                            <Button
+                              icon={DeleteIcon}
+                              tone="critical"
+                              submit
+                              name="_intent"
                               value="deleteField"
                             />
                           </Form>
@@ -209,6 +223,7 @@ function AddFieldForm() {
   const [fieldName, setFieldName] = useState("");
   const [fieldLabel, setFieldLabel] = useState("");
   const [options, setOptions] = useState("");
+  const [isRequired, setIsRequired] = useState(false); // ✅ Controlled state
 
   const needsOptions = ["select", "radio", "checkbox"].includes(fieldType);
 
@@ -217,7 +232,7 @@ function AddFieldForm() {
       <Form method="post">
         <BlockStack gap="400">
           <Text as="h3" variant="headingMd">Add New Field</Text>
-          
+
           <Select
             label="Field Type"
             name="type"
@@ -265,12 +280,20 @@ function AddFieldForm() {
             />
           )}
 
-          <Checkbox label="Required field" name="required" />
+          {/* ✅ Controlled Checkbox */}
+          <Checkbox 
+            label="Required field" 
+            checked={isRequired}
+            onChange={setIsRequired}
+          />
+          
+          {/* ✅ Hidden input to pass boolean as string */}
+          <input type="hidden" name="required" value={isRequired ? "true" : "false"} />
 
-          <input 
-            type="hidden" 
-            name="options" 
-            value={needsOptions ? JSON.stringify(options.split('\n').filter(o => o.trim())) : ""} 
+          <input
+            type="hidden"
+            name="options"
+            value={needsOptions ? JSON.stringify(options.split('\n').filter(o => o.trim())) : ""}
           />
 
           <Button submit name="_intent" value="addField">Add Field</Button>
@@ -285,6 +308,7 @@ function EditFieldForm({ field, onCancel }: { field: any; onCancel: () => void }
   const [options, setOptions] = useState(
     field.optionsJson ? (field.optionsJson as string[]).join('\n') : ''
   );
+  const [isRequired, setIsRequired] = useState(field.required); // ✅ Controlled state with initial value
 
   const needsOptions = ["select", "radio", "checkbox"].includes(field.type);
 
@@ -292,7 +316,7 @@ function EditFieldForm({ field, onCancel }: { field: any; onCancel: () => void }
     <Form method="post">
       <BlockStack gap="400">
         <input type="hidden" name="fieldId" value={field.id} />
-        
+
         <TextField
           label="Label"
           name="label"
@@ -313,12 +337,20 @@ function EditFieldForm({ field, onCancel }: { field: any; onCancel: () => void }
           />
         )}
 
-        <Checkbox label="Required field" name="required" defaultChecked={field.required} />
+        {/* ✅ Controlled Checkbox */}
+        <Checkbox 
+          label="Required field" 
+          checked={isRequired}
+          onChange={setIsRequired}
+        />
+        
+        {/* ✅ Hidden input to pass boolean as string */}
+        <input type="hidden" name="required" value={isRequired ? "true" : "false"} />
 
-        <input 
-          type="hidden" 
-          name="options" 
-          value={needsOptions ? JSON.stringify(options.split('\n').filter(o => o.trim())) : ""} 
+        <input
+          type="hidden"
+          name="options"
+          value={needsOptions ? JSON.stringify(options.split('\n').filter(o => o.trim())) : ""}
         />
 
         <ButtonGroup>
