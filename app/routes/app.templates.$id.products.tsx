@@ -1,4 +1,5 @@
-import { type LoaderFunctionArgs, type ActionFunctionArgs, redirect } from "@remix-run/node";
+import { json, type LoaderFunctionArgs, type ActionFunctionArgs, redirect } from "@remix-run/node";
+import { useLoaderData } from "@remix-run/react";
 import { authenticate } from "../shopify.server";
 import { prisma } from "../db.server";
 
@@ -6,27 +7,21 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   try {
     const { session, admin } = await authenticate.admin(request);
     
-    return new Response(JSON.stringify({
+    return json({
       debug: "SESSION INFO",
       sessionId: session.id,
       shop: session.shop,
       scope: session.scope,
       isOnline: session.isOnline,
       accessToken: session.accessToken ? "EXISTS" : "MISSING"
-    }, null, 2), { 
-      status: 200, 
-      headers: { 'Content-Type': 'application/json' } 
     });
     
   } catch (error: any) {
-    return new Response(JSON.stringify({
+    return json({
       debug: "AUTH ERROR",
       error: error.message,
       stack: error.stack
-    }, null, 2), { 
-      status: 500, 
-      headers: { 'Content-Type': 'application/json' } 
-    });
+    }, { status: 500 });
   }
 }
 
@@ -58,5 +53,10 @@ export async function action({ request, params }: ActionFunctionArgs) {
 }
 
 export default function TemplateProducts() {
-  return <div>Debug mode</div>;
+  const data = useLoaderData<typeof loader>();
+  return (
+    <div style={{ padding: '20px', fontFamily: 'monospace' }}>
+      <pre>{JSON.stringify(data, null, 2)}</pre>
+    </div>
+  );
 }
