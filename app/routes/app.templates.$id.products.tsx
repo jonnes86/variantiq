@@ -6,39 +6,58 @@ import { prisma } from "../db.server";
 import { useState } from "react";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  const { session, admin } = await authenticate.admin(request);
+  console.log("🔍 Products loader called");
+  console.log("🔍 Request URL:", request.url);
   
-  const template = await prisma.template.findFirst({
-    where: { id: params.id!, shop: session.shop },
-    include: { links: true },
-  });
-  
-  if (!template) throw new Response("Not found", { status: 404 });
+  try {
+    const { session, admin } = await authenticate.admin(request);
+    
+    console.log("🔍 Session found:", {
+      id: session.id,
+      shop: session.shop,
+      scope: session.scope,
+      isOnline: session.isOnline
+    });
+    
+    if (!session.shop) {
+      throw new Error("Session has no shop!");
+    }
+    
+    const template = await prisma.template.findFirst({
+      where: { id: params.id!, shop: session.shop },
+      include: { links: true },
+    });
+    
+    if (!template) throw new Response("Not found", { status: 404 });
 
-  // Fetch products from Shopify
-  const response = await admin.graphql(`
-    query {
-      products(first: 50) {
-        nodes {
-          id
-          title
-          handle
-          featuredImage {
-            url
+    // Fetch products from Shopify
+    const response = await admin.graphql(`
+      query {
+        products(first: 50) {
+          nodes {
+            id
+            title
+            handle
+            featuredImage {
+              url
+            }
           }
         }
       }
-    }
-  `);
+    `);
 
-  const { data } = await response.json();
-  const linkedProductIds = template.links.map(link => link.productGid);
+    const { data } = await response.json();
+    const linkedProductIds = template.links.map(link => link.productGid);
 
-  return json({ 
-    template, 
-    products: data.products.nodes,
-    linkedProductIds 
-  });
+    return json({ 
+      template, 
+      products: data.products.nodes,
+      linkedProductIds 
+    });
+  } catch (error) {
+    console.error("❌ Auth error:", error);
+    throw error;
+  }
 }
 
 export async function action({ request, params }: ActionFunctionArgs) {
