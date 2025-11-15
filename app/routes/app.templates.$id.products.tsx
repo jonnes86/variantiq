@@ -6,57 +6,31 @@ import { prisma } from "../db.server";
 import { useState } from "react";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  console.log("🔍 Products loader called");
-  console.log("🔍 Request URL:", request.url);
-  
   try {
     const { session, admin } = await authenticate.admin(request);
     
-    console.log("🔍 Session found:", {
-      id: session.id,
+    // Show session details directly in browser
+    return new Response(JSON.stringify({
+      debug: "SESSION INFO",
+      sessionId: session.id,
       shop: session.shop,
       scope: session.scope,
-      isOnline: session.isOnline
+      isOnline: session.isOnline,
+      accessToken: session.accessToken ? "EXISTS" : "MISSING"
+    }, null, 2), { 
+      status: 200, 
+      headers: { 'Content-Type': 'application/json' } 
     });
     
-    if (!session.shop) {
-      throw new Error("Session has no shop!");
-    }
-    
-    const template = await prisma.template.findFirst({
-      where: { id: params.id!, shop: session.shop },
-      include: { links: true },
+  } catch (error: any) {
+    return new Response(JSON.stringify({
+      debug: "AUTH ERROR",
+      error: error.message,
+      stack: error.stack
+    }, null, 2), { 
+      status: 500, 
+      headers: { 'Content-Type': 'application/json' } 
     });
-    
-    if (!template) throw new Response("Not found", { status: 404 });
-
-    // Fetch products from Shopify
-    const response = await admin.graphql(`
-      query {
-        products(first: 50) {
-          nodes {
-            id
-            title
-            handle
-            featuredImage {
-              url
-            }
-          }
-        }
-      }
-    `);
-
-    const { data } = await response.json();
-    const linkedProductIds = template.links.map(link => link.productGid);
-
-    return json({ 
-      template, 
-      products: data.products.nodes,
-      linkedProductIds 
-    });
-  } catch (error) {
-    console.error("❌ Auth error:", error);
-    throw error;
   }
 }
 
@@ -68,7 +42,6 @@ export async function action({ request, params }: ActionFunctionArgs) {
   if (intent === "link") {
     const productGid = String(form.get("productGid"));
     
-    // Check if already linked
     const existing = await prisma.productTemplateLink.findFirst({
       where: { productGid, templateId: params.id! }
     });
@@ -95,93 +68,5 @@ export async function action({ request, params }: ActionFunctionArgs) {
 }
 
 export default function TemplateProducts() {
-  const { template, products, linkedProductIds } = useLoaderData<typeof loader>();
-  const [searchQuery, setSearchQuery] = useState("");
-
-  const filteredProducts = products.filter((p: any) =>
-    p.title.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  return (
-    <Page
-      title={`Link Products to "${template.name}"`}
-      backAction={{ url: `/app/templates/${template.id}` }}
-    >
-      <BlockStack gap="400">
-        <Card>
-          <BlockStack gap="400">
-            <Text as="p">
-              Select which products should use this template. When customers view these products,
-              they'll see your custom fields.
-            </Text>
-            <TextField
-              label="Search products"
-              value={searchQuery}
-              onChange={setSearchQuery}
-              placeholder="Search by product name..."
-              autoComplete="off"
-              clearButton
-              onClearButtonClick={() => setSearchQuery("")}
-            />
-          </BlockStack>
-        </Card>
-
-        <Card>
-          <ResourceList
-            resourceName={{ singular: 'product', plural: 'products' }}
-            items={filteredProducts}
-            renderItem={(product: any) => {
-              const isLinked = linkedProductIds.includes(product.id);
-              
-              return (
-                <ResourceItem
-                  id={product.id}
-                  media={
-                    product.featuredImage ? (
-                      <img 
-                        src={product.featuredImage.url} 
-                        alt={product.title}
-                        style={{ width: 50, height: 50, objectFit: 'cover' }}
-                      />
-                    ) : undefined
-                  }
-                >
-                  <InlineStack align="space-between">
-                    <BlockStack gap="100">
-                      <Text as="h3" variant="bodyMd" fontWeight="semibold">
-                        {product.title}
-                      </Text>
-                      <Text as="p" tone="subdued">
-                        {product.handle}
-                      </Text>
-                    </BlockStack>
-                    <Form method="post">
-                      <input type="hidden" name="productGid" value={product.id} />
-                      {isLinked ? (
-                        <>
-                          <Badge tone="success">Linked</Badge>
-                          <Button 
-                            submit 
-                            name="_intent" 
-                            value="unlink"
-                            tone="critical"
-                          >
-                            Unlink
-                          </Button>
-                        </>
-                      ) : (
-                        <Button submit name="_intent" value="link">
-                          Link Template
-                        </Button>
-                      )}
-                    </Form>
-                  </InlineStack>
-                </ResourceItem>
-              );
-            }}
-          />
-        </Card>
-      </BlockStack>
-    </Page>
-  );
+  return <div>Debug mode - check JSON output</div>;
 }
