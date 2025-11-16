@@ -9,7 +9,7 @@ embedded = true
 automatically_update_urls_on_dev = true
 
 [access_scopes]
-scopes = "write_products,read_products"
+scopes = "read_products,write_products"
 
 [auth]
 redirect_urls = [

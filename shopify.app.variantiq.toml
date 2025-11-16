@@ -1,7 +1,7 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 name = "VariantIQ"
-client_id = "e5c349a3bb6593cf3d485ca1e29148f4"
+client_id = "76a6c470e49bfbff80afe0dced5067f6"
 application_url = "https://variantiq-production.up.railway.app"
 embedded = true
 
@@ -9,7 +9,7 @@ embedded = true
 automatically_update_urls_on_dev = true
 
 [access_scopes]
-scopes = "write_products,read_products"
+scopes = "read_products,write_products"
 
 [auth]
 redirect_urls = [
