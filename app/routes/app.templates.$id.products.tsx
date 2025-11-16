@@ -1,27 +1,69 @@
-import { json, type LoaderFunctionArgs, type ActionFunctionArgs, redirect } from "@remix-run/node";
-import { useLoaderData } from "@remix-run/react";
+import { json, redirect, type ActionFunctionArgs, type LoaderFunctionArgs } from "@remix-run/node";
+import { useLoaderData, Form } from "@remix-run/react";
+import { Page, Card, Button, BlockStack, ResourceList, ResourceItem, Text, TextField, InlineStack, Badge, Banner } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 import { prisma } from "../db.server";
+import { useState } from "react";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  try {
-    const { session, admin } = await authenticate.admin(request);
-    
-    return json({
-      debug: "SESSION INFO",
-      sessionId: session.id,
-      shop: session.shop,
-      scope: session.scope,
-      isOnline: session.isOnline,
-      accessToken: session.accessToken ? "EXISTS" : "MISSING"
+  const { session, admin } = await authenticate.admin(request);
+  
+  const template = await prisma.template.findFirst({
+    where: { id: params.id!, shop: session.shop },
+    include: { links: true },
+  });
+  
+  if (!template) throw new Response("Not found", { status: 404 });
+
+  // Check if we have read_products scope
+  const hasReadProducts = session.scope?.includes('read_products');
+  
+  if (!hasReadProducts) {
+    return json({ 
+      template,
+      products: [],
+      linkedProductIds: template.links.map(link => link.productGid),
+      error: "MISSING_SCOPE",
+      currentScope: session.scope
     });
-    
+  }
+
+  try {
+    // Fetch products from Shopify
+    const response = await admin.graphql(`
+      query {
+        products(first: 50) {
+          nodes {
+            id
+            title
+            handle
+            featuredImage {
+              url
+            }
+          }
+        }
+      }
+    `);
+
+    const { data } = await response.json();
+    const linkedProductIds = template.links.map(link => link.productGid);
+
+    return json({ 
+      template, 
+      products: data.products.nodes,
+      linkedProductIds,
+      error: null,
+      currentScope: session.scope
+    });
   } catch (error: any) {
     return json({
-      debug: "AUTH ERROR",
-      error: error.message,
-      stack: error.stack
-    }, { status: 500 });
+      template,
+      products: [],
+      linkedProductIds: template.links.map(link => link.productGid),
+      error: "GRAPHQL_ERROR",
+      errorMessage: error.message,
+      currentScope: session.scope
+    });
   }
 }
 
@@ -32,12 +74,18 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
   if (intent === "link") {
     const productGid = String(form.get("productGid"));
+    
     const existing = await prisma.productTemplateLink.findFirst({
       where: { productGid, templateId: params.id! }
     });
+
     if (!existing) {
       await prisma.productTemplateLink.create({
-        data: { shop: session.shop, productGid, templateId: params.id! }
+        data: {
+          shop: session.shop,
+          productGid,
+          templateId: params.id!,
+        }
       });
     }
   }
@@ -53,10 +101,119 @@ export async function action({ request, params }: ActionFunctionArgs) {
 }
 
 export default function TemplateProducts() {
-  const data = useLoaderData<typeof loader>();
+  const { template, products, linkedProductIds, error, errorMessage, currentScope } = useLoaderData<typeof loader>();
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const filteredProducts = products.filter((p: any) =>
+    p.title.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return (
-    <div style={{ padding: '20px', fontFamily: 'monospace' }}>
-      <pre>{JSON.stringify(data, null, 2)}</pre>
-    </div>
+    <Page
+      title={`Link Products to "${template.name}"`}
+      backAction={{ url: `/app/templates/${template.id}` }}
+    >
+      <BlockStack gap="400">
+        {error === "MISSING_SCOPE" && (
+          <Banner tone="critical">
+            <p><strong>Missing Permission:</strong> This app needs the "read_products" permission to display your products.</p>
+            <p style={{ marginTop: '8px' }}>Current scopes: {currentScope || 'none'}</p>
+            <p style={{ marginTop: '8px' }}>Please reinstall the app to grant the required permissions.</p>
+          </Banner>
+        )}
+
+        {error === "GRAPHQL_ERROR" && (
+          <Banner tone="critical">
+            <p><strong>Error loading products:</strong> {errorMessage}</p>
+            <p style={{ marginTop: '8px' }}>Current scopes: {currentScope || 'none'}</p>
+          </Banner>
+        )}
+
+        <Card>
+          <BlockStack gap="400">
+            <Text as="p">
+              Select which products should use this template. When customers view these products,
+              they'll see your custom fields.
+            </Text>
+            
+            {!error && (
+              <TextField
+                label="Search products"
+                value={searchQuery}
+                onChange={setSearchQuery}
+                placeholder="Search by product name..."
+                autoComplete="off"
+                clearButton
+                onClearButtonClick={() => setSearchQuery("")}
+              />
+            )}
+          </BlockStack>
+        </Card>
+
+        {!error && products.length > 0 && (
+          <Card>
+            <ResourceList
+              resourceName={{ singular: 'product', plural: 'products' }}
+              items={filteredProducts}
+              renderItem={(product: any) => {
+                const isLinked = linkedProductIds.includes(product.id);
+                
+                return (
+                  <ResourceItem
+                    id={product.id}
+                    media={
+                      product.featuredImage ? (
+                        <img 
+                          src={product.featuredImage.url} 
+                          alt={product.title}
+                          style={{ width: 50, height: 50, objectFit: 'cover' }}
+                        />
+                      ) : undefined
+                    }
+                  >
+                    <InlineStack align="space-between">
+                      <BlockStack gap="100">
+                        <Text as="h3" variant="bodyMd" fontWeight="semibold">
+                          {product.title}
+                        </Text>
+                        <Text as="p" tone="subdued">
+                          {product.handle}
+                        </Text>
+                      </BlockStack>
+                      <Form method="post">
+                        <input type="hidden" name="productGid" value={product.id} />
+                        {isLinked ? (
+                          <InlineStack gap="200">
+                            <Badge tone="success">Linked</Badge>
+                            <Button 
+                              submit 
+                              name="_intent" 
+                              value="unlink"
+                              tone="critical"
+                            >
+                              Unlink
+                            </Button>
+                          </InlineStack>
+                        ) : (
+                          <Button submit name="_intent" value="link">
+                            Link Template
+                          </Button>
+                        )}
+                      </Form>
+                    </InlineStack>
+                  </ResourceItem>
+                );
+              }}
+            />
+          </Card>
+        )}
+
+        {!error && products.length === 0 && (
+          <Card>
+            <Text as="p" tone="subdued">No products found in your store.</Text>
+          </Card>
+        )}
+      </BlockStack>
+    </Page>
   );
 }
