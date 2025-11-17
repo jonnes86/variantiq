@@ -1,6 +1,7 @@
 import { json, redirect, type ActionFunctionArgs, type LoaderFunctionArgs } from "@remix-run/node";
 import { useLoaderData, Form, useSubmit } from "@remix-run/react";
-import { Page, Card, TextField, Button, BlockStack, InlineGrid, ButtonGroup, Select, Checkbox, Badge, Icon, InlineStack, Text, Divider } from "@shopify/polaris";
+import { Page, Card, TextField, Button, BlockStack, ButtonGroup, Select, Checkbox, Badge, InlineStack, Text, Divider } from "@shopify/polaris";
+import { TitleBar } from "@shopify/app-bridge-react";
 import { DeleteIcon, EditIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
 import { prisma } from "../db.server";
@@ -21,67 +22,44 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 }
 
 export async function action({ request, params }: ActionFunctionArgs) {
-  console.log("🔵 ACTION CALLED");
-  
   const { session } = await authenticate.admin(request);
-  console.log("🔵 Shop:", session.shop);
-  
   const form = await request.formData();
-  console.log("🔵 Form entries:");
-  for (const [key, value] of form.entries()) {
-    console.log(`  ${key}: "${value}"`);
-  }
-  
   const intent = String(form.get("_intent") || "");
-  console.log("🔵 Intent:", intent);
 
   if (intent === "rename") {
-    console.log("🟢 RENAME branch");
     const name = String(form.get("name") || "").trim();
     if (name) await prisma.template.update({ where: { id: params.id! }, data: { name } });
     return redirect(`/app/templates/${params.id}`);
   }
 
   if (intent === "delete") {
-    console.log("🔴 DELETE branch");
     await prisma.template.delete({ where: { id: params.id! } });
     return redirect("/app/templates");
   }
 
   if (intent === "addField") {
-    console.log("🟡 ADD FIELD branch");
     const type = String(form.get("type"));
     const name = String(form.get("fieldName") || "").trim();
     const label = String(form.get("label") || "").trim();
     const required = form.get("required") === "true";
     const optionsRaw = form.get("options");
     
-    console.log("  type:", type);
-    console.log("  name:", name);
-    console.log("  label:", label);
-    console.log("  required:", required);
-    console.log("  optionsRaw:", optionsRaw);
-    console.log("  name && label check:", !!(name && label));
-    
     let optionsJson = null;
     if (optionsRaw && String(optionsRaw).trim() && String(optionsRaw) !== "[]") {
       try {
         optionsJson = JSON.parse(String(optionsRaw));
-        console.log("  optionsJson parsed:", optionsJson);
       } catch (e) {
         console.error("  Failed to parse options:", e);
       }
     }
 
     if (name && label) {
-      console.log("  ✅ Validation passed");
       try {
         const maxSort = await prisma.field.findFirst({
           where: { templateId: params.id! },
           orderBy: { sort: 'desc' },
           select: { sort: true }
         });
-        console.log("  maxSort:", maxSort);
 
         const fieldData = {
           templateId: params.id!,
@@ -92,29 +70,23 @@ export async function action({ request, params }: ActionFunctionArgs) {
           optionsJson,
           sort: (maxSort?.sort || 0) + 1
         };
-        console.log("  Creating field with data:", JSON.stringify(fieldData));
 
-        const created = await prisma.field.create({ data: fieldData });
-        console.log("  ✅ Field created! ID:", created.id);
+        await prisma.field.create({ data: fieldData });
       } catch (error) {
         console.error("  ❌ Error creating field:", error);
         throw error;
       }
-    } else {
-      console.log("  ❌ Validation failed - name or label missing");
     }
     return redirect(`/app/templates/${params.id}`);
   }
 
   if (intent === "deleteField") {
-    console.log("🟠 DELETE FIELD branch");
     const fieldId = String(form.get("fieldId"));
     await prisma.field.delete({ where: { id: fieldId } });
     return redirect(`/app/templates/${params.id}`);
   }
 
   if (intent === "updateField") {
-    console.log("🟣 UPDATE FIELD branch");
     const fieldId = String(form.get("fieldId"));
     const label = String(form.get("label") || "").trim();
     const required = form.get("required") === "true";
@@ -136,7 +108,6 @@ export async function action({ request, params }: ActionFunctionArgs) {
     return redirect(`/app/templates/${params.id}`);
   }
 
-  console.log("⚪ No intent matched, redirecting");
   return redirect(`/app/templates/${params.id}`);
 }
 
@@ -152,118 +123,124 @@ export default function TemplateDetail() {
   }, [template.name]);
 
   return (
-    <Page
-      title={template.name}
-      backAction={{ url: "/app/templates" }}
-      secondaryActions={[
-        { content: "Rules", url: `/app/templates/${template.id}/rules` },
-        { content: "Link to Products", url: `/app/templates/${template.id}/products` }
-      ]}
-    >
-      <BlockStack gap="400">
-        <Card>
-          <BlockStack gap="400">
-            <Text as="h2" variant="headingMd">Template Settings</Text>
-            <Form method="post">
-              <BlockStack gap="300">
-                <TextField
-                  label="Template name"
-                  name="name"
-                  value={templateName}
-                  onChange={setTemplateName}
-                  autoComplete="off"
-                />
-                <InlineStack gap="200">
-                  <Button 
-                    submit 
-                    name="_intent" 
-                    value="rename"
-                    disabled={!templateName.trim() || templateName === template.name}
-                  >
-                    Save Changes
-                  </Button>
-                  <Button tone="critical" variant="secondary" submit name="_intent" value="delete">
-                    Delete Template
-                  </Button>
-                </InlineStack>
-              </BlockStack>
-            </Form>
-          </BlockStack>
-        </Card>
+    <>
+      <TitleBar title={template.name}>
+        <button variant="breadcrumb" onClick={() => window.open('/app/templates', '_top')}>
+          Templates
+        </button>
+        <button onClick={() => window.open(`/app/templates/${template.id}/products`, '_top')}>
+          Link to Products
+        </button>
+        <button onClick={() => window.open(`/app/templates/${template.id}/rules`, '_top')}>
+          Rules
+        </button>
+      </TitleBar>
+      <Page>
+        <BlockStack gap="400">
+          <Card>
+            <BlockStack gap="400">
+              <Text as="h2" variant="headingMd">Template Settings</Text>
+              <Form method="post">
+                <BlockStack gap="300">
+                  <TextField
+                    label="Template name"
+                    name="name"
+                    value={templateName}
+                    onChange={setTemplateName}
+                    autoComplete="off"
+                  />
+                  <InlineStack gap="200">
+                    <Button 
+                      submit 
+                      name="_intent" 
+                      value="rename"
+                      disabled={!templateName.trim() || templateName === template.name}
+                    >
+                      Save Changes
+                    </Button>
+                    <Button tone="critical" variant="secondary" submit name="_intent" value="delete">
+                      Delete Template
+                    </Button>
+                  </InlineStack>
+                </BlockStack>
+              </Form>
+            </BlockStack>
+          </Card>
 
-        <Card>
-          <BlockStack gap="400">
-            <InlineStack align="space-between">
-              <Text as="h2" variant="headingMd">Fields ({template.fields.length})</Text>
-              <Button onClick={() => setShowAddField(!showAddField)}>
-                {showAddField ? "Cancel" : "Add Field"}
+          <Card>
+            <BlockStack gap="400">
+              <InlineStack align="space-between">
+                <Text as="h2" variant="headingMd">Fields ({template.fields.length})</Text>
+                <Button onClick={() => setShowAddField(!showAddField)}>
+                  {showAddField ? "Cancel" : "Add Field"}
+                </Button>
+              </InlineStack>
+
+              {showAddField && <AddFieldForm />}
+
+              <Divider />
+
+              {template.fields.length === 0 ? (
+                <Text as="p" tone="subdued">No fields yet. Add your first field to start collecting custom data.</Text>
+              ) : (
+                <BlockStack gap="300">
+                  {template.fields.map((field: any) => (
+                    <Card key={field.id}>
+                      {editingField === field.id ? (
+                        <EditFieldForm field={field} onCancel={() => setEditingField(null)} />
+                      ) : (
+                        <InlineStack align="space-between">
+                          <BlockStack gap="100">
+                            <InlineStack gap="200" blockAlign="center">
+                              <Text as="h3" variant="headingSm">{field.label}</Text>
+                              <Badge tone={field.required ? "attention" : "info"}>
+                                {field.type}
+                              </Badge>
+                              {field.required && <Badge tone="critical">Required</Badge>}
+                            </InlineStack>
+                            <Text as="p" tone="subdued">Field name: {field.name}</Text>
+                            {field.optionsJson && (
+                              <Text as="p" tone="subdued">
+                                Options: {(field.optionsJson as string[]).join(", ")}
+                              </Text>
+                            )}
+                          </BlockStack>
+                          <ButtonGroup>
+                            <Button icon={EditIcon} onClick={() => setEditingField(field.id)} />
+                            <Form method="post">
+                              <input type="hidden" name="fieldId" value={field.id} />
+                              <Button
+                                icon={DeleteIcon}
+                                tone="critical"
+                                submit
+                                name="_intent"
+                                value="deleteField"
+                              />
+                            </Form>
+                          </ButtonGroup>
+                        </InlineStack>
+                      )}
+                    </Card>
+                  ))}
+                </BlockStack>
+              )}
+            </BlockStack>
+          </Card>
+
+          <Card>
+            <BlockStack gap="200">
+              <Text as="h2" variant="headingMd">Linked Products</Text>
+              <Text as="p" tone="subdued">
+                This template is linked to {template.links.length} product{template.links.length !== 1 ? 's' : ''}.
+              </Text>
+              <Button onClick={() => window.open(`/app/templates/${template.id}/products`, '_top')}>
+                Manage Product Links
               </Button>
-            </InlineStack>
-
-            {showAddField && <AddFieldForm />}
-
-            <Divider />
-
-            {template.fields.length === 0 ? (
-              <Text as="p" tone="subdued">No fields yet. Add your first field to start collecting custom data.</Text>
-            ) : (
-              <BlockStack gap="300">
-                {template.fields.map((field: any) => (
-                  <Card key={field.id}>
-                    {editingField === field.id ? (
-                      <EditFieldForm field={field} onCancel={() => setEditingField(null)} />
-                    ) : (
-                      <InlineStack align="space-between">
-                        <BlockStack gap="100">
-                          <InlineStack gap="200" blockAlign="center">
-                            <Text as="h3" variant="headingSm">{field.label}</Text>
-                            <Badge tone={field.required ? "attention" : "info"}>
-                              {field.type}
-                            </Badge>
-                            {field.required && <Badge tone="critical">Required</Badge>}
-                          </InlineStack>
-                          <Text as="p" tone="subdued">Field name: {field.name}</Text>
-                          {field.optionsJson && (
-                            <Text as="p" tone="subdued">
-                              Options: {(field.optionsJson as string[]).join(", ")}
-                            </Text>
-                          )}
-                        </BlockStack>
-                        <ButtonGroup>
-                          <Button icon={EditIcon} onClick={() => setEditingField(field.id)} />
-                          <Form method="post">
-                            <input type="hidden" name="fieldId" value={field.id} />
-                            <Button
-                              icon={DeleteIcon}
-                              tone="critical"
-                              submit
-                              name="_intent"
-                              value="deleteField"
-                            />
-                          </Form>
-                        </ButtonGroup>
-                      </InlineStack>
-                    )}
-                  </Card>
-                ))}
-              </BlockStack>
-            )}
-          </BlockStack>
-        </Card>
-
-        <Card>
-          <BlockStack gap="200">
-            <Text as="h2" variant="headingMd">Linked Products</Text>
-            <Text as="p" tone="subdued">
-              This template is linked to {template.links.length} product{template.links.length !== 1 ? 's' : ''}.
-            </Text>
-            <a href={`/app/templates/${template.id}/products`} style={{textDecoration: 'none'}}>
-              <Button>Manage Product Links</Button>
-            </a>
-          </BlockStack>
-        </Card>
-      </BlockStack>
-    </Page>
+            </BlockStack>
+          </Card>
+        </BlockStack>
+      </Page>
+    </>
   );
 }
 
