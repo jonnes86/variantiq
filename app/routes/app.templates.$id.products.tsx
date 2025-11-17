@@ -6,7 +6,17 @@ import { prisma } from "../db.server";
 import { useState } from "react";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  const { session, admin } = await authenticate.admin(request);
+  // const { session, admin } = await authenticate.admin(request);
+  
+  // TEMPORARY - just return mock data
+  return json({
+    template: { id: params.id, name: "Test", links: [] },
+    products: [],
+    linkedProductIds: [],
+    error: null,
+    currentScope: "test"
+  });
+}
   
   const template = await prisma.template.findFirst({
     where: { id: params.id!, shop: session.shop },
