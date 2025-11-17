@@ -259,12 +259,17 @@ function AddFieldForm() {
     e.preventDefault();
     
     const formData = new FormData();
-    formData.append("_intent", "addField");
-    formData.append("type", fieldType);
-    formData.append("fieldName", fieldName);
-    formData.append("label", fieldLabel);
-    formData.append("required", isRequired ? "true" : "false");
-    formData.append("options", needsOptions ? JSON.stringify(options.split('\n').filter(o => o.trim())) : "");
+ <Card>
+  <BlockStack gap="200">
+    <Text as="h2" variant="headingMd">Linked Products</Text>
+    <Text as="p" tone="subdued">
+      This template is linked to {template.links.length} product{template.links.length !== 1 ? 's' : ''}.
+    </Text>
+    <form method="get" action={`/app/templates/${template.id}/products`}>
+      <Button submit>Manage Product Links</Button>
+    </form>
+  </BlockStack>
+</Card>
     
     submit(formData, { method: "post" });
   };
