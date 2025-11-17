@@ -6,21 +6,65 @@ import { prisma } from "../db.server";
 import { useState } from "react";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  // TEMPORARY - authentication disabled for testing
-  return json({ 
-    template: {
-      id: params.id,
-      name: "Short Sleeve T-Shirts",
-      shop: "atestteamstore.myshopify.com"
-    },
-    products: [
-      { id: "gid://shopify/Product/1", title: "Test Product 1", handle: "test-1", featuredImage: null },
-      { id: "gid://shopify/Product/2", title: "Test Product 2", handle: "test-2", featuredImage: null }
-    ],
-    linkedProductIds: [],
-    error: null,
-    currentScope: "testing-no-auth"
+  const { session, admin } = await authenticate.admin(request);
+  
+  const template = await prisma.template.findFirst({
+    where: { id: params.id!, shop: session.shop },
+    include: { links: true },
   });
+  
+  if (!template) throw new Response("Not found", { status: 404 });
+
+  // Check if we have read_products scope
+  const hasReadProducts = session.scope?.includes('read_products');
+  
+  if (!hasReadProducts) {
+    return json({ 
+      template,
+      products: [],
+      linkedProductIds: template.links.map(link => link.productGid),
+      error: "MISSING_SCOPE",
+      currentScope: session.scope
+    });
+  }
+
+  try {
+    // Fetch products from Shopify
+    const response = await admin.graphql(`
+      query {
+        products(first: 50) {
+          nodes {
+            id
+            title
+            handle
+            featuredImage {
+              url
+            }
+          }
+        }
+      }
+    `);
+
+    const { data } = await response.json();
+    const linkedProductIds = template.links.map(link => link.productGid);
+
+    return json({ 
+      template, 
+      products: data.products.nodes,
+      linkedProductIds,
+      error: null,
+      currentScope: session.scope
+    });
+  } catch (error: any) {
+    return json({
+      template,
+      products: [],
+      linkedProductIds: template.links.map(link => link.productGid),
+      error: "GRAPHQL_ERROR",
+      errorMessage: error.message,
+      currentScope: session.scope
+    });
+  }
 }
 
 export async function action({ request, params }: ActionFunctionArgs) {
@@ -70,10 +114,20 @@ export default function TemplateProducts() {
       backAction={{ url: `/app/templates/${template.id}` }}
     >
       <BlockStack gap="400">
-        <Banner tone="info">
-          <p><strong>Testing Mode:</strong> Authentication is temporarily disabled.</p>
-          <p>Current scope: {currentScope}</p>
-        </Banner>
+        {error === "MISSING_SCOPE" && (
+          <Banner tone="critical">
+            <p><strong>Missing Permission:</strong> This app needs the "read_products" permission to display your products.</p>
+            <p style={{ marginTop: '8px' }}>Current scopes: {currentScope || 'none'}</p>
+            <p style={{ marginTop: '8px' }}>Please reinstall the app to grant the required permissions.</p>
+          </Banner>
+        )}
+
+        {error === "GRAPHQL_ERROR" && (
+          <Banner tone="critical">
+            <p><strong>Error loading products:</strong> {errorMessage}</p>
+            <p style={{ marginTop: '8px' }}>Current scopes: {currentScope || 'none'}</p>
+          </Banner>
+        )}
 
         <Card>
           <BlockStack gap="400">
@@ -82,73 +136,83 @@ export default function TemplateProducts() {
               they'll see your custom fields.
             </Text>
             
-            <TextField
-              label="Search products"
-              value={searchQuery}
-              onChange={setSearchQuery}
-              placeholder="Search by product name..."
-              autoComplete="off"
-              clearButton
-              onClearButtonClick={() => setSearchQuery("")}
-            />
+            {!error && (
+              <TextField
+                label="Search products"
+                value={searchQuery}
+                onChange={setSearchQuery}
+                placeholder="Search by product name..."
+                autoComplete="off"
+                clearButton
+                onClearButtonClick={() => setSearchQuery("")}
+              />
+            )}
           </BlockStack>
         </Card>
 
-        <Card>
-          <ResourceList
-            resourceName={{ singular: 'product', plural: 'products' }}
-            items={filteredProducts}
-            renderItem={(product: any) => {
-              const isLinked = linkedProductIds.includes(product.id);
-              
-              return (
-                <ResourceItem
-                  id={product.id}
-                  media={
-                    product.featuredImage ? (
-                      <img 
-                        src={product.featuredImage.url} 
-                        alt={product.title}
-                        style={{ width: 50, height: 50, objectFit: 'cover' }}
-                      />
-                    ) : undefined
-                  }
-                >
-                  <InlineStack align="space-between">
-                    <BlockStack gap="100">
-                      <Text as="h3" variant="bodyMd" fontWeight="semibold">
-                        {product.title}
-                      </Text>
-                      <Text as="p" tone="subdued">
-                        {product.handle}
-                      </Text>
-                    </BlockStack>
-                    <Form method="post">
-                      <input type="hidden" name="productGid" value={product.id} />
-                      {isLinked ? (
-                        <InlineStack gap="200">
-                          <Badge tone="success">Linked</Badge>
-                          <Button 
-                            submit 
-                            name="_intent" 
-                            value="unlink"
-                            tone="critical"
-                          >
-                            Unlink
+        {!error && products.length > 0 && (
+          <Card>
+            <ResourceList
+              resourceName={{ singular: 'product', plural: 'products' }}
+              items={filteredProducts}
+              renderItem={(product: any) => {
+                const isLinked = linkedProductIds.includes(product.id);
+                
+                return (
+                  <ResourceItem
+                    id={product.id}
+                    media={
+                      product.featuredImage ? (
+                        <img 
+                          src={product.featuredImage.url} 
+                          alt={product.title}
+                          style={{ width: 50, height: 50, objectFit: 'cover' }}
+                        />
+                      ) : undefined
+                    }
+                  >
+                    <InlineStack align="space-between">
+                      <BlockStack gap="100">
+                        <Text as="h3" variant="bodyMd" fontWeight="semibold">
+                          {product.title}
+                        </Text>
+                        <Text as="p" tone="subdued">
+                          {product.handle}
+                        </Text>
+                      </BlockStack>
+                      <Form method="post">
+                        <input type="hidden" name="productGid" value={product.id} />
+                        {isLinked ? (
+                          <InlineStack gap="200">
+                            <Badge tone="success">Linked</Badge>
+                            <Button 
+                              submit 
+                              name="_intent" 
+                              value="unlink"
+                              tone="critical"
+                            >
+                              Unlink
+                            </Button>
+                          </InlineStack>
+                        ) : (
+                          <Button submit name="_intent" value="link">
+                            Link Template
                           </Button>
-                        </InlineStack>
-                      ) : (
-                        <Button submit name="_intent" value="link">
-                          Link Template
-                        </Button>
-                      )}
-                    </Form>
-                  </InlineStack>
-                </ResourceItem>
-              );
-            }}
-          />
-        </Card>
+                        )}
+                      </Form>
+                    </InlineStack>
+                  </ResourceItem>
+                );
+              }}
+            />
+          </Card>
+        )}
+
+        {!error && products.length === 0 && (
+          <Card>
+            <Text as="p" tone="subdued">No products found in your store.</Text>
+          </Card>
+        )}
       </BlockStack>
     </Page>
   );
