@@ -139,6 +139,48 @@ export async function action({ request, params }: ActionFunctionArgs) {
     return redirect(`/app/templates/${params.id}`);
   }
 
+  if (intent === "addRule") {
+    const parentFieldId = String(form.get("parentFieldId"));
+    const parentValue = String(form.get("parentValue"));
+    const childFieldId = String(form.get("childFieldId"));
+    const childOptionsRaw = form.get("childOptions");
+
+    let childOptionsJson = null;
+    if (childOptionsRaw && String(childOptionsRaw).trim() && String(childOptionsRaw) !== "[]") {
+      try {
+        childOptionsJson = JSON.parse(String(childOptionsRaw));
+      } catch (e) {
+        console.error("Failed to parse child options:", e);
+      }
+    }
+
+    if (parentFieldId && parentValue && childFieldId) {
+      const maxSort = await prisma.rule.findFirst({
+        where: { templateId: params.id! },
+        orderBy: { sort: 'desc' },
+        select: { sort: true }
+      });
+
+      await prisma.rule.create({
+        data: {
+          templateId: params.id!,
+          parentFieldId,
+          parentValue,
+          childFieldId,
+          childOptionsJson,
+          sort: (maxSort?.sort || 0) + 1
+        }
+      });
+    }
+    return redirect(`/app/templates/${params.id}`);
+  }
+
+  if (intent === "deleteRule") {
+    const ruleId = String(form.get("ruleId"));
+    await prisma.rule.delete({ where: { id: ruleId } });
+    return redirect(`/app/templates/${params.id}`);
+  }
+
   if (intent === "linkProduct") {
     const productGid = String(form.get("productGid"));
     const existing = await prisma.productTemplateLink.findFirst({
@@ -173,6 +215,7 @@ export default function TemplateDetail() {
   const submit = useSubmit();
   const [selectedTab, setSelectedTab] = useState(0);
   const [showAddField, setShowAddField] = useState(false);
+  const [showAddRule, setShowAddRule] = useState(false);
   const [editingField, setEditingField] = useState<string | null>(null);
   const [templateName, setTemplateName] = useState(template.name);
   const [searchQuery, setSearchQuery] = useState("");
@@ -426,10 +469,74 @@ export default function TemplateDetail() {
             {/* Rules Tab */}
             {selectedTab === 2 && (
               <BlockStack gap="400">
-                <Text as="h2" variant="headingMd">Rules</Text>
-                <Text as="p" tone="subdued">
-                  Rules feature coming soon. This will allow you to set conditional logic for when fields appear.
-                </Text>
+                <InlineStack align="space-between">
+                  <Text as="h2" variant="headingMd">Cascading Rules ({template.rules.length})</Text>
+                  <Button onClick={() => setShowAddRule(!showAddRule)}>
+                    {showAddRule ? "Cancel" : "Add Rule"}
+                  </Button>
+                </InlineStack>
+
+                {showAddRule && <AddRuleForm fields={template.fields} />}
+
+                <Divider />
+
+                {template.rules.length === 0 ? (
+                  <Card>
+                    <BlockStack gap="200">
+                      <Text as="p" tone="subdued">
+                        No rules yet. Rules control which fields appear based on customer selections.
+                      </Text>
+                      <Text as="p" tone="subdued">
+                        Example: "When Shirt Type = Hoodie, show Brand field with options: Gildan, Bella+Canvas"
+                      </Text>
+                    </BlockStack>
+                  </Card>
+                ) : (
+                  <BlockStack gap="300">
+                    {template.rules.map((rule: any) => {
+                      const parentField = template.fields.find((f: any) => f.id === rule.parentFieldId);
+                      const childField = template.fields.find((f: any) => f.id === rule.childFieldId);
+                      
+                      return (
+                        <Card key={rule.id}>
+                          <InlineStack align="space-between">
+                            <BlockStack gap="200">
+                              <InlineStack gap="200" blockAlign="center">
+                                <Badge tone="info">IF</Badge>
+                                <Text as="span" variant="bodyMd" fontWeight="semibold">
+                                  {parentField?.label || 'Unknown Field'}
+                                </Text>
+                                <Text as="span" tone="subdued">=</Text>
+                                <Badge>{rule.parentValue}</Badge>
+                              </InlineStack>
+                              <InlineStack gap="200" blockAlign="center">
+                                <Badge tone="success">THEN SHOW</Badge>
+                                <Text as="span" variant="bodyMd" fontWeight="semibold">
+                                  {childField?.label || 'Unknown Field'}
+                                </Text>
+                              </InlineStack>
+                              {rule.childOptionsJson && (
+                                <Text as="p" tone="subdued">
+                                  Options: {(rule.childOptionsJson as string[]).join(", ")}
+                                </Text>
+                              )}
+                            </BlockStack>
+                            <Form method="post">
+                              <input type="hidden" name="ruleId" value={rule.id} />
+                              <Button
+                                icon={DeleteIcon}
+                                tone="critical"
+                                submit
+                                name="_intent"
+                                value="deleteRule"
+                              />
+                            </Form>
+                          </InlineStack>
+                        </Card>
+                      );
+                    })}
+                  </BlockStack>
+                )}
               </BlockStack>
             )}
           </Tabs>
@@ -588,5 +695,121 @@ function EditFieldForm({ field, onCancel }: { field: any; onCancel: () => void }
         </ButtonGroup>
       </BlockStack>
     </Form>
+  );
+}
+
+function AddRuleForm({ fields }: { fields: any[] }) {
+  const [parentFieldId, setParentFieldId] = useState("");
+  const [parentValue, setParentValue] = useState("");
+  const [childFieldId, setChildFieldId] = useState("");
+  const [childOptions, setChildOptions] = useState("");
+  const submit = useSubmit();
+
+  const parentField = fields.find(f => f.id === parentFieldId);
+  const parentHasOptions = parentField && ["select", "radio", "checkbox"].includes(parentField.type);
+  
+  const childField = fields.find(f => f.id === childFieldId);
+  const childHasOptions = childField && ["select", "radio", "checkbox"].includes(childField.type);
+
+  const canSubmit = parentFieldId && parentValue && childFieldId && (!childHasOptions || childOptions.trim());
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    const formData = new FormData();
+    formData.append("_intent", "addRule");
+    formData.append("parentFieldId", parentFieldId);
+    formData.append("parentValue", parentValue);
+    formData.append("childFieldId", childFieldId);
+    formData.append("childOptions", childHasOptions ? JSON.stringify(childOptions.split('\n').filter(o => o.trim())) : "");
+    
+    submit(formData, { method: "post" });
+  };
+
+  const fieldOptions = fields.map(f => ({ label: f.label, value: f.id }));
+  const parentValueOptions = parentHasOptions && parentField.optionsJson 
+    ? (parentField.optionsJson as string[]).map((opt: string) => ({ label: opt, value: opt }))
+    : [];
+
+  return (
+    <Card background="bg-surface-secondary">
+      <form onSubmit={handleSubmit}>
+        <BlockStack gap="400">
+          <Text as="h3" variant="headingMd">Add New Rule</Text>
+          
+          <Text as="p" tone="subdued">
+            Define when a field should appear based on another field's value
+          </Text>
+
+          <Divider />
+
+          <Text as="h4" variant="headingSm">IF (Parent Condition)</Text>
+
+          <Select
+            label="Parent Field"
+            value={parentFieldId}
+            onChange={setParentFieldId}
+            options={[
+              { label: "Select a field...", value: "" },
+              ...fieldOptions
+            ]}
+          />
+
+          {parentHasOptions ? (
+            <Select
+              label="Equals Value"
+              value={parentValue}
+              onChange={setParentValue}
+              options={[
+                { label: "Select a value...", value: "" },
+                ...parentValueOptions
+              ]}
+              disabled={!parentFieldId}
+            />
+          ) : (
+            <TextField
+              label="Equals Value"
+              value={parentValue}
+              onChange={setParentValue}
+              placeholder="Enter the value to match"
+              disabled={!parentFieldId}
+              autoComplete="off"
+            />
+          )}
+
+          <Divider />
+
+          <Text as="h4" variant="headingSm">THEN SHOW (Child Field)</Text>
+
+          <Select
+            label="Child Field"
+            value={childFieldId}
+            onChange={setChildFieldId}
+            options={[
+              { label: "Select a field...", value: "" },
+              ...fieldOptions.filter(f => f.value !== parentFieldId)
+            ]}
+          />
+
+          {childHasOptions && (
+            <TextField
+              label="Available Options (one per line)"
+              multiline={4}
+              value={childOptions}
+              onChange={setChildOptions}
+              placeholder="Gildan&#10;Bella+Canvas&#10;Next Level"
+              helpText="Enter the options that should appear when this rule triggers"
+            />
+          )}
+
+          <Button 
+            submit
+            disabled={!canSubmit}
+          >
+            Add Rule
+          </Button>
+        </BlockStack>
+      </form>
+    </Card>
   );
 }
