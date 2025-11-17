@@ -176,6 +176,7 @@ export default function TemplateDetail() {
   const [editingField, setEditingField] = useState<string | null>(null);
   const [templateName, setTemplateName] = useState(template.name);
   const [searchQuery, setSearchQuery] = useState("");
+  const [optimisticLinks, setOptimisticLinks] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     setTemplateName(template.name);
@@ -349,7 +350,9 @@ export default function TemplateDetail() {
                         resourceName={{ singular: 'product', plural: 'products' }}
                         items={filteredProducts}
                         renderItem={(product: any) => {
-                          const isLinked = linkedProductIds.includes(product.id);
+                          const isLinkedInDb = linkedProductIds.includes(product.id);
+                          const isOptimisticallyLinked = optimisticLinks.has(product.id);
+                          const isLinked = isLinkedInDb || isOptimisticallyLinked;
                           
                           return (
                             <ResourceItem
@@ -373,7 +376,7 @@ export default function TemplateDetail() {
                                     {product.handle}
                                   </Text>
                                 </BlockStack>
-                                <Form method="post" reloadDocument>
+                                <Form method="post">
                                   <input type="hidden" name="productGid" value={product.id} />
                                   {isLinked ? (
                                     <InlineStack gap="200">
@@ -383,12 +386,26 @@ export default function TemplateDetail() {
                                         name="_intent" 
                                         value="unlinkProduct"
                                         tone="critical"
+                                        onClick={() => {
+                                          setOptimisticLinks(prev => {
+                                            const next = new Set(prev);
+                                            next.delete(product.id);
+                                            return next;
+                                          });
+                                        }}
                                       >
                                         Unlink
                                       </Button>
                                     </InlineStack>
                                   ) : (
-                                    <Button submit name="_intent" value="linkProduct">
+                                    <Button 
+                                      submit 
+                                      name="_intent" 
+                                      value="linkProduct"
+                                      onClick={() => {
+                                        setOptimisticLinks(prev => new Set(prev).add(product.id));
+                                      }}
+                                    >
                                       Link Template
                                     </Button>
                                   )}
