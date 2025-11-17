@@ -2,7 +2,6 @@ import { json, redirect, type ActionFunctionArgs, type LoaderFunctionArgs } from
 import { useLoaderData, Form, useSubmit } from "@remix-run/react";
 import { Page, Card, TextField, Button, BlockStack, InlineGrid, ButtonGroup, Select, Checkbox, Badge, Icon, InlineStack, Text, Divider } from "@shopify/polaris";
 import { DeleteIcon, EditIcon } from "@shopify/polaris-icons";
-import { Redirect } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { prisma } from "../db.server";
 import { useState, useEffect } from "react";
@@ -147,7 +146,6 @@ export default function TemplateDetail() {
   const [showAddField, setShowAddField] = useState(false);
   const [editingField, setEditingField] = useState<string | null>(null);
   const [templateName, setTemplateName] = useState(template.name);
-  const [shouldRedirect, setShouldRedirect] = useState(false);
 
   useEffect(() => {
     setTemplateName(template.name);
@@ -162,7 +160,6 @@ export default function TemplateDetail() {
         { content: "Link to Products", url: `/app/templates/${template.id}/products` }
       ]}
     >
-      {shouldRedirect && <Redirect url={`/app/templates/${template.id}/products`} />}
       <BlockStack gap="400">
         <Card>
           <BlockStack gap="400">
@@ -260,9 +257,9 @@ export default function TemplateDetail() {
             <Text as="p" tone="subdued">
               This template is linked to {template.links.length} product{template.links.length !== 1 ? 's' : ''}.
             </Text>
-            <Button onClick={() => setShouldRedirect(true)}>
-              Manage Product Links
-            </Button>
+            <a href={`/app/templates/${template.id}/products`} style={{textDecoration: 'none'}}>
+              <Button>Manage Product Links</Button>
+            </a>
           </BlockStack>
         </Card>
       </BlockStack>
