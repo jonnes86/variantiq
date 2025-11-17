@@ -373,7 +373,7 @@ export default function TemplateDetail() {
                                     {product.handle}
                                   </Text>
                                 </BlockStack>
-                                <Form method="post">
+                                <Form method="post" reloadDocument>
                                   <input type="hidden" name="productGid" value={product.id} />
                                   {isLinked ? (
                                     <InlineStack gap="200">
