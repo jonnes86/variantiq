@@ -1,5 +1,5 @@
 import { json, redirect, type ActionFunctionArgs, type LoaderFunctionArgs } from "@remix-run/node";
-import { useLoaderData, Form, useSubmit } from "@remix-run/react";
+import { useLoaderData, Form, useSubmit, Link } from "@remix-run/react";
 import { Page, Card, TextField, Button, BlockStack, InlineGrid, ButtonGroup, Select, Checkbox, Badge, Icon, InlineStack, Text, Divider } from "@shopify/polaris";
 import { DeleteIcon, EditIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
@@ -161,7 +161,6 @@ export default function TemplateDetail() {
       ]}
     >
       <BlockStack gap="400">
-        {/* Template Name */}
         <Card>
           <BlockStack gap="400">
             <Text as="h2" variant="headingMd">Template Settings</Text>
@@ -192,7 +191,6 @@ export default function TemplateDetail() {
           </BlockStack>
         </Card>
 
-        {/* Fields List */}
         <Card>
           <BlockStack gap="400">
             <InlineStack align="space-between">
@@ -253,16 +251,15 @@ export default function TemplateDetail() {
           </BlockStack>
         </Card>
 
-        {/* Linked Products Summary */}
         <Card>
           <BlockStack gap="200">
             <Text as="h2" variant="headingMd">Linked Products</Text>
             <Text as="p" tone="subdued">
               This template is linked to {template.links.length} product{template.links.length !== 1 ? 's' : ''}.
             </Text>
-            <Button url={`/app/templates/${template.id}/products`}>
-              Manage Product Links
-            </Button>
+            <Link to={`/app/templates/${template.id}/products`}>
+              <Button>Manage Product Links</Button>
+            </Link>
           </BlockStack>
         </Card>
       </BlockStack>
