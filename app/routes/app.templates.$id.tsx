@@ -1,14 +1,14 @@
 import { json, redirect, type ActionFunctionArgs, type LoaderFunctionArgs } from "@remix-run/node";
 import { useLoaderData, Form, useSubmit } from "@remix-run/react";
-import { Page, Card, TextField, Button, BlockStack, ButtonGroup, Select, Checkbox, Badge, InlineStack, Text, Divider } from "@shopify/polaris";
-import { TitleBar } from "@shopify/app-bridge-react";
+import { Page, Card, TextField, Button, BlockStack, ButtonGroup, Select, Checkbox, Badge, InlineStack, Text, Divider, Tabs, ResourceList, ResourceItem, Banner } from "@shopify/polaris";
 import { DeleteIcon, EditIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
 import { prisma } from "../db.server";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
+  
   const template = await prisma.template.findFirst({
     where: { id: params.id!, shop: session.shop },
     include: {
@@ -17,8 +17,44 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       links: true
     },
   });
+  
   if (!template) throw new Response("Not found", { status: 404 });
-  return json({ template });
+
+  // Fetch products for the Products tab
+  const hasReadProducts = session.scope?.includes('read_products');
+  let products = [];
+  let productsError = null;
+
+  if (hasReadProducts) {
+    try {
+      const response = await admin.graphql(`
+        query {
+          products(first: 50) {
+            nodes {
+              id
+              title
+              handle
+              featuredImage {
+                url
+              }
+            }
+          }
+        }
+      `);
+      const { data } = await response.json();
+      products = data.products.nodes;
+    } catch (error: any) {
+      productsError = error.message;
+    }
+  }
+
+  return json({ 
+    template,
+    products,
+    productsError,
+    hasReadProducts,
+    currentScope: session.scope
+  });
 }
 
 export async function action({ request, params }: ActionFunctionArgs) {
@@ -49,19 +85,19 @@ export async function action({ request, params }: ActionFunctionArgs) {
       try {
         optionsJson = JSON.parse(String(optionsRaw));
       } catch (e) {
-        console.error("  Failed to parse options:", e);
+        console.error("Failed to parse options:", e);
       }
     }
 
     if (name && label) {
-      try {
-        const maxSort = await prisma.field.findFirst({
-          where: { templateId: params.id! },
-          orderBy: { sort: 'desc' },
-          select: { sort: true }
-        });
+      const maxSort = await prisma.field.findFirst({
+        where: { templateId: params.id! },
+        orderBy: { sort: 'desc' },
+        select: { sort: true }
+      });
 
-        const fieldData = {
+      await prisma.field.create({
+        data: {
           templateId: params.id!,
           type,
           name,
@@ -69,13 +105,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
           required,
           optionsJson,
           sort: (maxSort?.sort || 0) + 1
-        };
-
-        await prisma.field.create({ data: fieldData });
-      } catch (error) {
-        console.error("  ❌ Error creating field:", error);
-        throw error;
-      }
+        }
+      });
     }
     return redirect(`/app/templates/${params.id}`);
   }
@@ -108,139 +139,286 @@ export async function action({ request, params }: ActionFunctionArgs) {
     return redirect(`/app/templates/${params.id}`);
   }
 
+  if (intent === "linkProduct") {
+    const productGid = String(form.get("productGid"));
+    const existing = await prisma.productTemplateLink.findFirst({
+      where: { productGid, templateId: params.id! }
+    });
+
+    if (!existing) {
+      await prisma.productTemplateLink.create({
+        data: {
+          shop: session.shop,
+          productGid,
+          templateId: params.id!,
+        }
+      });
+    }
+    return redirect(`/app/templates/${params.id}`);
+  }
+
+  if (intent === "unlinkProduct") {
+    const productGid = String(form.get("productGid"));
+    await prisma.productTemplateLink.deleteMany({
+      where: { productGid, templateId: params.id! }
+    });
+    return redirect(`/app/templates/${params.id}`);
+  }
+
   return redirect(`/app/templates/${params.id}`);
 }
 
 export default function TemplateDetail() {
-  const { template } = useLoaderData<typeof loader>();
+  const { template, products, productsError, hasReadProducts, currentScope } = useLoaderData<typeof loader>();
   const submit = useSubmit();
+  const [selectedTab, setSelectedTab] = useState(0);
   const [showAddField, setShowAddField] = useState(false);
   const [editingField, setEditingField] = useState<string | null>(null);
   const [templateName, setTemplateName] = useState(template.name);
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     setTemplateName(template.name);
   }, [template.name]);
 
+  const handleTabChange = useCallback((selectedTabIndex: number) => {
+    setSelectedTab(selectedTabIndex);
+  }, []);
+
+  const tabs = [
+    {
+      id: 'fields',
+      content: 'Fields',
+      panelID: 'fields-panel',
+    },
+    {
+      id: 'products',
+      content: 'Products',
+      panelID: 'products-panel',
+    },
+    {
+      id: 'rules',
+      content: 'Rules',
+      panelID: 'rules-panel',
+    },
+  ];
+
+  const linkedProductIds = template.links.map((link: any) => link.productGid);
+  const filteredProducts = products.filter((p: any) =>
+    p.title.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return (
-    <>
-      <TitleBar title={template.name}>
-        <button variant="breadcrumb" onClick={() => window.open('/app/templates', '_top')}>
-          Templates
-        </button>
-        <button onClick={() => window.open(`/app/templates/${template.id}/products`, '_top')}>
-          Link to Products
-        </button>
-        <button onClick={() => window.open(`/app/templates/${template.id}/rules`, '_top')}>
-          Rules
-        </button>
-      </TitleBar>
-      <Page>
-        <BlockStack gap="400">
-          <Card>
-            <BlockStack gap="400">
-              <Text as="h2" variant="headingMd">Template Settings</Text>
-              <Form method="post">
-                <BlockStack gap="300">
-                  <TextField
-                    label="Template name"
-                    name="name"
-                    value={templateName}
-                    onChange={setTemplateName}
-                    autoComplete="off"
-                  />
-                  <InlineStack gap="200">
-                    <Button 
-                      submit 
-                      name="_intent" 
-                      value="rename"
-                      disabled={!templateName.trim() || templateName === template.name}
-                    >
-                      Save Changes
-                    </Button>
-                    <Button tone="critical" variant="secondary" submit name="_intent" value="delete">
-                      Delete Template
-                    </Button>
-                  </InlineStack>
-                </BlockStack>
-              </Form>
-            </BlockStack>
-          </Card>
+    <Page
+      title={template.name}
+      backAction={{ url: "/app/templates" }}
+    >
+      <BlockStack gap="400">
+        {/* Template Settings */}
+        <Card>
+          <BlockStack gap="400">
+            <Text as="h2" variant="headingMd">Template Settings</Text>
+            <Form method="post">
+              <BlockStack gap="300">
+                <TextField
+                  label="Template name"
+                  name="name"
+                  value={templateName}
+                  onChange={setTemplateName}
+                  autoComplete="off"
+                />
+                <InlineStack gap="200">
+                  <Button 
+                    submit 
+                    name="_intent" 
+                    value="rename"
+                    disabled={!templateName.trim() || templateName === template.name}
+                  >
+                    Save Changes
+                  </Button>
+                  <Button tone="critical" variant="secondary" submit name="_intent" value="delete">
+                    Delete Template
+                  </Button>
+                </InlineStack>
+              </BlockStack>
+            </Form>
+          </BlockStack>
+        </Card>
 
-          <Card>
-            <BlockStack gap="400">
-              <InlineStack align="space-between">
-                <Text as="h2" variant="headingMd">Fields ({template.fields.length})</Text>
-                <Button onClick={() => setShowAddField(!showAddField)}>
-                  {showAddField ? "Cancel" : "Add Field"}
-                </Button>
-              </InlineStack>
+        {/* Tabs */}
+        <Card>
+          <Tabs tabs={tabs} selected={selectedTab} onSelect={handleTabChange}>
+            {/* Fields Tab */}
+            {selectedTab === 0 && (
+              <BlockStack gap="400">
+                <InlineStack align="space-between">
+                  <Text as="h2" variant="headingMd">Fields ({template.fields.length})</Text>
+                  <Button onClick={() => setShowAddField(!showAddField)}>
+                    {showAddField ? "Cancel" : "Add Field"}
+                  </Button>
+                </InlineStack>
 
-              {showAddField && <AddFieldForm />}
+                {showAddField && <AddFieldForm />}
 
-              <Divider />
+                <Divider />
 
-              {template.fields.length === 0 ? (
-                <Text as="p" tone="subdued">No fields yet. Add your first field to start collecting custom data.</Text>
-              ) : (
-                <BlockStack gap="300">
-                  {template.fields.map((field: any) => (
-                    <Card key={field.id}>
-                      {editingField === field.id ? (
-                        <EditFieldForm field={field} onCancel={() => setEditingField(null)} />
-                      ) : (
-                        <InlineStack align="space-between">
-                          <BlockStack gap="100">
-                            <InlineStack gap="200" blockAlign="center">
-                              <Text as="h3" variant="headingSm">{field.label}</Text>
-                              <Badge tone={field.required ? "attention" : "info"}>
-                                {field.type}
-                              </Badge>
-                              {field.required && <Badge tone="critical">Required</Badge>}
-                            </InlineStack>
-                            <Text as="p" tone="subdued">Field name: {field.name}</Text>
-                            {field.optionsJson && (
-                              <Text as="p" tone="subdued">
-                                Options: {(field.optionsJson as string[]).join(", ")}
-                              </Text>
-                            )}
-                          </BlockStack>
-                          <ButtonGroup>
-                            <Button icon={EditIcon} onClick={() => setEditingField(field.id)} />
-                            <Form method="post">
-                              <input type="hidden" name="fieldId" value={field.id} />
-                              <Button
-                                icon={DeleteIcon}
-                                tone="critical"
-                                submit
-                                name="_intent"
-                                value="deleteField"
-                              />
-                            </Form>
-                          </ButtonGroup>
-                        </InlineStack>
-                      )}
-                    </Card>
-                  ))}
-                </BlockStack>
-              )}
-            </BlockStack>
-          </Card>
+                {template.fields.length === 0 ? (
+                  <Text as="p" tone="subdued">No fields yet. Add your first field to start collecting custom data.</Text>
+                ) : (
+                  <BlockStack gap="300">
+                    {template.fields.map((field: any) => (
+                      <Card key={field.id}>
+                        {editingField === field.id ? (
+                          <EditFieldForm field={field} onCancel={() => setEditingField(null)} />
+                        ) : (
+                          <InlineStack align="space-between">
+                            <BlockStack gap="100">
+                              <InlineStack gap="200" blockAlign="center">
+                                <Text as="h3" variant="headingSm">{field.label}</Text>
+                                <Badge tone={field.required ? "attention" : "info"}>
+                                  {field.type}
+                                </Badge>
+                                {field.required && <Badge tone="critical">Required</Badge>}
+                              </InlineStack>
+                              <Text as="p" tone="subdued">Field name: {field.name}</Text>
+                              {field.optionsJson && (
+                                <Text as="p" tone="subdued">
+                                  Options: {(field.optionsJson as string[]).join(", ")}
+                                </Text>
+                              )}
+                            </BlockStack>
+                            <ButtonGroup>
+                              <Button icon={EditIcon} onClick={() => setEditingField(field.id)} />
+                              <Form method="post">
+                                <input type="hidden" name="fieldId" value={field.id} />
+                                <Button
+                                  icon={DeleteIcon}
+                                  tone="critical"
+                                  submit
+                                  name="_intent"
+                                  value="deleteField"
+                                />
+                              </Form>
+                            </ButtonGroup>
+                          </InlineStack>
+                        )}
+                      </Card>
+                    ))}
+                  </BlockStack>
+                )}
+              </BlockStack>
+            )}
 
-          <Card>
-            <BlockStack gap="200">
-              <Text as="h2" variant="headingMd">Linked Products</Text>
-              <Text as="p" tone="subdued">
-                This template is linked to {template.links.length} product{template.links.length !== 1 ? 's' : ''}.
-              </Text>
-              <Button onClick={() => window.open(`/app/templates/${template.id}/products`, '_top')}>
-                Manage Product Links
-              </Button>
-            </BlockStack>
-          </Card>
-        </BlockStack>
-      </Page>
-    </>
+            {/* Products Tab */}
+            {selectedTab === 1 && (
+              <BlockStack gap="400">
+                <Text as="h2" variant="headingMd">Linked Products</Text>
+
+                {!hasReadProducts && (
+                  <Banner tone="critical">
+                    <p><strong>Missing Permission:</strong> This app needs the "read_products" permission.</p>
+                    <p style={{ marginTop: '8px' }}>Current scopes: {currentScope || 'none'}</p>
+                  </Banner>
+                )}
+
+                {productsError && (
+                  <Banner tone="critical">
+                    <p><strong>Error loading products:</strong> {productsError}</p>
+                  </Banner>
+                )}
+
+                {hasReadProducts && !productsError && (
+                  <>
+                    <Text as="p" tone="subdued">
+                      This template is linked to {linkedProductIds.length} product{linkedProductIds.length !== 1 ? 's' : ''}.
+                      Select which products should use this template.
+                    </Text>
+
+                    <TextField
+                      label="Search products"
+                      value={searchQuery}
+                      onChange={setSearchQuery}
+                      placeholder="Search by product name..."
+                      autoComplete="off"
+                      clearButton
+                      onClearButtonClick={() => setSearchQuery("")}
+                    />
+
+                    {filteredProducts.length > 0 ? (
+                      <ResourceList
+                        resourceName={{ singular: 'product', plural: 'products' }}
+                        items={filteredProducts}
+                        renderItem={(product: any) => {
+                          const isLinked = linkedProductIds.includes(product.id);
+                          
+                          return (
+                            <ResourceItem
+                              id={product.id}
+                              media={
+                                product.featuredImage ? (
+                                  <img 
+                                    src={product.featuredImage.url} 
+                                    alt={product.title}
+                                    style={{ width: 50, height: 50, objectFit: 'cover' }}
+                                  />
+                                ) : undefined
+                              }
+                            >
+                              <InlineStack align="space-between">
+                                <BlockStack gap="100">
+                                  <Text as="h3" variant="bodyMd" fontWeight="semibold">
+                                    {product.title}
+                                  </Text>
+                                  <Text as="p" tone="subdued">
+                                    {product.handle}
+                                  </Text>
+                                </BlockStack>
+                                <Form method="post">
+                                  <input type="hidden" name="productGid" value={product.id} />
+                                  {isLinked ? (
+                                    <InlineStack gap="200">
+                                      <Badge tone="success">Linked</Badge>
+                                      <Button 
+                                        submit 
+                                        name="_intent" 
+                                        value="unlinkProduct"
+                                        tone="critical"
+                                      >
+                                        Unlink
+                                      </Button>
+                                    </InlineStack>
+                                  ) : (
+                                    <Button submit name="_intent" value="linkProduct">
+                                      Link Template
+                                    </Button>
+                                  )}
+                                </Form>
+                              </InlineStack>
+                            </ResourceItem>
+                          );
+                        }}
+                      />
+                    ) : (
+                      <Text as="p" tone="subdued">No products found.</Text>
+                    )}
+                  </>
+                )}
+              </BlockStack>
+            )}
+
+            {/* Rules Tab */}
+            {selectedTab === 2 && (
+              <BlockStack gap="400">
+                <Text as="h2" variant="headingMd">Rules</Text>
+                <Text as="p" tone="subdued">
+                  Rules feature coming soon. This will allow you to set conditional logic for when fields appear.
+                </Text>
+              </BlockStack>
+            )}
+          </Tabs>
+        </Card>
+      </BlockStack>
+    </Page>
   );
 }
 
@@ -259,17 +437,12 @@ function AddFieldForm() {
     e.preventDefault();
     
     const formData = new FormData();
- <Card>
-  <BlockStack gap="200">
-    <Text as="h2" variant="headingMd">Linked Products</Text>
-    <Text as="p" tone="subdued">
-      This template is linked to {template.links.length} product{template.links.length !== 1 ? 's' : ''}.
-    </Text>
-    <form method="get" action={`/app/templates/${template.id}/products`}>
-      <Button submit>Manage Product Links</Button>
-    </form>
-  </BlockStack>
-</Card>
+    formData.append("_intent", "addField");
+    formData.append("type", fieldType);
+    formData.append("fieldName", fieldName);
+    formData.append("label", fieldLabel);
+    formData.append("required", isRequired ? "true" : "false");
+    formData.append("options", needsOptions ? JSON.stringify(options.split('\n').filter(o => o.trim())) : "");
     
     submit(formData, { method: "post" });
   };
