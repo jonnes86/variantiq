@@ -419,40 +419,39 @@ export default function TemplateDetail() {
                                     {product.handle}
                                   </Text>
                                 </BlockStack>
-                                <Form method="post">
-                                  <input type="hidden" name="productGid" value={product.id} />
-                                  {isLinked ? (
-                                    <InlineStack gap="200">
-                                      <Badge tone="success">Linked</Badge>
-                                      <Button 
-                                        submit 
-                                        name="_intent" 
-                                        value="unlinkProduct"
-                                        tone="critical"
-                                        onClick={() => {
-                                          setOptimisticLinks(prev => {
-                                            const next = new Set(prev);
-                                            next.delete(product.id);
-                                            return next;
-                                          });
-                                        }}
-                                      >
-                                        Unlink
-                                      </Button>
-                                    </InlineStack>
-                                  ) : (
+                                {isLinked ? (
+                                  <InlineStack gap="200">
+                                    <Badge tone="success">Linked</Badge>
                                     <Button 
-                                      submit 
-                                      name="_intent" 
-                                      value="linkProduct"
                                       onClick={() => {
-                                        setOptimisticLinks(prev => new Set(prev).add(product.id));
+                                        const formData = new FormData();
+                                        formData.append('_intent', 'unlinkProduct');
+                                        formData.append('productGid', product.id);
+                                        submit(formData, { method: 'post' });
+                                        setOptimisticLinks(prev => {
+                                          const next = new Set(prev);
+                                          next.delete(product.id);
+                                          return next;
+                                        });
                                       }}
+                                      tone="critical"
                                     >
-                                      Link Template
+                                      Unlink
                                     </Button>
-                                  )}
-                                </Form>
+                                  </InlineStack>
+                                ) : (
+                                  <Button 
+                                    onClick={() => {
+                                      const formData = new FormData();
+                                      formData.append('_intent', 'linkProduct');
+                                      formData.append('productGid', product.id);
+                                      submit(formData, { method: 'post' });
+                                      setOptimisticLinks(prev => new Set(prev).add(product.id));
+                                    }}
+                                  >
+                                    Link Template
+                                  </Button>
+                                )}
                               </InlineStack>
                             </ResourceItem>
                           );
