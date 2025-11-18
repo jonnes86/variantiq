@@ -48,13 +48,15 @@
 .variantiq-field {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
 }
 
 .variantiq-field label {
-  font-weight: 500;
+  font-weight: 600;
   color: #333;
-  font-size: 0.95em;
+  font-size: 1em;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .variantiq-field .required {
@@ -64,49 +66,129 @@
 
 .variantiq-input,
 .variantiq-select {
-  padding: 10px 12px;
-  border: 1px solid #ddd;
+  padding: 12px 16px;
+  border: 2px solid #ddd;
   border-radius: 4px;
   font-size: 1em;
   background: white;
-  transition: border-color 0.2s;
+  transition: all 0.2s;
+  font-family: inherit;
 }
 
 .variantiq-input:focus,
 .variantiq-select:focus {
   outline: none;
-  border-color: #4a90e2;
-  box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
+  border-color: #333;
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.05);
 }
 
-.variantiq-radio-group,
-.variantiq-checkbox-group {
+.variantiq-input:hover,
+.variantiq-select:hover {
+  border-color: #999;
+}
+
+/* Radio buttons styled as large clickable buttons */
+.variantiq-radio-group {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 12px;
+}
+
+.variantiq-radio-label {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 12px;
+  border: 2px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: white;
+  text-align: center;
+  font-weight: 500;
+  min-height: 60px;
+  position: relative;
 }
 
-.variantiq-radio-label,
+.variantiq-radio-label:hover {
+  border-color: #333;
+  background: #f9f9f9;
+}
+
+.variantiq-radio-label input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.variantiq-radio-label input[type="radio"]:checked + span,
+.variantiq-radio-label:has(input[type="radio"]:checked) {
+  border-color: #333;
+  background: #333;
+  color: white;
+}
+
+.variantiq-radio-label input[type="radio"]:checked ~ *,
+.variantiq-radio-label:has(input[type="radio"]:checked) span {
+  color: white;
+}
+
+.variantiq-radio-label span {
+  position: relative;
+  z-index: 1;
+}
+
+/* Checkbox buttons styled similarly */
+.variantiq-checkbox-group {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 12px;
+}
+
 .variantiq-checkbox-label {
   display: flex;
   align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  padding: 8px;
+  justify-content: center;
+  padding: 16px 12px;
+  border: 2px solid #ddd;
   border-radius: 4px;
-  transition: background-color 0.2s;
-}
-
-.variantiq-radio-label:hover,
-.variantiq-checkbox-label:hover {
-  background-color: #f0f0f0;
-}
-
-.variantiq-radio,
-.variantiq-checkbox {
-  width: 18px;
-  height: 18px;
   cursor: pointer;
+  transition: all 0.2s;
+  background: white;
+  text-align: center;
+  font-weight: 500;
+  min-height: 60px;
+  position: relative;
+}
+
+.variantiq-checkbox-label:hover {
+  border-color: #333;
+  background: #f9f9f9;
+}
+
+.variantiq-checkbox-label input[type="checkbox"] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.variantiq-checkbox-label input[type="checkbox"]:checked + span,
+.variantiq-checkbox-label:has(input[type="checkbox"]:checked) {
+  border-color: #333;
+  background: #333;
+  color: white;
+}
+
+.variantiq-checkbox-label input[type="checkbox"]:checked ~ *,
+.variantiq-checkbox-label:has(input[type="checkbox"]:checked) span {
+  color: white;
+}
+
+.variantiq-checkbox-label span {
+  position: relative;
+  z-index: 1;
 }
 
 /* Animation for cascading fields */
@@ -139,5 +221,17 @@
   .variantiq-input,
   .variantiq-select {
     font-size: 16px; /* Prevents zoom on iOS */
+  }
+
+  .variantiq-radio-group,
+  .variantiq-checkbox-group {
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  }
+
+  .variantiq-radio-label,
+  .variantiq-checkbox-label {
+    padding: 12px 8px;
+    min-height: 50px;
+    font-size: 0.9em;
   }
 }
