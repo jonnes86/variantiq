@@ -182,27 +182,75 @@ class VariantIQFields {
   }
 
   interceptAddToCart() {
-    // Find the Add to Cart form (Shopify standard form)
-    const addToCartForm = document.querySelector('form[action*="/cart/add"]');
-    
-    if (!addToCartForm) {
-      console.warn('VariantIQ: Could not find Add to Cart form');
-      return;
-    }
+    // Wait for DOM to be fully ready
+    const tryIntercept = () => {
+      // Try multiple selectors for Add to Cart forms
+      const selectors = [
+        'form[action*="/cart/add"]',
+        'form[action="/cart/add"]',
+        'form[action*="cart/add"]',
+        'form#add-to-cart-form',
+        'form.product-form',
+        'form[id*="product"]',
+        'form[class*="product"]'
+      ];
 
-    addToCartForm.addEventListener('submit', (e) => {
-      // Validate required fields
-      const validation = this.validateFields();
-      
-      if (!validation.valid) {
-        e.preventDefault();
-        this.showValidationError(validation.message);
+      let addToCartForm = null;
+      for (const selector of selectors) {
+        addToCartForm = document.querySelector(selector);
+        if (addToCartForm) {
+          console.log('VariantIQ: Found Add to Cart form with selector:', selector);
+          break;
+        }
+      }
+
+      if (!addToCartForm) {
+        console.warn('VariantIQ: Could not find Add to Cart form. Trying to find by button...');
+        
+        // Try to find by button
+        const addToCartButton = document.querySelector('button[name="add"], button[type="submit"][name="add"], input[type="submit"][name="add"]');
+        if (addToCartButton) {
+          addToCartForm = addToCartButton.closest('form');
+          console.log('VariantIQ: Found form via Add to Cart button');
+        }
+      }
+
+      if (!addToCartForm) {
+        console.error('VariantIQ: Could not find Add to Cart form after trying all methods');
         return false;
       }
 
-      // Add custom properties to cart
-      this.addPropertiesToCart(addToCartForm);
-    });
+      console.log('VariantIQ: Intercepting Add to Cart form');
+
+      addToCartForm.addEventListener('submit', (e) => {
+        console.log('VariantIQ: Add to Cart form submitted');
+        
+        // Validate required fields
+        const validation = this.validateFields();
+        
+        if (!validation.valid) {
+          console.log('VariantIQ: Validation failed:', validation.message);
+          e.preventDefault();
+          e.stopPropagation();
+          this.showValidationError(validation.message);
+          return false;
+        }
+
+        console.log('VariantIQ: Validation passed, adding properties');
+        // Add custom properties to cart
+        this.addPropertiesToCart(addToCartForm);
+      }, true); // Use capture phase
+
+      return true;
+    };
+
+    // Try immediately
+    if (!tryIntercept()) {
+      // If failed, try again after a short delay (for dynamic forms)
+      setTimeout(tryIntercept, 500);
+      setTimeout(tryIntercept, 1000);
+      setTimeout(tryIntercept, 2000);
+    }
   }
 
   validateFields() {
