@@ -2,17 +2,30 @@
   Custom Product Options - renders dynamic fields based on templates
 {% endcomment %}
 
+{{ 'product-fields.css' | asset_url | stylesheet_tag }}
+
 <div 
-  class="product-options-wrapper" 
+  class="variantiq-product-options" 
   data-product-id="{{ product.id }}"
-  data-app-url="{{ shop.permanent_domain | split: '.myshopify.com' | first }}"
+  data-shop="{{ shop.permanent_domain }}"
+  data-api-url="https://variantiq-production.up.railway.app"
 >
-  <div id="custom-options-{{ product.id }}" class="custom-options-container">
-    <div class="loading-state">
-      <p>Loading custom options...</p>
+  {% if section.settings.show_heading %}
+    <h3 class="variantiq-heading">{{ section.settings.heading }}</h3>
+  {% endif %}
+
+  <div id="variantiq-fields-{{ product.id }}" class="variantiq-fields-container">
+    <div class="variantiq-loading">
+      <p>Loading options...</p>
     </div>
   </div>
+
+  <div id="variantiq-error" class="variantiq-error" style="display: none;">
+    <p>Unable to load product options. Please refresh the page.</p>
+  </div>
 </div>
+
+<script src="{{ 'product-fields.js' | asset_url }}" defer></script>
 
 {% schema %}
 {
