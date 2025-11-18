@@ -1,143 +1,53 @@
-/* VariantIQ Product Fields Styles */
+import { json, type LoaderFunctionArgs } from "@remix-run/node";
+import { prisma } from "../db.server";
 
-.variantiq-product-options {
-  margin: 20px 0;
-  padding: 20px;
-  background: #f9f9f9;
-  border-radius: 8px;
-}
+/**
+ * Public API endpoint - returns template data for a product
+ * No authentication required (public storefront access)
+ */
+export async function loader({ params }: LoaderFunctionArgs) {
+  const productGid = decodeURIComponent(params.productId || "");
 
-.variantiq-heading {
-  margin: 0 0 20px 0;
-  font-size: 1.5em;
-  font-weight: 600;
-  color: #333;
-}
-
-.variantiq-fields-container {
-  margin-top: 16px;
-}
-
-.variantiq-loading {
-  text-align: center;
-  padding: 40px;
-  color: #666;
-}
-
-.variantiq-error {
-  padding: 16px;
-  background: #fee;
-  border: 1px solid #fcc;
-  border-radius: 4px;
-  color: #c33;
-}
-
-.variantiq-no-options {
-  text-align: center;
-  padding: 20px;
-  color: #999;
-  font-style: italic;
-}
-
-.variantiq-fields {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.variantiq-field {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.variantiq-field label {
-  font-weight: 500;
-  color: #333;
-  font-size: 0.95em;
-}
-
-.variantiq-field .required {
-  color: #d32f2f;
-  margin-left: 4px;
-}
-
-.variantiq-input,
-.variantiq-select {
-  padding: 10px 12px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 1em;
-  background: white;
-  transition: border-color 0.2s;
-}
-
-.variantiq-input:focus,
-.variantiq-select:focus {
-  outline: none;
-  border-color: #4a90e2;
-  box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
-}
-
-.variantiq-radio-group,
-.variantiq-checkbox-group {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.variantiq-radio-label,
-.variantiq-checkbox-label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  padding: 8px;
-  border-radius: 4px;
-  transition: background-color 0.2s;
-}
-
-.variantiq-radio-label:hover,
-.variantiq-checkbox-label:hover {
-  background-color: #f0f0f0;
-}
-
-.variantiq-radio,
-.variantiq-checkbox {
-  width: 18px;
-  height: 18px;
-  cursor: pointer;
-}
-
-/* Animation for cascading fields */
-.variantiq-field {
-  animation: slideIn 0.3s ease-out;
-}
-
-@keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* Mobile responsive */
-@media (max-width: 768px) {
-  .variantiq-product-options {
-    padding: 16px;
-    margin: 16px 0;
+  if (!productGid) {
+    return json({ error: "Product ID required" }, { status: 400 });
   }
 
-  .variantiq-heading {
-    font-size: 1.25em;
-  }
+  try {
+    // Find the template link for this product
+    const link = await prisma.productTemplateLink.findFirst({
+      where: { productGid },
+      include: {
+        template: {
+          include: {
+            fields: { orderBy: { sort: 'asc' } },
+            rules: { orderBy: { sort: 'asc' } }
+          }
+        }
+      }
+    });
 
-  .variantiq-input,
-  .variantiq-select {
-    font-size: 16px; /* Prevents zoom on iOS */
+    if (!link) {
+      return json({ 
+        template: null,
+        message: "No template found for this product" 
+      });
+    }
+
+    // Return template data
+    return json(
+      { 
+        template: link.template,
+        productGid 
+      },
+      {
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Cache-Control": "public, max-age=300" // Cache for 5 minutes
+        }
+      }
+    );
+  } catch (error) {
+    console.error("Error fetching template:", error);
+    return json({ error: "Internal server error" }, { status: 500 });
   }
 }
