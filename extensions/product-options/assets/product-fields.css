@@ -98,12 +98,13 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px 12px;
-  border: 2px solid #ddd;
-  border-radius: 4px;
+  padding: var(--button-padding, 16px) 12px;
+  border: 2px solid var(--button-border, #ddd);
+  border-radius: var(--button-radius, 4px);
   cursor: pointer;
   transition: all 0.2s;
-  background: white;
+  background: var(--button-bg, white);
+  color: var(--button-text, #333);
   text-align: center;
   font-weight: 500;
   min-height: 60px;
@@ -111,8 +112,8 @@
 }
 
 .variantiq-radio-label:hover {
-  border-color: #333;
-  background: #f9f9f9;
+  border-color: var(--button-selected-bg, #333);
+  opacity: 0.8;
 }
 
 .variantiq-radio-label input[type="radio"] {
@@ -122,16 +123,14 @@
   height: 0;
 }
 
-.variantiq-radio-label input[type="radio"]:checked + span,
 .variantiq-radio-label:has(input[type="radio"]:checked) {
-  border-color: #333;
-  background: #333;
-  color: white;
+  border-color: var(--button-selected-bg, #333);
+  background: var(--button-selected-bg, #333);
+  color: var(--button-selected-text, white);
 }
 
-.variantiq-radio-label input[type="radio"]:checked ~ *,
 .variantiq-radio-label:has(input[type="radio"]:checked) span {
-  color: white;
+  color: var(--button-selected-text, white);
 }
 
 .variantiq-radio-label span {
@@ -150,12 +149,13 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px 12px;
-  border: 2px solid #ddd;
-  border-radius: 4px;
+  padding: var(--button-padding, 16px) 12px;
+  border: 2px solid var(--button-border, #ddd);
+  border-radius: var(--button-radius, 4px);
   cursor: pointer;
   transition: all 0.2s;
-  background: white;
+  background: var(--button-bg, white);
+  color: var(--button-text, #333);
   text-align: center;
   font-weight: 500;
   min-height: 60px;
@@ -163,8 +163,8 @@
 }
 
 .variantiq-checkbox-label:hover {
-  border-color: #333;
-  background: #f9f9f9;
+  border-color: var(--button-selected-bg, #333);
+  opacity: 0.8;
 }
 
 .variantiq-checkbox-label input[type="checkbox"] {
@@ -174,21 +174,14 @@
   height: 0;
 }
 
-.variantiq-checkbox-label input[type="checkbox"]:checked + span,
 .variantiq-checkbox-label:has(input[type="checkbox"]:checked) {
-  border-color: #333;
-  background: #333;
-  color: white;
+  border-color: var(--button-selected-bg, #333);
+  background: var(--button-selected-bg, #333);
+  color: var(--button-selected-text, white);
 }
 
-.variantiq-checkbox-label input[type="checkbox"]:checked ~ *,
 .variantiq-checkbox-label:has(input[type="checkbox"]:checked) span {
-  color: white;
-}
-
-.variantiq-checkbox-label span {
-  position: relative;
-  z-index: 1;
+  color: var(--button-selected-text, white);
 }
 
 /* Animation for cascading fields */

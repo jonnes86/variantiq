@@ -4,6 +4,18 @@
 
 {{ 'product-fields.css' | asset_url | stylesheet_tag }}
 
+<style>
+  .variantiq-product-options {
+    --button-bg: {{ section.settings.button_background | default: '#ffffff' }};
+    --button-border: {{ section.settings.button_border | default: '#dddddd' }};
+    --button-text: {{ section.settings.button_text | default: '#333333' }};
+    --button-selected-bg: {{ section.settings.button_selected_background | default: '#333333' }};
+    --button-selected-text: {{ section.settings.button_selected_text | default: '#ffffff' }};
+    --button-radius: {{ section.settings.button_border_radius | default: 4 }}px;
+    --button-padding: {{ section.settings.button_padding | default: 16 }}px;
+  }
+</style>
+
 <div 
   class="variantiq-product-options" 
   data-product-id="{{ product.id }}"
@@ -43,6 +55,60 @@
       "id": "show_heading",
       "label": "Show heading",
       "default": true
+    },
+    {
+      "type": "header",
+      "content": "Button Styling"
+    },
+    {
+      "type": "color",
+      "id": "button_background",
+      "label": "Button background color",
+      "default": "#ffffff"
+    },
+    {
+      "type": "color",
+      "id": "button_border",
+      "label": "Button border color",
+      "default": "#dddddd"
+    },
+    {
+      "type": "color",
+      "id": "button_text",
+      "label": "Button text color",
+      "default": "#333333"
+    },
+    {
+      "type": "color",
+      "id": "button_selected_background",
+      "label": "Selected button background",
+      "default": "#333333"
+    },
+    {
+      "type": "color",
+      "id": "button_selected_text",
+      "label": "Selected button text",
+      "default": "#ffffff"
+    },
+    {
+      "type": "range",
+      "id": "button_border_radius",
+      "label": "Button border radius",
+      "min": 0,
+      "max": 20,
+      "step": 1,
+      "unit": "px",
+      "default": 4
+    },
+    {
+      "type": "range",
+      "id": "button_padding",
+      "label": "Button padding",
+      "min": 8,
+      "max": 24,
+      "step": 2,
+      "unit": "px",
+      "default": 16
     }
   ]
 }
