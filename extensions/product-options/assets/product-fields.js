@@ -184,46 +184,21 @@ class VariantIQFields {
   interceptAddToCart() {
     // Wait for DOM to be fully ready
     const tryIntercept = () => {
-      // Try multiple selectors for Add to Cart forms
-      const selectors = [
-        'form[action*="/cart/add"]',
-        'form[action="/cart/add"]',
-        'form[action*="cart/add"]',
-        'form#add-to-cart-form',
-        'form.product-form',
-        'form[id*="product"]',
-        'form[class*="product"]'
-      ];
+      // Find the Add to Cart button
+      const addToCartButton = document.querySelector(
+        'button[name="add"], button[type="submit"][form*="product"], input[type="submit"][name="add"], [id*="AddToCart"], [class*="add-to-cart"]'
+      );
 
-      let addToCartForm = null;
-      for (const selector of selectors) {
-        addToCartForm = document.querySelector(selector);
-        if (addToCartForm) {
-          console.log('VariantIQ: Found Add to Cart form with selector:', selector);
-          break;
-        }
-      }
-
-      if (!addToCartForm) {
-        console.warn('VariantIQ: Could not find Add to Cart form. Trying to find by button...');
-        
-        // Try to find by button
-        const addToCartButton = document.querySelector('button[name="add"], button[type="submit"][name="add"], input[type="submit"][name="add"]');
-        if (addToCartButton) {
-          addToCartForm = addToCartButton.closest('form');
-          console.log('VariantIQ: Found form via Add to Cart button');
-        }
-      }
-
-      if (!addToCartForm) {
-        console.error('VariantIQ: Could not find Add to Cart form after trying all methods');
+      if (!addToCartButton) {
+        console.warn('VariantIQ: Could not find Add to Cart button');
         return false;
       }
 
-      console.log('VariantIQ: Intercepting Add to Cart form');
+      console.log('VariantIQ: Found Add to Cart button:', addToCartButton);
 
-      addToCartForm.addEventListener('submit', (e) => {
-        console.log('VariantIQ: Add to Cart form submitted');
+      // Intercept the click instead of form submit (works better with AJAX carts)
+      addToCartButton.addEventListener('click', (e) => {
+        console.log('VariantIQ: Add to Cart button clicked');
         
         // Validate required fields
         const validation = this.validateFields();
@@ -232,21 +207,28 @@ class VariantIQFields {
           console.log('VariantIQ: Validation failed:', validation.message);
           e.preventDefault();
           e.stopPropagation();
+          e.stopImmediatePropagation();
           this.showValidationError(validation.message);
           return false;
         }
 
-        console.log('VariantIQ: Validation passed, adding properties');
-        // Add custom properties to cart
-        this.addPropertiesToCart(addToCartForm);
-      }, true); // Use capture phase
+        console.log('VariantIQ: Validation passed, adding properties to form');
+        
+        // Find the form
+        const form = addToCartButton.closest('form') || document.querySelector('form[action*="/cart/add"]');
+        if (form) {
+          this.addPropertiesToCart(form);
+        } else {
+          console.error('VariantIQ: Could not find form to add properties');
+        }
+      }, true); // Use capture phase to run before other handlers
 
       return true;
     };
 
     // Try immediately
     if (!tryIntercept()) {
-      // If failed, try again after a short delay (for dynamic forms)
+      // If failed, try again after delays (for dynamic content)
       setTimeout(tryIntercept, 500);
       setTimeout(tryIntercept, 1000);
       setTimeout(tryIntercept, 2000);
