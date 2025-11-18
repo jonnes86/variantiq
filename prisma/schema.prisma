@@ -59,15 +59,17 @@ model Field {
 }
 
 model Rule {
-  id          String   @id @default(cuid())
-  templateId  String
-  expression  String   // your DSL/JSON for conditions
-  action      String   // show | hide | require | disable | limit
-  payloadJson Json?
-  sort        Int      @default(0)
-  template    Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
-
+  id               String   @id @default(cuid())
+  templateId       String
+  parentFieldId    String   // Field that triggers the rule
+  parentValue      String   // Value that triggers the rule
+  childFieldId     String   // Field to show when triggered
+  childOptionsJson Json?    // Options to show for the child field
+  sort             Int      @default(0)
+  template         Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
   @@index([templateId])
+  @@index([parentFieldId])
+  @@index([childFieldId])
 }
 
 model ProductTemplateLink {
