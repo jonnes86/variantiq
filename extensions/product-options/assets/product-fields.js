@@ -158,11 +158,132 @@ class VariantIQFields {
       if (!fieldElement) return;
       
       const fieldId = fieldElement.dataset.fieldId;
-      const value = e.target.value;
+      const field = this.templateData.template.fields.find(f => f.id === fieldId);
+      
+      // Get value based on field type
+      let value;
+      if (field.type === 'checkbox') {
+        // For checkboxes, collect all checked values
+        const checkboxes = fieldElement.querySelectorAll('input[type="checkbox"]:checked');
+        value = Array.from(checkboxes).map(cb => cb.value).join(', ');
+      } else if (field.type === 'radio') {
+        const radio = fieldElement.querySelector('input[type="radio"]:checked');
+        value = radio ? radio.value : '';
+      } else {
+        value = e.target.value;
+      }
       
       this.fieldValues[fieldId] = value;
       this.handleCascade(fieldId, value);
     });
+
+    // Intercept Add to Cart form submission
+    this.interceptAddToCart();
+  }
+
+  interceptAddToCart() {
+    // Find the Add to Cart form (Shopify standard form)
+    const addToCartForm = document.querySelector('form[action*="/cart/add"]');
+    
+    if (!addToCartForm) {
+      console.warn('VariantIQ: Could not find Add to Cart form');
+      return;
+    }
+
+    addToCartForm.addEventListener('submit', (e) => {
+      // Validate required fields
+      const validation = this.validateFields();
+      
+      if (!validation.valid) {
+        e.preventDefault();
+        this.showValidationError(validation.message);
+        return false;
+      }
+
+      // Add custom properties to cart
+      this.addPropertiesToCart(addToCartForm);
+    });
+  }
+
+  validateFields() {
+    const { fields } = this.templateData.template;
+    const visibleFields = this.getVisibleFields();
+    
+    for (const field of visibleFields) {
+      if (field.required) {
+        const value = this.fieldValues[field.id];
+        
+        if (!value || value.trim() === '') {
+          return {
+            valid: false,
+            message: `Please fill in the required field: ${field.label}`
+          };
+        }
+      }
+    }
+    
+    return { valid: true };
+  }
+
+  getVisibleFields() {
+    // Get all currently visible fields in the DOM
+    const visibleFieldElements = document.querySelectorAll('.variantiq-field');
+    const visibleFieldIds = Array.from(visibleFieldElements).map(el => el.dataset.fieldId);
+    
+    return this.templateData.template.fields.filter(f => visibleFieldIds.includes(f.id));
+  }
+
+  addPropertiesToCart(form) {
+    const { fields } = this.templateData.template;
+    
+    // Remove any existing VariantIQ properties to avoid duplicates
+    const existingProperties = form.querySelectorAll('input[name^="properties["]');
+    existingProperties.forEach(input => {
+      if (input.name.includes('_variantiq_')) {
+        input.remove();
+      }
+    });
+
+    // Add each visible field value as a line item property
+    const visibleFields = this.getVisibleFields();
+    
+    visibleFields.forEach(field => {
+      const value = this.fieldValues[field.id];
+      
+      if (value && value.trim() !== '') {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = `properties[${field.label}]`;
+        input.value = value;
+        form.appendChild(input);
+      }
+    });
+  }
+
+  showValidationError(message) {
+    // Remove any existing error
+    const existingError = document.querySelector('.variantiq-validation-error');
+    if (existingError) {
+      existingError.remove();
+    }
+
+    // Create error message
+    const errorDiv = document.createElement('div');
+    errorDiv.className = 'variantiq-validation-error';
+    errorDiv.style.cssText = 'background: #fee; border: 2px solid #c33; padding: 12px; margin: 16px 0; border-radius: 4px; color: #c33; font-weight: 500;';
+    errorDiv.textContent = message;
+
+    // Insert before the fields container
+    const container = this.container;
+    container.parentNode.insertBefore(errorDiv, container);
+
+    // Scroll to error
+    errorDiv.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+    // Remove after 5 seconds
+    setTimeout(() => {
+      errorDiv.remove();
+    }, 5000);
   }
 
   handleCascade(parentFieldId, parentValue) {
