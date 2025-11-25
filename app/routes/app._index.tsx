@@ -1,6 +1,7 @@
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { Page, Layout, Card, Text, BlockStack, Button, InlineStack } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
+import { useNavigate } from "@remix-run/react";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Do NOT force authenticate here — let child routes handle it
@@ -8,6 +9,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export default function Index() {
+  const navigate = useNavigate();
+
   return (
     <Page>
       <TitleBar title="VariantIQ" />
@@ -31,7 +34,10 @@ export default function Index() {
                     Get Started
                   </Text>
                   <InlineStack gap="300">
-                    <Button url="/app/templates" variant="primary">
+                    <Button
+                      variant="primary"
+                      onClick={() => navigate("/app/templates")}
+                    >
                       Manage Templates
                     </Button>
                   </InlineStack>
