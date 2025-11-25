@@ -1,5 +1,5 @@
 import { json, redirect, type ActionFunctionArgs, type LoaderFunctionArgs } from "@remix-run/node";
-import { useLoaderData, Form } from "@remix-run/react";
+import { useLoaderData, Form, Link } from "@remix-run/react";
 import { Page, Card, Text, TextField, Button, BlockStack, InlineGrid } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 import { prisma } from "../db.server";
@@ -26,7 +26,7 @@ export async function action({ request }: ActionFunctionArgs) {
 export default function TemplatesIndex() {
   const { templates } = useLoaderData<typeof loader>();
   const [templateName, setTemplateName] = useState("");
-  
+
   return (
     <Page title="Templates">
       <BlockStack gap="400">
@@ -35,9 +35,9 @@ export default function TemplatesIndex() {
             <Text as="h2" variant="headingMd">Create a new template</Text>
             <Form method="post">
               <InlineGrid columns={["1fr", "auto"]} gap="200">
-                <TextField 
-                  label="Name" 
-                  name="name" 
+                <TextField
+                  label="Name"
+                  name="name"
                   value={templateName}
                   onChange={setTemplateName}
                   autoComplete="off"
@@ -61,15 +61,17 @@ export default function TemplatesIndex() {
                     <InlineGrid columns={["1fr", "auto"]} gap="200">
                       <BlockStack gap="100">
                         <Text as="h3" variant="headingMd">
-                          <a href={`/app/templates/${t.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+                          <Link to={`/app/templates/${t.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
                             {t.name}
-                          </a>
+                          </Link>
                         </Text>
                         <Text as="p" tone="subdued" variant="bodySm">
                           Updated {new Date(t.updatedAt).toLocaleDateString()}
                         </Text>
                       </BlockStack>
-                      <Button url={`/app/templates/${t.id}`}>Edit</Button>
+                      <Link to={`/app/templates/${t.id}`}>
+                        <Button>Edit</Button>
+                      </Link>
                     </InlineGrid>
                   </Card>
                 ))}
