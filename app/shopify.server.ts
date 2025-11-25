@@ -8,6 +8,7 @@ import {
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
 import prisma from "./db.server";
 
+// Helpful startup logging
 console.log("🔍 SCOPES environment variable:", process.env.SCOPES);
 console.log("🔍 Parsed scopes:", process.env.SCOPES?.split(","));
 
@@ -55,3 +56,22 @@ export const unauthenticated = shopify.unauthenticated;
 export const login = shopify.login;
 export const registerWebhooks = shopify.registerWebhooks;
 export const sessionStorage = shopify.sessionStorage;
+
+/**
+ * Safe wrapper for admin authentication.
+ * Prevents 500s when session is missing or expired.
+ * Use this in loaders/actions instead of authenticate.admin directly.
+ */
+export async function authenticateAdminSafe(request: Request) {
+  try {
+    const result = await shopify.authenticate.admin(request);
+    if (!result?.session) {
+      console.warn("[Auth] No session found during authenticate.admin");
+      return { session: null, admin: null };
+    }
+    return result;
+  } catch (err) {
+    console.error("[Auth] authenticate.admin failed:", err);
+    return { session: null, admin: null };
+  }
+}
