@@ -2,7 +2,7 @@ import type { LoaderFunctionArgs } from "@remix-run/node";
 import { Page, Layout, Card, Text, BlockStack, Button, InlineStack } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { useAppBridge } from "@shopify/app-bridge-react";
-import { Redirect } from "@shopify/app-bridge/actions";
+import { Redirect } from "@shopify/app-bridge";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Do NOT force authenticate here — let child routes handle it
