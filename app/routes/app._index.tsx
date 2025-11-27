@@ -1,8 +1,7 @@
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { Page, Layout, Card, Text, BlockStack, Button, InlineStack } from "@shopify/polaris";
-import { TitleBar } from "@shopify/app-bridge-react";
-import { useAppBridge } from "@shopify/app-bridge-react";
-import { Redirect } from "@shopify/app-bridge";
+import { TitleBar, useAppBridge } from "@shopify/app-bridge-react";
+import { Redirect } from "@shopify/app-bridge"; // ✅ keep this, but only alongside useAppBridge
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Do NOT force authenticate here — let child routes handle it
@@ -44,34 +43,6 @@ export default function Index() {
                       Manage Templates
                     </Button>
                   </InlineStack>
-                </BlockStack>
-              </BlockStack>
-            </Card>
-          </Layout.Section>
-
-          <Layout.Section variant="oneThird">
-            <Card>
-              <BlockStack gap="300">
-                <Text as="h2" variant="headingMd">
-                  Quick Guide
-                </Text>
-                <BlockStack gap="200">
-                  <Text as="p" variant="bodyMd">
-                    <strong>1. Create a Template</strong><br />
-                    Define the custom fields you want to collect from customers.
-                  </Text>
-                  <Text as="p" variant="bodyMd">
-                    <strong>2. Add Fields</strong><br />
-                    Text inputs, dropdowns, radio buttons, or checkboxes.
-                  </Text>
-                  <Text as="p" variant="bodyMd">
-                    <strong>3. Set Rules</strong><br />
-                    Show, hide, require, or disable fields based on customer choices.
-                  </Text>
-                  <Text as="p" variant="bodyMd">
-                    <strong>4. Link to Products</strong><br />
-                    Attach your template to specific products in your store.
-                  </Text>
                 </BlockStack>
               </BlockStack>
             </Card>
