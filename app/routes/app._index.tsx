@@ -1,7 +1,6 @@
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { Page, Layout, Card, Text, BlockStack, Button, InlineStack } from "@shopify/polaris";
 import { TitleBar, useAppBridge } from "@shopify/app-bridge-react";
-import { Redirect } from "@shopify/app-bridge"; // ✅ keep this, but only alongside useAppBridge
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Do NOT force authenticate here — let child routes handle it
@@ -12,8 +11,12 @@ export default function Index() {
   const app = useAppBridge();
 
   const handleRedirect = () => {
-    const redirect = Redirect.create(app);
-    redirect.dispatch(Redirect.Action.APP, "/app/templates");
+    app.dispatch({
+      type: "APP::NAVIGATION::REDIRECT",
+      payload: {
+        path: "/app/templates",
+      },
+    });
   };
 
   return (
