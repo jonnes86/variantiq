@@ -1,49 +1,88 @@
+// Filename: app/routes/app.templates._index.tsx
+
 // All imports have been removed to prevent module resolution errors.
 // Dependencies (json, redirect, useLoaderData, Form, Link, Page, Card, Text, TextField, Button, BlockStack, InlineGrid, authenticateAdminSafe, prisma, useState)
 // are assumed to be globally available in the runtime environment.
 
 // --- Remix Loader ---
 export async function loader({ request }: any) {
-  // authenticateAdminSafe is assumed to be available globally
-  const { session } = await authenticateAdminSafe(request);
-  if (!session) {
-    // redirect is assumed to be available globally
-    return redirect("/auth/login");
-  }
+  try {
+    // 1. Authentication Check
+    // authenticateAdminSafe is assumed to be available globally
+    const authResult = await authenticateAdminSafe(request);
+    const session = authResult?.session; // Safely access session
+    
+    if (!session) {
+      // redirect is assumed to be available globally
+      return redirect("/auth/login");
+    }
 
-  // prisma is assumed to be available globally
-  const templates = await prisma.template.findMany({
-    where: { shop: session.shop },
-    orderBy: { updatedAt: "desc" },
-  });
-  // json is assumed to be available globally
-  return json({ templates });
+    // 2. Database Availability Check (Critical for 500s)
+    // prisma is assumed to be available globally
+    if (typeof prisma === 'undefined') {
+        console.error("CRITICAL ERROR: Prisma client is not defined. Database access failed.");
+        throw new Error("Database service is unavailable.");
+    }
+
+    // 3. Database Fetch
+    const templates = await prisma.template.findMany({
+      where: { shop: session.shop },
+      orderBy: { updatedAt: "desc" },
+    });
+
+    // json is assumed to be available globally
+    return json({ templates });
+
+  } catch (error) {
+    console.error("500 ERROR in app.templates._index loader:", error);
+    // Throw a 500 response (Response is assumed to be available globally)
+    throw new Response(`Internal Server Error in Templates Loader: ${(error as Error).message}`, { status: 500 });
+  }
 }
 
 // --- Remix Action ---
 export async function action({ request }: any) {
-  const form = await request.formData();
-  const name = String(form.get("name") || "").trim();
-  // authenticateAdminSafe is assumed to be available globally
-  const { session } = await authenticateAdminSafe(request);
-  if (!session) {
-    return redirect("/auth/login");
+  try {
+    const form = await request.formData();
+    const name = String(form.get("name") || "").trim();
+
+    // 1. Authentication Check
+    const authResult = await authenticateAdminSafe(request);
+    const session = authResult?.session; // Safely access session
+
+    if (!session) {
+      return redirect("/auth/login");
+    }
+
+    if (!name) return redirect("/app/templates");
+
+    // 2. Database Availability Check (Critical for 500s)
+    if (typeof prisma === 'undefined') {
+        console.error("CRITICAL ERROR: Prisma client is not defined in Action.");
+        // json is assumed to be available globally
+        return json({ error: "Database service is unavailable for template creation." }, { status: 500 });
+    }
+
+    // 3. Database Write
+    const t = await prisma.template.create({ data: { name, shop: session.shop } });
+    return redirect(`/app/templates/${t.id}`);
+
+  } catch (error) {
+    console.error("ERROR in app.templates._index action:", error);
+    // json is assumed to be available globally
+    return json({ error: "Failed to create template." }, { status: 500 });
   }
-
-  if (!name) return redirect("/app/templates");
-
-  // prisma is assumed to be available globally
-  const t = await prisma.template.create({ data: { name, shop: session.shop } });
-  return redirect(`/app/templates/${t.id}`);
 }
 
 // --- Component ---
 export default function TemplatesIndex() {
   // useLoaderData and useState are assumed to be globally available
-  const { templates } = useLoaderData();
+  // The loader guarantees that templates will be available if no 500 occurs.
+  const loaderData: any = useLoaderData(); 
+  const templates = loaderData?.templates || [];
+  
   const [templateName, setTemplateName] = useState("");
 
-  // Placeholder function for onChange if necessary, though Polaris TextField handles it
   const handleTemplateNameChange = (value: string) => setTemplateName(value);
 
   return (
@@ -61,7 +100,6 @@ export default function TemplatesIndex() {
                   label="Template name"
                   labelHidden
                   value={templateName}
-                  // Using the assumed global handleTemplateNameChange
                   onChange={handleTemplateNameChange} 
                   name="name"
                   autoComplete="off"
