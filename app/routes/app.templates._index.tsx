@@ -1,12 +1,17 @@
 import { json, redirect, type ActionFunctionArgs, type LoaderFunctionArgs } from "@remix-run/node";
 import { useLoaderData, Form, Link } from "@remix-run/react";
 import { Page, Card, Text, TextField, Button, BlockStack, InlineGrid } from "@shopify/polaris";
-import { authenticate } from "../shopify.server";
+import { authenticateAdminSafe } from "../shopify.server";
 import { prisma } from "../db.server";
 import { useState } from "react";
 
 export async function loader({ request }: LoaderFunctionArgs) {
-  const { session } = await authenticate.admin(request);
+  const { session } = await authenticateAdminSafe(request);
+  if (!session) {
+    // Explicitly redirect to login if no session
+    return redirect("/auth/login");
+  }
+
   const templates = await prisma.template.findMany({
     where: { shop: session.shop },
     orderBy: { updatedAt: "desc" },
@@ -17,8 +22,13 @@ export async function loader({ request }: LoaderFunctionArgs) {
 export async function action({ request }: ActionFunctionArgs) {
   const form = await request.formData();
   const name = String(form.get("name") || "").trim();
-  const { session } = await authenticate.admin(request);
+  const { session } = await authenticateAdminSafe(request);
+  if (!session) {
+    return redirect("/auth/login");
+  }
+
   if (!name) return redirect("/app/templates");
+
   const t = await prisma.template.create({ data: { name, shop: session.shop } });
   return redirect(`/app/templates/${t.id}`);
 }
