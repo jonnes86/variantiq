@@ -1,23 +1,25 @@
 // Filename: app/routes/app._index.tsx
-// All imports for @remix-run/react and @shopify/polaris have been REMOVED
-// to resolve persistent compilation errors. These components and hooks (useNavigate,
-// Page, Layout, Card, Text, BlockStack, Button, InlineStack) are assumed to be
-// available globally in the Shopify/Remix runtime environment, as seen in other working files.
+import { useNavigate } from "@remix-run/react";
+import {
+  Page,
+  Layout,
+  Card,
+  Text,
+  BlockStack,
+  Button,
+  InlineStack,
+} from "@shopify/polaris";
 
 /**
  * The main dashboard page for the VariantIQ application.
- * Provides an overview and navigation links to core features.
+ * This is the clean, standard implementation for the rebuild.
  */
 export default function Index() {
-  // @ts-ignore - Assuming useNavigate is globally available via App Bridge/Remix runtime
   const navigate = useNavigate();
   
-  // Handlers for programmatic navigation using useNavigate is the most reliable method
+  // Reliable programmatic navigation
   const goToTemplates = () => navigate("/app/templates");
   
-  // The 'View Products' button remains commented out until the 'app/products' route is confirmed stable.
-  
-  // @ts-ignore - Assuming Polaris components are globally available
   return (
     <Page>
       <Layout>
@@ -31,13 +33,13 @@ export default function Index() {
                 VariantIQ helps you define and manage custom variant option templates to ensure consistent data and structured variants across your product catalog.
               </Text>
               <InlineStack gap="200" align="start">
-                {/* Navigation using onClick and useNavigate hook */}
                 <Button primary onClick={goToTemplates}>
                   Manage Templates
                 </Button>
-                {/* <Button onClick={goToProducts}>
-                  View Products
-                </Button> */}
+                {/* Products button is temporarily disabled for the initial rebuild step 
+                  to focus strictly on getting the Templates flow working first.
+                */}
+                {/* <Button onClick={() => navigate("/app/products")}>View Products</Button> */}
               </InlineStack>
             </BlockStack>
           </Card>
@@ -51,16 +53,13 @@ export default function Index() {
                   Getting Started
                 </Text>
                 <Text as="p" tone="subdued">
-                  1. Click "Manage Templates" to create your first variant template (e.g., "T-Shirt Sizes").
+                  1. Click "Manage Templates" to create your first variant template.
                 </Text>
                 <Text as="p" tone="subdued">
-                  2. Add custom fields (like "Size", "Color", "Material") to your template.
+                  2. Define custom fields (like "Size", "Color") and rules.
                 </Text>
                 <Text as="p" tone="subdued">
-                  3. Link the template to relevant Shopify products.
-                </Text>
-                <Text as="p" tone="subdued">
-                  4. The template will automatically apply rules and consistency checks to linked products.
+                  3. Link the template to your Shopify products.
                 </Text>
               </BlockStack>
             </Card>
