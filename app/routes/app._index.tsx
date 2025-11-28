@@ -1,16 +1,22 @@
 // Filename: app/routes/app._index.tsx
-
-// All imports have been removed to prevent module resolution errors.
-// Dependencies (useLoaderData, Link, Page, Layout, Card, Text, BlockStack, Button, InlineStack)
-// are assumed to be globally available in the runtime environment.
+import { Link, useLoaderData } from "@remix-run/react";
+import {
+  Page,
+  Layout,
+  Card,
+  Text,
+  BlockStack,
+  Button,
+  InlineStack
+} from "@shopify/polaris";
+// Note: useLoaderData is imported but commented out below as it's not strictly used in this specific component's logic, 
+// but is often included in standard Remix components.
 
 // --- Component ---
 export default function Index() {
-  // FIX: Removed unused useLoaderData() call which was causing a ReferenceError
-  // const data = useLoaderData();
-
+  // const data = useLoaderData(); // No loader data needed here
+  
   return (
-    // Polaris components are assumed to be available globally
     <Page>
       <Layout>
         <Layout.Section>
@@ -23,9 +29,6 @@ export default function Index() {
                 VariantIQ helps you define and manage custom variant option templates to ensure consistent data and structured variants across your product catalog.
               </Text>
               <InlineStack gap="200" align="start">
-                {/* CRITICAL FIX: Use the Remix Link component for internal navigation 
-                  to ensure client-side routing is handled correctly by the embedded app.
-                */}
                 <Link to="/app/templates">
                   <Button primary>
                     Manage Templates
