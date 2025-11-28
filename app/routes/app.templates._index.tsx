@@ -27,11 +27,9 @@ export async function action({ request }: any) {
   // authenticateAdminSafe is assumed to be available globally
   const { session } = await authenticateAdminSafe(request);
   if (!session) {
-    // redirect is assumed to be available globally
     return redirect("/auth/login");
   }
 
-  // redirect is assumed to be available globally
   if (!name) return redirect("/app/templates");
 
   // prisma is assumed to be available globally
@@ -41,7 +39,7 @@ export async function action({ request }: any) {
 
 // --- Component ---
 export default function TemplatesIndex() {
-  // useLoaderData and useState are assumed to be available globally
+  // useLoaderData and useState are assumed to be globally available
   const { templates } = useLoaderData();
   const [templateName, setTemplateName] = useState("");
 
@@ -89,7 +87,7 @@ export default function TemplatesIndex() {
                       <BlockStack gap="100">
                         <Text as="h3" variant="headingMd">
                           {/* Link component is assumed to be available globally */}
-                          <Link to={`${t.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+                          <Link to={`/app/templates/${t.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
                             {t.name}
                           </Link>
                         </Text>
@@ -98,7 +96,7 @@ export default function TemplatesIndex() {
                         </Text>
                       </BlockStack>
                       {/* Link component is assumed to be available globally */}
-                      <Link to={`${t.id}`}>
+                      <Link to={`/app/templates/${t.id}`}>
                         <Button>Edit</Button>
                       </Link>
                     </InlineGrid>
