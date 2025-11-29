@@ -10,12 +10,7 @@ import {
   InlineStack,
 } from "@shopify/polaris";
 
-/**
- * The main dashboard page for the VariantIQ application.
- * This is the clean, standard implementation for the rebuild.
- */
 export default function Index() {
-  
   return (
     <Page>
       <Layout>
@@ -29,22 +24,17 @@ export default function Index() {
                 VariantIQ helps you define and manage custom variant option templates to ensure consistent data and structured variants across your product catalog.
               </Text>
               <InlineStack gap="200" align="start">
-                {/* FIX: Wrapping the Button in a Link component.
-                   This bypasses potential onClick/useNavigate issues in the embedded iframe.
+                {/* Using Remix <Link> is the standard way to navigate in a Shopify App.
+                  We wrap the Button to ensure it behaves like a SPA link (no full reload).
                 */}
                 <Link to="/app/templates" style={{ textDecoration: 'none' }}>
-                  <Button primary>
-                    Manage Templates
-                  </Button>
+                  <Button primary>Manage Templates</Button>
                 </Link>
                 
-                {/* Products button is temporarily disabled for the initial rebuild step 
-                  to focus strictly on getting the Templates flow working first.
+                {/* Placeholder for future functionality. 
+                  Keep disabled until the Templates feature is stable.
                 */}
-                {/* <Link to="/app/products" style={{ textDecoration: 'none' }}>
-                  <Button>View Products</Button>
-                </Link> 
-                */}
+                {/* <Link to="/app/products" style={{ textDecoration: 'none' }}><Button>View Products</Button></Link> */}
               </InlineStack>
             </BlockStack>
           </Card>
