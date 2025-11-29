@@ -1,130 +1,121 @@
 // Filename: app/routes/app.templates._index.tsx
+import { json, redirect, type ActionFunctionArgs, type LoaderFunctionArgs } from "@remix-run/node";
+import { useLoaderData, Form, Link } from "@remix-run/react";
+import { Page, Card, Text, TextField, Button, BlockStack, InlineGrid } from "@shopify/polaris";
+import { authenticateAdminSafe } from "../shopify.server";
+import { prisma } from "../db.server";
+import { useState } from "react";
 
-// All imports have been removed to prevent module resolution errors.
-// Dependencies (json, redirect, useLoaderData, Form, Link, Page, Card, Text, TextField, Button, BlockStack, InlineGrid, authenticateAdminSafe, prisma, useState)
-// are assumed to be globally available in the runtime environment.
-
-// --- Remix Loader ---
-export async function loader({ request }: any) {
+// --- Loader ---
+export async function loader({ request }: LoaderFunctionArgs) {
   try {
-    // 1. Authentication Check
-    // authenticateAdminSafe is assumed to be available globally
-    const authResult = await authenticateAdminSafe(request);
-    const session = authResult?.session; // Safely access session
-    
+    // 1. Authenticate
+    const { session } = await authenticateAdminSafe(request);
     if (!session) {
-      // redirect is assumed to be available globally
       return redirect("/auth/login");
     }
 
-    // 2. Database Availability Check (Critical for 500s)
-    // prisma is assumed to be available globally
+    // 2. Database Check
     if (typeof prisma === 'undefined') {
-        console.error("CRITICAL ERROR: Prisma client is not defined. Database access failed.");
-        throw new Error("Database service is unavailable.");
+      console.error("CRITICAL: Prisma client is undefined.");
+      throw new Error("Database connection failed.");
     }
-
-    // 3. Database Fetch
+  
+    // 3. Fetch Data
     const templates = await prisma.template.findMany({
       where: { shop: session.shop },
       orderBy: { updatedAt: "desc" },
     });
-
-    // json is assumed to be available globally
-    return json({ templates });
+    
+    return json({ templates, error: null });
 
   } catch (error) {
-    console.error("500 ERROR in app.templates._index loader:", error);
-    // Throw a 500 response (Response is assumed to be available globally)
-    throw new Response(`Internal Server Error in Templates Loader: ${(error as Error).message}`, { status: 500 });
+    console.error("Templates Index Loader Error:", error);
+    // Return error as data to prevent 500 crash page
+    return json({ 
+      templates: [], 
+      error: "Failed to load templates. Please check server logs." 
+    });
   }
 }
 
-// --- Remix Action ---
-export async function action({ request }: any) {
+// --- Action ---
+export async function action({ request }: ActionFunctionArgs) {
   try {
     const form = await request.formData();
     const name = String(form.get("name") || "").trim();
+    
+    const { session } = await authenticateAdminSafe(request);
+    if (!session) return redirect("/auth/login");
+  
+    if (!name) return json({ error: "Name is required" }, { status: 400 });
+  
+    if (typeof prisma === 'undefined') throw new Error("Database connection failed.");
 
-    // 1. Authentication Check
-    const authResult = await authenticateAdminSafe(request);
-    const session = authResult?.session; // Safely access session
-
-    if (!session) {
-      return redirect("/auth/login");
-    }
-
-    if (!name) return redirect("/app/templates");
-
-    // 2. Database Availability Check (Critical for 500s)
-    if (typeof prisma === 'undefined') {
-        console.error("CRITICAL ERROR: Prisma client is not defined in Action.");
-        // json is assumed to be available globally
-        return json({ error: "Database service is unavailable for template creation." }, { status: 500 });
-    }
-
-    // 3. Database Write
     const t = await prisma.template.create({ data: { name, shop: session.shop } });
     return redirect(`/app/templates/${t.id}`);
 
   } catch (error) {
-    console.error("ERROR in app.templates._index action:", error);
-    // json is assumed to be available globally
+    console.error("Templates Index Action Error:", error);
     return json({ error: "Failed to create template." }, { status: 500 });
   }
 }
 
 // --- Component ---
 export default function TemplatesIndex() {
-  // useLoaderData and useState are assumed to be globally available
-  // The loader guarantees that templates will be available if no 500 occurs.
-  const loaderData: any = useLoaderData(); 
-  const templates = loaderData?.templates || [];
-  
+  const { templates, error } = useLoaderData<typeof loader>();
   const [templateName, setTemplateName] = useState("");
 
-  const handleTemplateNameChange = (value: string) => setTemplateName(value);
+  if (error) {
+    return (
+      <Page title="Templates">
+        <Card>
+          <Text as="h2" variant="headingMd" tone="critical">Error Loading Templates</Text>
+          <Text as="p">{error}</Text>
+        </Card>
+      </Page>
+    );
+  }
 
   return (
-    // Polaris components are assumed to be available globally
     <Page title="Templates">
-      <BlockStack gap="400">
+      <BlockStack gap="500">
+        {/* Creation Form */}
         <Card>
           <BlockStack gap="400">
-            <Text as="h2" variant="headingMd">Create new template</Text>
-            {/* Form component is assumed to be available globally */}
+            <Text as="h2" variant="headingMd">Create New Template</Text>
             <Form method="post">
-              <InlineGrid columns={["3fr", "1fr"]} gap="200">
-                {/* TextField component is assumed to be available globally */}
-                <TextField 
-                  label="Template name"
+              <InlineGrid columns={["3fr", "1fr"]} gap="400" alignItems="end">
+                <TextField
+                  label="Template Name"
                   labelHidden
+                  placeholder="e.g., T-Shirt Sizes"
                   value={templateName}
-                  onChange={handleTemplateNameChange} 
+                  onChange={setTemplateName}
                   name="name"
                   autoComplete="off"
-                  placeholder="e.g. T-Shirt Sizes, Jewelry Materials"
                 />
-                {/* Button component is assumed to be available globally */}
-                <Button submit primary disabled={!templateName.trim()}>Create Template</Button>
+                <Button submit primary disabled={templateName.trim().length === 0}>
+                  Create
+                </Button>
               </InlineGrid>
             </Form>
           </BlockStack>
         </Card>
 
+        {/* Templates List */}
         <Card>
           <BlockStack gap="200">
-            <Text as="h2" variant="headingMd">Your templates</Text>
+            <Text as="h2" variant="headingMd">Your Templates</Text>
             {templates.length === 0 ? (
               <Text as="p" tone="subdued">No templates yet — create your first one above.</Text>
             ) : (
               <BlockStack gap="300">
                 {templates.map((t: any) => (
                   <Card key={t.id}>
-                    <InlineGrid columns={["1fr", "auto"]} gap="200">
+                    <InlineGrid columns={["1fr", "auto"]} gap="200" alignItems="center">
                       <BlockStack gap="100">
                         <Text as="h3" variant="headingMd">
-                          {/* Link component is assumed to be available globally */}
                           <Link to={`/app/templates/${t.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
                             {t.name}
                           </Link>
@@ -133,7 +124,6 @@ export default function TemplatesIndex() {
                           Updated {new Date(t.updatedAt).toLocaleDateString()}
                         </Text>
                       </BlockStack>
-                      {/* Link component is assumed to be available globally */}
                       <Link to={`/app/templates/${t.id}`}>
                         <Button>Edit</Button>
                       </Link>

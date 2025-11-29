@@ -1,5 +1,5 @@
 // Filename: app/routes/app._index.tsx
-import { useNavigate } from "@remix-run/react";
+import { Link } from "@remix-run/react";
 import {
   Page,
   Layout,
@@ -15,10 +15,6 @@ import {
  * This is the clean, standard implementation for the rebuild.
  */
 export default function Index() {
-  const navigate = useNavigate();
-  
-  // Reliable programmatic navigation
-  const goToTemplates = () => navigate("/app/templates");
   
   return (
     <Page>
@@ -33,13 +29,22 @@ export default function Index() {
                 VariantIQ helps you define and manage custom variant option templates to ensure consistent data and structured variants across your product catalog.
               </Text>
               <InlineStack gap="200" align="start">
-                <Button primary onClick={goToTemplates}>
-                  Manage Templates
-                </Button>
+                {/* FIX: Wrapping the Button in a Link component.
+                   This bypasses potential onClick/useNavigate issues in the embedded iframe.
+                */}
+                <Link to="/app/templates" style={{ textDecoration: 'none' }}>
+                  <Button primary>
+                    Manage Templates
+                  </Button>
+                </Link>
+                
                 {/* Products button is temporarily disabled for the initial rebuild step 
                   to focus strictly on getting the Templates flow working first.
                 */}
-                {/* <Button onClick={() => navigate("/app/products")}>View Products</Button> */}
+                {/* <Link to="/app/products" style={{ textDecoration: 'none' }}>
+                  <Button>View Products</Button>
+                </Link> 
+                */}
               </InlineStack>
             </BlockStack>
           </Card>
