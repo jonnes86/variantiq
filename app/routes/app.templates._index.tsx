@@ -1,7 +1,17 @@
 // Filename: app/routes/app.templates._index.tsx
-import { json, redirect, type ActionFunctionArgs, type LoaderFunctionArgs } from "@remix-run/node";
+import { json, redirect } from "@remix-run/node";
+import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { useLoaderData, Form, Link } from "@remix-run/react";
-import { Page, Card, Text, TextField, Button, BlockStack, InlineGrid } from "@shopify/polaris";
+import {
+  Page,
+  Card,
+  Text,
+  TextField,
+  Button,
+  BlockStack,
+  InlineGrid,
+  Banner
+} from "@shopify/polaris";
 import { authenticateAdminSafe } from "../shopify.server";
 import { prisma } from "../db.server";
 import { useState } from "react";
@@ -15,8 +25,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
       return redirect("/auth/login");
     }
 
-    // 2. Database Check
-    if (typeof prisma === 'undefined') {
+    // 2. Database Check (Critical for preventing 500s)
+    if (!prisma) {
       console.error("CRITICAL: Prisma client is undefined.");
       throw new Error("Database connection failed.");
     }
@@ -31,7 +41,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   } catch (error) {
     console.error("Templates Index Loader Error:", error);
-    // Return error as data to prevent 500 crash page
+    // Return error as data to allow UI to render instead of 500 crash
     return json({ 
       templates: [], 
       error: "Failed to load templates. Please check server logs." 
@@ -49,8 +59,8 @@ export async function action({ request }: ActionFunctionArgs) {
     if (!session) return redirect("/auth/login");
   
     if (!name) return json({ error: "Name is required" }, { status: 400 });
-  
-    if (typeof prisma === 'undefined') throw new Error("Database connection failed.");
+    
+    if (!prisma) throw new Error("Database connection failed.");
 
     const t = await prisma.template.create({ data: { name, shop: session.shop } });
     return redirect(`/app/templates/${t.id}`);
@@ -66,13 +76,13 @@ export default function TemplatesIndex() {
   const { templates, error } = useLoaderData<typeof loader>();
   const [templateName, setTemplateName] = useState("");
 
+  // Error State UI
   if (error) {
     return (
       <Page title="Templates">
-        <Card>
-          <Text as="h2" variant="headingMd" tone="critical">Error Loading Templates</Text>
-          <Text as="p">{error}</Text>
-        </Card>
+        <Banner tone="critical" title="Error Loading Templates">
+          <p>{error}</p>
+        </Banner>
       </Page>
     );
   }
@@ -124,7 +134,7 @@ export default function TemplatesIndex() {
                           Updated {new Date(t.updatedAt).toLocaleDateString()}
                         </Text>
                       </BlockStack>
-                      <Link to={`/app/templates/${t.id}`}>
+                      <Link to={`/app/templates/${t.id}`} style={{ textDecoration: 'none' }}>
                         <Button>Edit</Button>
                       </Link>
                     </InlineGrid>

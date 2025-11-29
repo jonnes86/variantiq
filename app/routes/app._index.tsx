@@ -24,16 +24,15 @@ export default function Index() {
                 VariantIQ helps you define and manage custom variant option templates to ensure consistent data and structured variants across your product catalog.
               </Text>
               <InlineStack gap="200" align="start">
-                {/* Using Remix <Link> is the standard way to navigate in a Shopify App.
-                  We wrap the Button to ensure it behaves like a SPA link (no full reload).
+                {/* OFFICIAL PATTERN: 
+                  Use Remix <Link> for navigation. This matches the Shopify template's 
+                  standard for internal routing.
                 */}
                 <Link to="/app/templates" style={{ textDecoration: 'none' }}>
                   <Button primary>Manage Templates</Button>
                 </Link>
                 
-                {/* Placeholder for future functionality. 
-                  Keep disabled until the Templates feature is stable.
-                */}
+                {/* Placeholder for future functionality */}
                 {/* <Link to="/app/products" style={{ textDecoration: 'none' }}><Button>View Products</Button></Link> */}
               </InlineStack>
             </BlockStack>
