@@ -7,23 +7,17 @@ import { authenticate } from "../shopify.server";
 export async function loader({ request }: LoaderFunctionArgs) {
   console.log("[DEBUG] Loader called");
   
-  try {
-    const { session } = await authenticate.admin(request);
-    console.log("[DEBUG] Session:", session?.shop);
-    
-    return json({ 
-      shop: session.shop,
-      message: "VariantIQ is working!",
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    console.error("[DEBUG] Error in loader:", error);
-    return json({ 
-      shop: "unknown",
-      message: "Error occurred",
-      error: String(error)
-    });
-  }
+  // CRITICAL: Do NOT wrap authenticate.admin in try/catch
+  // It throws Response objects for redirects, which must bubble up
+  const { session } = await authenticate.admin(request);
+  
+  console.log("[DEBUG] Session:", session?.shop);
+  
+  return json({ 
+    shop: session.shop,
+    message: "VariantIQ is working!",
+    timestamp: new Date().toISOString()
+  });
 }
 
 export default function Index() {
