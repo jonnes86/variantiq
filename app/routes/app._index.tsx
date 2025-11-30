@@ -1,5 +1,5 @@
 // Filename: app/routes/app._index.tsx
-import { Link } from "@remix-run/react";
+import { useNavigate } from "@remix-run/react";
 import {
   Page,
   Layout,
@@ -11,6 +11,13 @@ import {
 } from "@shopify/polaris";
 
 export default function Index() {
+  const navigate = useNavigate();
+
+  const handleManageTemplates = () => {
+    console.log("Navigating to templates...");
+    navigate("/app/templates");
+  };
+
   return (
     <Page>
       <Layout>
@@ -21,43 +28,15 @@ export default function Index() {
                 Welcome to VariantIQ
               </Text>
               <Text as="p">
-                VariantIQ helps you define and manage custom variant option templates to ensure consistent data and structured variants across your product catalog.
+                VariantIQ helps you define and manage custom variant option templates.
               </Text>
               <InlineStack gap="200" align="start">
-                {/* OFFICIAL PATTERN: 
-                  Use Remix <Link> for navigation. This matches the Shopify template's 
-                  standard for internal routing.
-                */}
-                <Link to="/app/templates" style={{ textDecoration: 'none' }}>
-                  <Button primary>Manage Templates</Button>
-                </Link>
-                
-                {/* Placeholder for future functionality */}
-                {/* <Link to="/app/products" style={{ textDecoration: 'none' }}><Button>View Products</Button></Link> */}
+                <Button primary onClick={handleManageTemplates}>
+                  Manage Templates
+                </Button>
               </InlineStack>
             </BlockStack>
           </Card>
-        </Layout.Section>
-        
-        <Layout.Section secondary>
-          <BlockStack gap="400">
-            <Card>
-              <BlockStack gap="200">
-                <Text as="h3" variant="headingSm">
-                  Getting Started
-                </Text>
-                <Text as="p" tone="subdued">
-                  1. Click "Manage Templates" to create your first variant template.
-                </Text>
-                <Text as="p" tone="subdued">
-                  2. Define custom fields (like "Size", "Color") and rules.
-                </Text>
-                <Text as="p" tone="subdued">
-                  3. Link the template to your Shopify products.
-                </Text>
-              </BlockStack>
-            </Card>
-          </BlockStack>
         </Layout.Section>
       </Layout>
     </Page>

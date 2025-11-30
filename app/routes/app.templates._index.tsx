@@ -19,8 +19,12 @@ import { useState } from "react";
 // --- Loader ---
 export async function loader({ request }: LoaderFunctionArgs) {
   try {
-    // 1. Authenticate
+    // 1. Authenticate using the STANDARD Shopify method
+    // This uses the 'authenticate' export from your shopify.server.ts
     const { session } = await authenticate.admin(request);
+    
+    // In standard Shopify Remix apps, authenticate.admin handles the redirect automatically if auth fails.
+    // But we check for session existence just in case.
     if (!session) {
       return redirect("/auth/login");
     }
@@ -41,9 +45,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   } catch (error) {
     console.error("Templates Index Loader Error:", error);
+    
+    // Important: If authenticate.admin throws a Response (like a redirect), we must re-throw it.
     if (error instanceof Response) {
       throw error;
     }
+
     // Return error as data to allow UI to render instead of 500 crash
     return json({ 
       templates: [], 
