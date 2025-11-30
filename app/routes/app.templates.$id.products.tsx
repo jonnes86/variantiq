@@ -1,210 +1,214 @@
-import {
-  json,
-  type LoaderFunctionArgs,
-  type ActionFunctionArgs,
-} from "@remix-run/node";
-import { useLoaderData, Form } from "@remix-run/react";
+// Filename: app/routes/app.templates.$id.products.tsx
+import { json, redirect, type ActionFunctionArgs, type LoaderFunctionArgs } from "@remix-run/node";
+import { useLoaderData, Form, Link } from "@remix-run/react";
 import {
   Page,
+  Layout,
   Card,
-  Button,
-  BlockStack,
+  Text,
   ResourceList,
   ResourceItem,
-  Text,
-  TextField,
-  InlineStack,
   Badge,
+  Button,
+  LegacyStack,
+  Banner
 } from "@shopify/polaris";
-import { useState } from "react";
-
 import { authenticate } from "../shopify.server";
 import { prisma } from "../db.server";
 
-export async function loader({ request, params }: LoaderFunctionArgs) {
-  const { session, admin } = await authenticate.admin(request);
-
-  if (!session) {
-    throw new Response("Unauthorized", { status: 401 });
-  }
-
-  const template = await prisma.template.findFirst({
-    where: { id: params.id!, shop: session.shop },
-    include: {
-      // ⬇⬇ If your relation is called `productTemplateLinks` instead of `links`,
-      // change this include + the map below to match your schema.
-      links: true,
-    },
-  });
-
-  if (!template) {
-    throw new Response("Not found", { status: 404 });
-  }
-
-  // Fetch products from Shopify
-  const response = await admin.graphql(`
-    query {
-      products(first: 50) {
-        nodes {
+// --- GraphQL Query to fetch products ---
+const PRODUCTS_QUERY = `
+  query GetProducts($first: Int!) {
+    products(first: $first) {
+      edges {
+        node {
           id
           title
-          handle
-          featuredImage {
-            url
-          }
+          vendor
         }
       }
     }
-  `);
-
-  const { data } = await response.json();
-  const products = data.products.nodes;
-
-  const linkedProductIds = template.links.map((link: any) => link.productGid);
-
-  return json({
-    template,
-    products,
-    linkedProductIds,
-  });
-}
-
-export async function action({ request, params }: ActionFunctionArgs) {
-  // IMPORTANT: use `redirect` from authenticate.admin (embedded-safe)
-  const { session, redirect } = await authenticate.admin(request);
-
-  if (!session) {
-    return new Response("Unauthorized", { status: 401 });
   }
+`;
 
-  const form = await request.formData();
-  const intent = String(form.get("_intent") || "");
-  const productGid = String(form.get("productGid") || "");
+// --- Loader ---
+export async function loader({ request, params }: LoaderFunctionArgs) {
+  try {
+    const { session, admin } = await authenticate.admin(request);
+    
+    // Check session manually if needed
+    if (!session) {
+      return redirect("/auth/login");
+    }
 
-  if (!productGid) {
-    return json({ error: "Missing productGid" }, { status: 400 });
-  }
+    const templateId = params.id;
+    if (!templateId) return redirect("/app");
 
-  if (intent === "link") {
-    // Check if already linked
-    const existing = await prisma.productTemplateLink.findFirst({
-      where: { productGid, templateId: params.id! },
+    if (!prisma) throw new Error("Database connection failed");
+
+    // 1. Load the template and linked products from the database
+    const template = await prisma.template.findFirst({
+      where: { id: templateId, shop: session.shop },
+      include: {
+        links: true, // Use the correct relation name 'links' from your schema
+      },
     });
 
-    if (!existing) {
+    if (!template) {
+      throw new Response("Template not found.", { status: 404 });
+    }
+
+    const linkedProductIds = template.links.map((link: any) => link.productGid);
+
+    // 2. Fetch all products from Shopify Admin GraphQL
+    const response = await admin.graphql(PRODUCTS_QUERY, {
+      variables: { first: 25 },
+    });
+    
+    const responseJson = await response.json();
+    const products = responseJson.data.products.edges.map((edge: any) => edge.node);
+
+    return json({
+      template: { id: template.id, name: template.name },
+      products,
+      linkedProductIds,
+      error: null
+    });
+
+  } catch (error) {
+    console.error("Products Loader Error:", error);
+    if (error instanceof Response) throw error;
+    
+    return json({
+      template: { id: "", name: "Error" },
+      products: [],
+      linkedProductIds: [],
+      error: "Failed to load products. Please check server logs."
+    });
+  }
+}
+
+// --- Action ---
+export async function action({ request, params }: ActionFunctionArgs) {
+  try {
+    const { session } = await authenticate.admin(request);
+    if (!session) return redirect("/auth/login");
+
+    const templateId = params.id!;
+    const formData = await request.formData();
+
+    const intent = formData.get("_intent");
+    const productGid = formData.get("productGid") as string;
+    const shop = session.shop;
+
+    if (!productGid) {
+      return json({ error: "Missing required data." }, { status: 400 });
+    }
+
+    if (!prisma) throw new Error("Database connection failed");
+
+    if (intent === "link") {
       await prisma.productTemplateLink.create({
         data: {
-          shop: session.shop,
+          shop,
+          templateId,
           productGid,
-          templateId: params.id!,
+        },
+      });
+    } else if (intent === "unlink") {
+      await prisma.productTemplateLink.deleteMany({
+        where: {
+          shop,
+          templateId,
+          productGid,
         },
       });
     }
-  }
+    
+    // Return null to reload the loader
+    return null;
 
-  if (intent === "unlink") {
-    await prisma.productTemplateLink.deleteMany({
-      where: { productGid, templateId: params.id! },
-    });
+  } catch (error) {
+    console.error("Products Action Error:", error);
+    if (error instanceof Response) throw error;
+    return json({ error: "Failed to update product link." }, { status: 500 });
   }
-
-  // Uses Shopify’s redirect helper – required in embedded apps
-  return redirect(`/app/templates/${params.id}/products`);
 }
 
-export default function TemplateProducts() {
-  const { template, products, linkedProductIds } =
-    useLoaderData<typeof loader>();
-  const [searchQuery, setSearchQuery] = useState("");
+// --- Component ---
+export default function TemplateProductsPage() {
+  const { template, products, linkedProductIds, error } = useLoaderData<typeof loader>();
 
-  const filteredProducts = products.filter((p: any) =>
-    p.title.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  if (error) {
+    return (
+      <Page title="Manage Product Links">
+        <Banner tone="critical" title="Error">
+          <p>{error}</p>
+        </Banner>
+      </Page>
+    );
+  }
+
+  const resourceName = {
+    singular: 'product',
+    plural: 'products',
+  };
 
   return (
     <Page
-      title={`Link Products to "${template.name}"`}
-      backAction={{ url: `/app/templates/${template.id}` }}
+      title={`Link Products to: ${template.name}`}
+      backAction={{ content: "Template Detail", url: `/app/templates/${template.id}` }}
+      subtitle="Select which Shopify products should use this template."
     >
-      <BlockStack gap="400">
-        <Card>
-          <BlockStack gap="400">
-            <Text as="p">
-              Select which products should use this template. When customers
-              view these products, they&apos;ll see your custom fields.
+      <Layout>
+        <Layout.Section>
+          <Card>
+            <Text as="h2" variant="headingMd">
+              Available Products ({products.length})
             </Text>
-            <TextField
-              label="Search products"
-              value={searchQuery}
-              onChange={setSearchQuery}
-              placeholder="Search by product name..."
-              autoComplete="off"
-              clearButton
-              onClearButtonClick={() => setSearchQuery("")}
+            <ResourceList
+              resourceName={resourceName}
+              items={products}
+              renderItem={(product: any) => {
+                const isLinked = linkedProductIds.includes(product.id);
+                const actionVerb = isLinked ? "Unlink" : "Link";
+                
+                return (
+                  <ResourceItem
+                    id={product.id}
+                    url="#"
+                    accessibilityLabel={`View details for ${product.title}`}
+                    name={product.title}
+                  >
+                    <LegacyStack alignment="center">
+                      <LegacyStack.Item fill>
+                        <Text variant="headingMd" as="h3">{product.title}</Text>
+                        <Text variant="bodySm" tone="subdued">{product.vendor}</Text>
+                      </LegacyStack.Item>
+                      <LegacyStack.Item>
+                        {isLinked && <Badge tone="success">Linked</Badge>}
+                      </LegacyStack.Item>
+                      <LegacyStack.Item>
+                        <Form method="post">
+                            <input type="hidden" name="productGid" value={product.id} />
+                            <Button 
+                                submit
+                                variant={isLinked ? undefined : "primary"}
+                                name="_intent" 
+                                value={isLinked ? "unlink" : "link"} 
+                            >
+                                {actionVerb}
+                            </Button>
+                        </Form>
+                      </LegacyStack.Item>
+                    </LegacyStack>
+                  </ResourceItem>
+                );
+              }}
             />
-          </BlockStack>
-        </Card>
-
-        <Card>
-          <ResourceList
-            resourceName={{ singular: "product", plural: "products" }}
-            items={filteredProducts}
-            renderItem={(product: any) => {
-              const isLinked = linkedProductIds.includes(product.id);
-
-              return (
-                <ResourceItem
-                  id={product.id}
-                  media={
-                    product.featuredImage ? (
-                      <img
-                        src={product.featuredImage.url}
-                        alt={product.title}
-                        style={{ width: 50, height: 50, objectFit: "cover" }}
-                      />
-                    ) : undefined
-                  }
-                >
-                  <InlineStack align="space-between">
-                    <BlockStack gap="100">
-                      <Text as="h3" variant="bodyMd" fontWeight="semibold">
-                        {product.title}
-                      </Text>
-                      <Text as="p" tone="subdued">
-                        {product.handle}
-                      </Text>
-                    </BlockStack>
-                    <Form method="post">
-                      <input
-                        type="hidden"
-                        name="productGid"
-                        value={product.id}
-                      />
-                      {isLinked ? (
-                        <>
-                          <Badge tone="success">Linked</Badge>
-                          <Button
-                            submit
-                            name="_intent"
-                            value="unlink"
-                            tone="critical"
-                          >
-                            Unlink
-                          </Button>
-                        </>
-                      ) : (
-                        <Button submit name="_intent" value="link">
-                          Link Template
-                        </Button>
-                      )}
-                    </Form>
-                  </InlineStack>
-                </ResourceItem>
-              );
-            }}
-          />
-        </Card>
-      </BlockStack>
+          </Card>
+        </Layout.Section>
+      </Layout>
     </Page>
   );
 }
