@@ -18,40 +18,33 @@ import { useState } from "react";
 
 // --- Loader ---
 export async function loader({ request }: LoaderFunctionArgs) {
+  console.log("Templates Loader: Start");
   try {
-    // 1. Authenticate using the STANDARD Shopify method
-    // This uses the 'authenticate' export from your shopify.server.ts
     const { session } = await authenticate.admin(request);
-    
-    // In standard Shopify Remix apps, authenticate.admin handles the redirect automatically if auth fails.
-    // But we check for session existence just in case.
-    if (!session) {
-      return redirect("/auth/login");
-    }
+    if (!session) return redirect("/auth/login");
 
-    // 2. Database Check
-    if (!prisma) {
-      console.error("CRITICAL: Prisma client is undefined.");
-      throw new Error("Database connection failed.");
-    }
+    if (!prisma) throw new Error("Database connection failed.");
   
-    // 3. Fetch Data
     const templates = await prisma.template.findMany({
       where: { shop: session.shop },
       orderBy: { updatedAt: "desc" },
     });
     
-    return json({ templates, error: null });
+    console.log(`Templates Loader: Found ${templates.length} templates`);
+
+    return json(
+      { templates, error: null },
+      { 
+        // Force no-cache to ensure fresh data and prevent 304 Not Modified issues during dev
+        headers: { 
+          "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate" 
+        } 
+      }
+    );
 
   } catch (error) {
-    console.error("Templates Index Loader Error:", error);
-    
-    // Important: If authenticate.admin throws a Response (like a redirect), we must re-throw it.
-    if (error instanceof Response) {
-      throw error;
-    }
-
-    // Return error as data to allow UI to render instead of 500 crash
+    console.error("Templates Loader: Error", error);
+    if (error instanceof Response) throw error;
     return json({ 
       templates: [], 
       error: "Failed to load templates. Please check server logs." 
@@ -67,14 +60,13 @@ export async function action({ request }: ActionFunctionArgs) {
     const name = String(form.get("name") || "").trim();
   
     if (!name) return json({ error: "Name is required" }, { status: 400 });
-    
     if (!prisma) throw new Error("Database connection failed.");
 
     const t = await prisma.template.create({ data: { name, shop: session.shop } });
     return redirect(`/app/templates/${t.id}`);
 
   } catch (error) {
-    console.error("Templates Index Action Error:", error);
+    console.error("Templates Action: Error", error);
     if (error instanceof Response) throw error;
     return json({ error: "Failed to create template." }, { status: 500 });
   }
@@ -85,7 +77,6 @@ export default function TemplatesIndex() {
   const { templates, error } = useLoaderData<typeof loader>();
   const [templateName, setTemplateName] = useState("");
 
-  // Error State UI
   if (error) {
     return (
       <Page title="Templates">
@@ -99,7 +90,6 @@ export default function TemplatesIndex() {
   return (
     <Page title="Templates">
       <BlockStack gap="500">
-        {/* Creation Form */}
         <Card>
           <BlockStack gap="400">
             <Text as="h2" variant="headingMd">Create New Template</Text>
@@ -122,7 +112,6 @@ export default function TemplatesIndex() {
           </BlockStack>
         </Card>
 
-        {/* Templates List */}
         <Card>
           <BlockStack gap="200">
             <Text as="h2" variant="headingMd">Your Templates</Text>
