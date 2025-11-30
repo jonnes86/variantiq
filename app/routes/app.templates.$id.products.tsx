@@ -1,221 +1,210 @@
-// All imports for @remix-run/react, @shopify/polaris, @remix-run/node,
-// ../shopify.server, and ../db.server have been REMOVED to resolve persistent compilation errors.
-// These dependencies are assumed to be available globally in the Shopify/Remix runtime environment.
+import {
+  json,
+  type LoaderFunctionArgs,
+  type ActionFunctionArgs,
+} from "@remix-run/node";
+import { useLoaderData, Form } from "@remix-run/react";
+import {
+  Page,
+  Card,
+  Button,
+  BlockStack,
+  ResourceList,
+  ResourceItem,
+  Text,
+  TextField,
+  InlineStack,
+  Badge,
+} from "@shopify/polaris";
+import { useState } from "react";
 
+import { authenticate } from "../shopify.server";
+import { prisma } from "../db.server";
 
-// --- Types (Placeholders) ---
-interface Template {
-  id: number;
-  name: string;
-}
+export async function loader({ request, params }: LoaderFunctionArgs) {
+  const { session, admin } = await authenticate.admin(request);
 
-interface Product {
-  id: string; // GraphQL ID, e.g., 'gid://shopify/Product/12345'
-  title: string;
-  vendor: string;
-}
+  if (!session) {
+    throw new Response("Unauthorized", { status: 401 });
+  }
 
-interface LoaderData {
-  template: Template;
-  products: Product[];
-  linkedProductIds: string[];
-}
+  const template = await prisma.template.findFirst({
+    where: { id: params.id!, shop: session.shop },
+    include: {
+      // ⬇⬇ If your relation is called `productTemplateLinks` instead of `links`,
+      // change this include + the map below to match your schema.
+      links: true,
+    },
+  });
 
-// --- GraphQL Query to fetch products (Placeholder) ---
-const PRODUCTS_QUERY = `
-  query GetProducts($first: Int!) {
-    products(first: $first) {
-      edges {
-        node {
+  if (!template) {
+    throw new Response("Not found", { status: 404 });
+  }
+
+  // Fetch products from Shopify
+  const response = await admin.graphql(`
+    query {
+      products(first: 50) {
+        nodes {
           id
           title
-          vendor
+          handle
+          featuredImage {
+            url
+          }
         }
       }
     }
-  }
-`;
+  `);
 
-// --- Remix Loader ---
-// All server dependencies (LoaderFunctionArgs, authenticateAdminSafe, db, json, Response) are assumed to be available globally.
-export const loader = async ({ request, params }: any) => {
-  // authenticateAdminSafe is assumed to be available globally
-  const { session, admin } = await authenticateAdminSafe(request);
+  const { data } = await response.json();
+  const products = data.products.nodes;
 
-  // If the session is missing or invalid, immediately return 401
-  if (!session || !admin) {
-    // Response is assumed to be available globally
-    throw new Response("Unauthorized: Session or Admin client missing.", { status: 401 });
-  }
-    
-  // --- START: Short-Term Step 2 Instrumentation ---
-  // Log the session shop to confirm session presence in server logs
-  console.log("Template Products loader session shop:", session.shop);
-  // --- END: Short-Term Step 2 Instrumentation ---
-  
-  const templateId = params.id ? parseInt(params.id, 10) : null;
-  if (!templateId) {
-    throw new Response("Template ID is missing.", { status: 400 });
-  }
+  const linkedProductIds = template.links.map((link: any) => link.productGid);
 
-  try {
-    // 'db' is assumed to be available globally
-    const template = await db.template.findUnique({
-      where: { id: templateId, shop: session.shop },
-      include: {
-        productTemplateLinks: true,
-      },
-    });
+  return json({
+    template,
+    products,
+    linkedProductIds,
+  });
+}
 
-    if (!template) {
-      throw new Response("Template not found.", { status: 404 });
-    }
+export async function action({ request, params }: ActionFunctionArgs) {
+  // IMPORTANT: use `redirect` from authenticate.admin (embedded-safe)
+  const { session, redirect } = await authenticate.admin(request);
 
-    const linkedProductIds = template.productTemplateLinks.map(link => link.productGid);
-
-    // 2. Fetch all products from Shopify Admin GraphQL (using a limited set for demo)
-    const { data } = await admin.graphql(PRODUCTS_QUERY, {
-      variables: { first: 25 },
-    });
-    
-    // Type casting here is necessary
-    const products = data.products.edges.map((edge: any) => edge.node) as Product[];
-
-    // 'json' is assumed to be available globally
-    return json({
-      template: { id: template.id, name: template.name },
-      products,
-      linkedProductIds,
-    });
-  } catch (error) {
-    // Catch database or GraphQL errors
-    console.error("Error in app.templates.$id.products loader:", error);
-    throw new Response("Internal Server Error during data fetch.", { status: 500 }); 
-  }
-};
-
-
-// --- Remix Action ---
-// All server dependencies (ActionFunctionArgs, redirect) are assumed to be available globally.
-export const action = async ({ request, params }: any) => {
-  // authenticateAdminSafe is assumed to be available globally
-  const { session } = await authenticateAdminSafe(request);
-  
   if (!session) {
-    // 'Response' is assumed to be available globally
     return new Response("Unauthorized", { status: 401 });
   }
-  
-  const templateId = params.id ? parseInt(params.id, 10) : null;
-  const formData = await request.formData();
 
-  const intent = formData.get("_intent");
-  const productGid = formData.get("productGid") as string;
-  const shop = session.shop;
+  const form = await request.formData();
+  const intent = String(form.get("_intent") || "");
+  const productGid = String(form.get("productGid") || "");
 
-  if (!templateId || !productGid) {
-    return json({ error: "Missing required data." }, { status: 400 });
+  if (!productGid) {
+    return json({ error: "Missing productGid" }, { status: 400 });
   }
 
-  try {
-    // 'db' is assumed to be available globally
-    if (intent === "link") {
-      await db.productTemplateLink.create({
+  if (intent === "link") {
+    // Check if already linked
+    const existing = await prisma.productTemplateLink.findFirst({
+      where: { productGid, templateId: params.id! },
+    });
+
+    if (!existing) {
+      await prisma.productTemplateLink.create({
         data: {
-          shop,
-          templateId,
+          shop: session.shop,
           productGid,
-        },
-      });
-    } else if (intent === "unlink") {
-      await db.productTemplateLink.deleteMany({
-        where: {
-          shop,
-          templateId,
-          productGid,
+          templateId: params.id!,
         },
       });
     }
-    // 'redirect' is assumed to be available globally
-    return redirect(`/app/templates/${templateId}/products`);
-
-  } catch (error) {
-    console.error("Error in product link action:", error);
-    return json({ error: "Failed to update product link." }, { status: 500 });
   }
-};
 
+  if (intent === "unlink") {
+    await prisma.productTemplateLink.deleteMany({
+      where: { productGid, templateId: params.id! },
+    });
+  }
 
-// --- Remix Component ---
-// All client dependencies (useLoaderData, Form, Page, Layout, Card, Text, ResourceList, ResourceItem, Badge, Button, LegacyStack) are assumed to be available globally.
-export default function TemplateProductsPage() {
-  // useLoaderData is assumed to be available globally
-  const { template, products, linkedProductIds } = useLoaderData() as LoaderData;
+  // Uses Shopify’s redirect helper – required in embedded apps
+  return redirect(`/app/templates/${params.id}/products`);
+}
 
-  const resourceName = {
-    singular: 'product',
-    plural: 'products',
-  };
+export default function TemplateProducts() {
+  const { template, products, linkedProductIds } =
+    useLoaderData<typeof loader>();
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const filteredProducts = products.filter((p: any) =>
+    p.title.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
-    // Polaris components are assumed to be available globally
     <Page
-      title={`Link Products to: ${template.name}`}
-      // backAction is assumed to use the Remix url helper correctly in the underlying framework
-      backAction={{ content: "Template Detail", url: `/app/templates/${template.id}` }} 
-      subtitle="Select which Shopify products should use this template."
+      title={`Link Products to "${template.name}"`}
+      backAction={{ url: `/app/templates/${template.id}` }}
     >
-      <Layout>
-        <Layout.Section>
-          <Card>
-            <Text as="h2" variant="headingMd">
-              Available Products ({products.length})
+      <BlockStack gap="400">
+        <Card>
+          <BlockStack gap="400">
+            <Text as="p">
+              Select which products should use this template. When customers
+              view these products, they&apos;ll see your custom fields.
             </Text>
-            <ResourceList
-              resourceName={resourceName}
-              items={products}
-              renderItem={(product: Product) => {
-                const isLinked = linkedProductIds.includes(product.id);
-                const actionVerb = isLinked ? "Unlink" : "Link";
-                
-                return (
-                  <ResourceItem
-                    id={product.id}
-                    url="#" // Not a real link, just for ResourceItem structure
-                    accessibilityLabel={`View details for ${product.title}`}
-                    name={product.title}
-                  >
-                    <LegacyStack alignment="center">
-                      <LegacyStack.Item fill>
-                        <Text variant="headingMd" as="h3">{product.title}</Text>
-                        <Text variant="bodySm" color="subdued">{product.vendor}</Text>
-                      </LegacyStack.Item>
-                      <LegacyStack.Item>
-                        {isLinked && <Badge status="success">Linked</Badge>}
-                      </LegacyStack.Item>
-                      <LegacyStack.Item>
-                        {/* Form component is assumed to be available globally */}
-                        <Form method="post">
-                            <input type="hidden" name="productGid" value={product.id} />
-                            <Button 
-                                submit
-                                primary={!isLinked}
-                                // Use the intent name to differentiate form submission in the action function
-                                name="_intent" 
-                                value={isLinked ? "unlink" : "link"} 
-                            >
-                                {actionVerb}
-                            </Button>
-                        </Form>
-                      </LegacyStack.Item>
-                    </LegacyStack>
-                  </ResourceItem>
-                );
-              }}
+            <TextField
+              label="Search products"
+              value={searchQuery}
+              onChange={setSearchQuery}
+              placeholder="Search by product name..."
+              autoComplete="off"
+              clearButton
+              onClearButtonClick={() => setSearchQuery("")}
             />
-          </Card>
-        </Layout.Section>
-      </Layout>
+          </BlockStack>
+        </Card>
+
+        <Card>
+          <ResourceList
+            resourceName={{ singular: "product", plural: "products" }}
+            items={filteredProducts}
+            renderItem={(product: any) => {
+              const isLinked = linkedProductIds.includes(product.id);
+
+              return (
+                <ResourceItem
+                  id={product.id}
+                  media={
+                    product.featuredImage ? (
+                      <img
+                        src={product.featuredImage.url}
+                        alt={product.title}
+                        style={{ width: 50, height: 50, objectFit: "cover" }}
+                      />
+                    ) : undefined
+                  }
+                >
+                  <InlineStack align="space-between">
+                    <BlockStack gap="100">
+                      <Text as="h3" variant="bodyMd" fontWeight="semibold">
+                        {product.title}
+                      </Text>
+                      <Text as="p" tone="subdued">
+                        {product.handle}
+                      </Text>
+                    </BlockStack>
+                    <Form method="post">
+                      <input
+                        type="hidden"
+                        name="productGid"
+                        value={product.id}
+                      />
+                      {isLinked ? (
+                        <>
+                          <Badge tone="success">Linked</Badge>
+                          <Button
+                            submit
+                            name="_intent"
+                            value="unlink"
+                            tone="critical"
+                          >
+                            Unlink
+                          </Button>
+                        </>
+                      ) : (
+                        <Button submit name="_intent" value="link">
+                          Link Template
+                        </Button>
+                      )}
+                    </Form>
+                  </InlineStack>
+                </ResourceItem>
+              );
+            }}
+          />
+        </Card>
+      </BlockStack>
     </Page>
   );
 }
