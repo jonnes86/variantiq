@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { json, redirect } from "@remix-run/node";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
-import { useLoaderData, Form, useSubmit, Link } from "@remix-run/react";
+import { useLoaderData, Form, Link, useRouteError, isRouteErrorResponse } from "@remix-run/react";
 import {
   Page,
   Layout,
@@ -31,11 +31,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
     return json({ templates, error: null });
   } catch (error) {
-    // CRITICAL FIX: If the error is a Response (like a Shopify Redirect), throw it!
-    if (error instanceof Response) {
-      throw error;
-    }
-    
+    if (error instanceof Response) throw error;
     console.error("Dashboard Loader Error:", error);
     return json({ templates: [], error: "Failed to load app data." });
   }
@@ -55,13 +51,33 @@ export async function action({ request }: ActionFunctionArgs) {
       const t = await prisma.template.create({ data: { name, shop: session.shop } });
       return redirect(`/app/templates/${t.id}`);
     }
-
     return null;
   } catch (error) {
     if (error instanceof Response) throw error;
-    console.error("Dashboard Action Error:", error);
     return json({ error: "Action failed" }, { status: 500 });
   }
+}
+
+// --- ERROR BOUNDARY (Catches "Blank Page" crashes) ---
+export function ErrorBoundary() {
+  const error = useRouteError();
+  return (
+    <Page title="Error">
+      <Layout>
+        <Layout.Section>
+          <Banner tone="critical" title="Something went wrong">
+            <p>
+              {isRouteErrorResponse(error)
+                ? `${error.status} ${error.statusText}`
+                : error instanceof Error
+                ? error.message
+                : "Unknown error"}
+            </p>
+          </Banner>
+        </Layout.Section>
+      </Layout>
+    </Page>
+  );
 }
 
 export default function Index() {
@@ -76,7 +92,7 @@ export default function Index() {
     { id: 'templates-tab', content: 'Templates' },
   ];
 
-  // --- TAB CONTENT: DASHBOARD ---
+  // --- VIEWS ---
   const DashboardView = (
     <BlockStack gap="400">
       <Card>
@@ -91,7 +107,6 @@ export default function Index() {
     </BlockStack>
   );
 
-  // --- TAB CONTENT: TEMPLATES ---
   const TemplatesView = (
     <BlockStack gap="500">
       <Card>
@@ -154,12 +169,12 @@ export default function Index() {
       
       <Layout>
         <Layout.Section>
-          <Tabs tabs={tabs} selected={selectedTab} onSelect={handleTabChange}>
-            <div style={{ marginTop: '1rem' }}>
-              {selectedTab === 0 && DashboardView}
-              {selectedTab === 1 && TemplatesView}
-            </div>
-          </Tabs>
+          {/* FIX: Content is rendered AFTER Tabs, not inside, to prevent rendering issues */}
+          <Tabs tabs={tabs} selected={selectedTab} onSelect={handleTabChange} />
+          <div style={{ marginTop: '1rem' }}>
+            {selectedTab === 0 && DashboardView}
+            {selectedTab === 1 && TemplatesView}
+          </div>
         </Layout.Section>
       </Layout>
     </Page>
