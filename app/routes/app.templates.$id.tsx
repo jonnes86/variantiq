@@ -1,11 +1,11 @@
-// app/routes/app.templates.$id.tsx - Complete working version
+// app/routes/app.templates.$id.tsx - FIXED: Working product navigation
 import {
   json,
   redirect,
   type ActionFunctionArgs,
   type LoaderFunctionArgs,
 } from "@remix-run/node";
-import { useLoaderData, useSubmit, useNavigate, Form } from "@remix-run/react";
+import { useLoaderData, useSubmit, Link, Form } from "@remix-run/react";
 import {
   Page,
   Card,
@@ -149,7 +149,6 @@ export async function action({ request, params }: ActionFunctionArgs) {
 export default function TemplateDetail() {
   const { template } = useLoaderData<typeof loader>();
   const submit = useSubmit();
-  const navigate = useNavigate();
 
   const [selectedTab, setSelectedTab] = useState(0);
   const [templateName, setTemplateName] = useState(template.name);
@@ -358,11 +357,10 @@ export default function TemplateDetail() {
           <Text as="p">
             {template.links.length} product(s) using this template
           </Text>
-          <Button
-            onClick={() => navigate(`/app/templates/${template.id}/products`)}
-          >
-            Manage Product Links
-          </Button>
+          {/* FIX: Use Link component instead of Button with navigate */}
+          <Link to={`/app/templates/${template.id}/products`} style={{ textDecoration: 'none' }}>
+            <Button>Manage Product Links</Button>
+          </Link>
         </BlockStack>
       </Card>
 
@@ -427,7 +425,7 @@ export default function TemplateDetail() {
 
   return (
     <Page
-      backAction={{ content: "Templates", onAction: () => navigate("/app") }}
+      backAction={{ content: "Templates", url: "/app" }}
       title={template.name}
       secondaryActions={[
         {
