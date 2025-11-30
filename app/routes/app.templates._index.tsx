@@ -12,7 +12,7 @@ import {
   InlineGrid,
   Banner
 } from "@shopify/polaris";
-import { authenticateAdminSafe } from "../shopify.server";
+import { authenticate } from "../shopify.server";
 import { prisma } from "../db.server";
 import { useState } from "react";
 
@@ -20,12 +20,12 @@ import { useState } from "react";
 export async function loader({ request }: LoaderFunctionArgs) {
   try {
     // 1. Authenticate
-    const { session } = await authenticateAdminSafe(request);
+    const { session } = await authenticate.admin(request);
     if (!session) {
       return redirect("/auth/login");
     }
 
-    // 2. Database Check (Critical for preventing 500s)
+    // 2. Database Check
     if (!prisma) {
       console.error("CRITICAL: Prisma client is undefined.");
       throw new Error("Database connection failed.");
@@ -41,6 +41,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   } catch (error) {
     console.error("Templates Index Loader Error:", error);
+    if (error instanceof Response) {
+      throw error;
+    }
     // Return error as data to allow UI to render instead of 500 crash
     return json({ 
       templates: [], 
@@ -52,11 +55,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
 // --- Action ---
 export async function action({ request }: ActionFunctionArgs) {
   try {
+    const { session } = await authenticate.admin(request);
     const form = await request.formData();
     const name = String(form.get("name") || "").trim();
-    
-    const { session } = await authenticateAdminSafe(request);
-    if (!session) return redirect("/auth/login");
   
     if (!name) return json({ error: "Name is required" }, { status: 400 });
     
@@ -67,6 +68,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
   } catch (error) {
     console.error("Templates Index Action Error:", error);
+    if (error instanceof Response) throw error;
     return json({ error: "Failed to create template." }, { status: 500 });
   }
 }
