@@ -18,13 +18,12 @@ import {
 import { authenticate } from "../shopify.server";
 import { prisma } from "../db.server";
 
-// --- LOADER (Fetches data for ALL tabs) ---
+// --- LOADER ---
 export async function loader({ request }: LoaderFunctionArgs) {
   try {
     const { session } = await authenticate.admin(request);
     if (!session) return redirect("/auth/login");
 
-    // Fetch templates for the "Templates" tab
     const templates = await prisma.template.findMany({
       where: { shop: session.shop },
       orderBy: { updatedAt: "desc" },
@@ -32,19 +31,21 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
     return json({ templates, error: null });
   } catch (error) {
+    // CRITICAL FIX: If the error is a Response (like a Shopify Redirect), throw it!
+    if (error instanceof Response) {
+      throw error;
+    }
+    
     console.error("Dashboard Loader Error:", error);
-    // Return empty templates list instead of crashing
     return json({ templates: [], error: "Failed to load app data." });
   }
 }
 
-// --- ACTION (Handles creation from the Templates tab) ---
+// --- ACTION ---
 export async function action({ request }: ActionFunctionArgs) {
   try {
     const { session } = await authenticate.admin(request);
     const form = await request.formData();
-    
-    // We can check an 'intent' field if we have multiple forms
     const intent = form.get("_intent");
 
     if (intent === "createTemplate") {
@@ -52,12 +53,12 @@ export async function action({ request }: ActionFunctionArgs) {
       if (!name) return json({ error: "Name required" }, { status: 400 });
       
       const t = await prisma.template.create({ data: { name, shop: session.shop } });
-      // Redirect to the specific template detail page (still requires routing, but robust)
       return redirect(`/app/templates/${t.id}`);
     }
 
     return null;
   } catch (error) {
+    if (error instanceof Response) throw error;
     console.error("Dashboard Action Error:", error);
     return json({ error: "Action failed" }, { status: 500 });
   }
@@ -71,16 +72,8 @@ export default function Index() {
   const handleTabChange = (selectedTabIndex: number) => setSelectedTab(selectedTabIndex);
 
   const tabs = [
-    {
-      id: 'dashboard-tab',
-      content: 'Dashboard',
-      panelID: 'dashboard-panel',
-    },
-    {
-      id: 'templates-tab',
-      content: 'Templates',
-      panelID: 'templates-panel',
-    },
+    { id: 'dashboard-tab', content: 'Dashboard' },
+    { id: 'templates-tab', content: 'Templates' },
   ];
 
   // --- TAB CONTENT: DASHBOARD ---
@@ -91,7 +84,6 @@ export default function Index() {
           <Text as="h2" variant="headingMd">Welcome to VariantIQ</Text>
           <Text as="p">
             VariantIQ helps you define and manage custom variant option templates.
-            Use the tabs above to manage your templates.
           </Text>
           <Button onClick={() => setSelectedTab(1)}>Go to Templates</Button>
         </BlockStack>
@@ -102,7 +94,6 @@ export default function Index() {
   // --- TAB CONTENT: TEMPLATES ---
   const TemplatesView = (
     <BlockStack gap="500">
-      {/* Create Template Form */}
       <Card>
         <BlockStack gap="400">
           <Text as="h2" variant="headingMd">Create New Template</Text>
@@ -124,7 +115,6 @@ export default function Index() {
         </BlockStack>
       </Card>
 
-      {/* Templates List */}
       <Card>
         <BlockStack gap="200">
           <Text as="h2" variant="headingMd">Your Templates</Text>
