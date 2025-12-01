@@ -4,7 +4,10 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
+  isRouteErrorResponse,
+  useRouteError,
 } from "@remix-run/react";
+import { Page, Banner } from "@shopify/polaris";
 
 export default function App() {
   return (
@@ -22,6 +25,43 @@ export default function App() {
       </head>
       <body>
         <Outlet />
+        <ScrollRestoration />
+        <Scripts />
+      </body>
+    </html>
+  );
+}
+
+// 👇 ErrorBoundary handles 401, 404, and generic errors
+export function ErrorBoundary() {
+  const error = useRouteError();
+
+  let title = "Something went wrong";
+  let message = "An unexpected error occurred. Please try again later.";
+
+  if (isRouteErrorResponse(error)) {
+    if (error.status === 401) {
+      title = "Session Expired";
+      message = "Your session expired. Please reopen the app from your Shopify Admin.";
+    } else if (error.status === 404) {
+      title = "Page Not Found";
+      message = "We couldn’t find the page or resource you were looking for.";
+    }
+  }
+
+  return (
+    <html>
+      <head>
+        <title>{title}</title>
+        <Meta />
+        <Links />
+      </head>
+      <body>
+        <Page title={title}>
+          <Banner status="critical">
+            <p>{message}</p>
+          </Banner>
+        </Page>
         <ScrollRestoration />
         <Scripts />
       </body>
