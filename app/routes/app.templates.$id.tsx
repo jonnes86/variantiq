@@ -1,4 +1,3 @@
-// app/routes/app.templates.$id.tsx - FIXED: Working product navigation
 import {
   json,
   redirect,
@@ -131,6 +130,50 @@ export async function action({ request, params }: ActionFunctionArgs) {
       return json({ success: true });
     }
 
+    // Add rule
+    if (intent === "addRule") {
+      const parentFieldId = String(form.get("parentFieldId") || "");
+      const parentValue = String(form.get("parentValue") || "").trim();
+      const childFieldId = String(form.get("childFieldId") || "");
+
+      if (!parentFieldId || !parentValue || !childFieldId) {
+        return json({ error: "All fields required" }, { status: 400 });
+      }
+
+      if (parentFieldId === childFieldId) {
+        return json(
+          { error: "Parent and child must be different fields" },
+          { status: 400 }
+        );
+      }
+
+      // Get max sort order for rules
+      const maxRuleSort = await prisma.rule.findFirst({
+        where: { templateId },
+        orderBy: { sort: "desc" },
+        select: { sort: true },
+      });
+
+      await prisma.rule.create({
+        data: {
+          templateId,
+          parentFieldId,
+          parentValue,
+          childFieldId,
+          sort: (maxRuleSort?.sort || 0) + 1,
+        },
+      });
+
+      return json({ success: true });
+    }
+
+    // Delete rule
+    if (intent === "deleteRule") {
+      const ruleId = String(form.get("ruleId") || "");
+      await prisma.rule.delete({ where: { id: ruleId } });
+      return json({ success: true });
+    }
+
     // Delete template
     if (intent === "deleteTemplate") {
       await prisma.template.delete({ where: { id: templateId } });
@@ -216,6 +259,35 @@ export default function TemplateDetail() {
       )
     ) {
       submit({ _intent: "deleteTemplate" }, { method: "post" });
+    }
+  };
+
+  // Rule form state
+  const [showRuleForm, setShowRuleForm] = useState(false);
+  const [parentFieldId, setParentFieldId] = useState("");
+  const [parentValue, setParentValue] = useState("");
+  const [childFieldId, setChildFieldId] = useState("");
+
+  const handleParentFieldChange = (value: string) => {
+    setParentFieldId(value);
+    setChildFieldId("");
+  };
+
+  const handleAddRule = () => {
+    submit(
+      { _intent: "addRule", parentFieldId, parentValue, childFieldId },
+      { method: "post" }
+    );
+    // Reset form
+    setParentFieldId("");
+    setParentValue("");
+    setChildFieldId("");
+    setShowRuleForm(false);
+  };
+
+  const handleDeleteRule = (ruleId: string) => {
+    if (confirm("Delete this rule? This cannot be undone.")) {
+      submit({ _intent: "deleteRule", ruleId }, { method: "post" });
     }
   };
 
@@ -358,7 +430,10 @@ export default function TemplateDetail() {
             {template.links.length} product(s) using this template
           </Text>
           {/* FIX: Use Link component instead of Button with navigate */}
-          <Link to={`/app/templates/${template.id}/products`} style={{ textDecoration: 'none' }}>
+          <Link
+            to={`/app/templates/${template.id}/products`}
+            style={{ textDecoration: "none" }}
+          >
             <Button>Manage Product Links</Button>
           </Link>
         </BlockStack>
@@ -384,9 +459,14 @@ export default function TemplateDetail() {
     <BlockStack gap="400">
       <Card>
         <BlockStack gap="400">
-          <Text as="h3" variant="headingMd">
-            Cascading Rules
-          </Text>
+          <InlineGrid columns={["1fr", "auto"]}>
+            <Text as="h3" variant="headingMd">
+              Cascading Rules
+            </Text>
+            {template.fields.length >= 2 && !showRuleForm && (
+              <Button onClick={() => setShowRuleForm(true)}>Add Rule</Button>
+            )}
+          </InlineGrid>
           <Text as="p">
             Rules determine which fields appear based on previous selections.
           </Text>
@@ -395,13 +475,64 @@ export default function TemplateDetail() {
               You need at least 2 fields to create cascading rules.
             </Banner>
           )}
+          {showRuleForm && (
+            <Card background="bg-surface-secondary">
+              <BlockStack gap="400">
+                <Text as="h4" variant="headingSm">
+                  New Rule
+                </Text>
+                <Select
+                  label="Parent Field"
+                  options={[
+                    { label: "Select field", value: "" },
+                    ...template.fields.map((f) => ({
+                      label: f.label,
+                      value: f.id,
+                    })),
+                  ]}
+                  value={parentFieldId}
+                  onChange={handleParentFieldChange}
+                />
+                <TextField
+                  label="Parent Value"
+                  value={parentValue}
+                  onChange={setParentValue}
+                  autoComplete="off"
+                />
+                <Select
+                  label="Child Field"
+                  options={[
+                    { label: "Select field", value: "" },
+                    ...template.fields
+                      .filter((f) => f.id !== parentFieldId)
+                      .map((f) => ({ label: f.label, value: f.id })),
+                  ]}
+                  value={childFieldId}
+                  onChange={setChildFieldId}
+                  disabled={!parentFieldId}
+                />
+                <InlineGrid columns={2} gap="200">
+                  <Button onClick={() => setShowRuleForm(false)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    primary
+                    onClick={handleAddRule}
+                    disabled={!parentFieldId || !parentValue || !childFieldId}
+                  >
+                    Add Rule
+                  </Button>
+                </InlineGrid>
+              </BlockStack>
+            </Card>
+          )}
         </BlockStack>
       </Card>
 
       {template.rules.length === 0 ? (
         <Card>
           <Text as="p" tone="subdued">
-            No rules yet. Coming soon: visual rule builder.
+            No rules yet. Add your first rule to get started.
           </Text>
         </Card>
       ) : (
@@ -409,14 +540,32 @@ export default function TemplateDetail() {
           <ResourceList
             resourceName={{ singular: "rule", plural: "rules" }}
             items={template.rules}
-            renderItem={(rule: any) => (
-              <ResourceItem id={rule.id}>
-                <Text as="p">
-                  When {rule.parentFieldId} = {rule.parentValue}, show{" "}
-                  {rule.childFieldId}
-                </Text>
-              </ResourceItem>
-            )}
+            renderItem={(rule: any) => {
+              const parentField = template.fields.find(
+                (f) => f.id === rule.parentFieldId
+              );
+              const childField = template.fields.find(
+                (f) => f.id === rule.childFieldId
+              );
+              return (
+                <ResourceItem id={rule.id}>
+                  <InlineStack align="space-between">
+                    <Text as="p" variant="bodyMd">
+                      When{" "}
+                      {parentField ? parentField.label : rule.parentFieldId} ={" "}
+                      {rule.parentValue}, show{" "}
+                      {childField ? childField.label : rule.childFieldId}
+                    </Text>
+                    <Button
+                      onClick={() => handleDeleteRule(rule.id)}
+                      tone="critical"
+                    >
+                      Delete
+                    </Button>
+                  </InlineStack>
+                </ResourceItem>
+              );
+            }}
           />
         </Card>
       )}
