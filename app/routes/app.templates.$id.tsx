@@ -4,7 +4,7 @@ import {
   type ActionFunctionArgs,
   type LoaderFunctionArgs,
 } from "@remix-run/node";
-import { useLoaderData, useSubmit, Link, Form } from "@remix-run/react";
+import { useLoaderData, useSubmit } from "@remix-run/react";
 import {
   Page,
   Card,
@@ -15,27 +15,21 @@ import {
   Text,
   InlineGrid,
   Select,
-  Checkbox,
   Banner,
   ResourceList,
   ResourceItem,
   InlineStack,
 } from "@shopify/polaris";
 import { prisma } from "../db.server";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { authenticate } from "../shopify.server";
 
-// --- Loader ---
 export async function loader({ request, params }: LoaderFunctionArgs) {
   try {
     const { session } = await authenticate.admin(request);
-
-    if (!session) {
-      return redirect("/auth/login");
-    }
+    if (!session) return redirect("/auth/login");
 
     const templateId = params.id!;
-
     const template = await prisma.template.findFirst({
       where: { id: templateId, shop: session.shop },
       include: {
@@ -45,10 +39,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       },
     });
 
-    if (!template) {
-      throw new Response("Template not found", { status: 404 });
-    }
-
+    if (!template) throw new Response("Template not found", { status: 404 });
     return json({ template });
   } catch (error) {
     console.error("Template Detail Loader Error:", error);
@@ -57,7 +48,6 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   }
 }
 
-// --- Action ---
 export async function action({ request, params }: ActionFunctionArgs) {
   try {
     const { session } = await authenticate.admin(request);
@@ -114,6 +104,7 @@ export default function TemplateDetail() {
   const { template } = useLoaderData<typeof loader>();
   const submit = useSubmit();
 
+  const [selectedTab, setSelectedTab] = useState(0);
   const [showRuleForm, setShowRuleForm] = useState(false);
   const [parentFieldId, setParentFieldId] = useState("");
   const [parentValue, setParentValue] = useState("");
@@ -242,7 +233,9 @@ export default function TemplateDetail() {
                       Show {childField?.label || rule.childFieldId} when {parentField?.label || rule.parentFieldId} equals {rule.parentValue}.
                     </Text>
                     <Button
-                      onClick={() => submit({ _intent: "deleteRule", ruleId: rule.id }, { method: "post" })}
+                      onClick={() =>
+                        submit({ _intent: "deleteRule", ruleId: rule.id }, { method: "post" })
+                      }
                       tone="critical"
                     >
                       Delete
@@ -259,13 +252,30 @@ export default function TemplateDetail() {
 
   return (
     <Page title={template.name}>
-      <Tabs
-        tabs={[{ id: "rules", content: "Rules", badge: String(template.rules.length) }]}
-        selected={0}
-        onSelect={() => {}}
-      >
-        <div style={{ marginTop: "1rem" }}>{RulesView}</div>
-      </Tabs>
+      <BlockStack gap="500">
+        <Tabs
+          tabs={[
+            { id: "fields", content: "Fields", badge: String(template.fields.length) },
+            { id: "products", content: "Products", badge: String(template.links.length) },
+            { id: "rules", content: "Rules", badge: String(template.rules.length) },
+          ]}
+          selected={selectedTab}
+          onSelect={setSelectedTab}
+        />
+        <div style={{ marginTop: "1rem" }}>
+          {selectedTab === 0 && (
+            <Text as="p" tone="subdued">
+              Fields tab content placeholder
+            </Text>
+          )}
+          {selectedTab === 1 && (
+            <Text as="p" tone="subdued">
+              Products tab content placeholder
+            </Text>
+          )}
+          {selectedTab === 2 && RulesView}
+        </div>
+      </BlockStack>
     </Page>
   );
 }
