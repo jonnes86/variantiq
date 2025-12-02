@@ -57,17 +57,17 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
         id: template.id,
         name: template.name,
         shop: template.shop,
-+       // New appearance fields included in loader data
-+       fontFamily: template.fontFamily,
-+       fontSize: template.fontSize,
-+       fontWeight: template.fontWeight,
-+       textColor: template.textColor,
-+       backgroundColor: template.backgroundColor,
-+       borderColor: template.borderColor,
-+       borderRadius: template.borderRadius,
-+       padding: template.padding,
-+       hoverBackgroundColor: template.hoverBackgroundColor,
-+       hoverTextColor: template.hoverTextColor,
+        // New appearance fields included in loader data
+        fontFamily: template.fontFamily,
+        fontSize: template.fontSize,
+        fontWeight: template.fontWeight,
+        textColor: template.textColor,
+        backgroundColor: template.backgroundColor,
+        borderColor: template.borderColor,
+        borderRadius: template.borderRadius,
+        padding: template.padding,
+        hoverBackgroundColor: template.hoverBackgroundColor,
+        hoverTextColor: template.hoverTextColor,
         fields: template.fields,
         rules: template.rules,
         links: template.links,
@@ -116,16 +116,16 @@ export async function action({ request, params }: ActionFunctionArgs) {
       await prisma.template.update({
         where: { id: templateId },
         data: {
-+         fontFamily,
-+         fontSize,
-+         fontWeight,
-+         textColor,
-+         backgroundColor,
-+         borderColor,
-+         borderRadius,
-+         padding,
-+         hoverBackgroundColor,
-+         hoverTextColor,
+          fontFamily,
+          fontSize,
+          fontWeight,
+          textColor,
+          backgroundColor,
+          borderColor,
+          borderRadius,
+          padding,
+          hoverBackgroundColor,
+          hoverTextColor,
         },
       });
       return json({ success: true });
@@ -335,7 +335,7 @@ export default function TemplateDetail() {
             { id: "fields", content: "Fields", badge: String(template.fields.length) },
             { id: "products", content: "Products", badge: String(template.links.length) },
             { id: "rules", content: "Rules", badge: String(template.rules.length) },
-+           { id: "appearance", content: "Appearance" }, // New tab
+            { id: "appearance", content: "Appearance" }, // New tab
           ]}
           selected={selectedTab}
           onSelect={setSelectedTab}
@@ -344,7 +344,7 @@ export default function TemplateDetail() {
           {selectedTab === 0 && FieldsView}
           {selectedTab === 1 && ProductsView}
           {selectedTab === 2 && RulesView}
-+         {selectedTab === 3 && AppearanceView}  {/* Show Appearance tab */}
+		  {selectedTab === 3 && AppearanceView}  {/* Show Appearance tab */}
         </div>
       </BlockStack>
     </Page>
