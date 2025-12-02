@@ -148,7 +148,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
     const form = await request.formData();
     const intent = form.get("_intent") as string;
 
-    // --- Handle Fields and Rules as before ---
+    // --- Handle Fields and Rules ---
     if (intent === "addRule") {
       const parentFieldId = String(form.get("parentFieldId") || "");
       const parentValue = String(form.get("parentValue") || "").trim();
@@ -226,6 +226,36 @@ export async function action({ request, params }: ActionFunctionArgs) {
       return json({ success: true });
     }
 
+    if (intent === "updateField") {
+      const fieldId = String(form.get("fieldId") || "");
+      const type = String(form.get("type") || "");
+      const name = String(form.get("name") || "").trim();
+      const label = String(form.get("label") || "").trim();
+      const options = String(form.get("options") || "");
+      const required = form.get("required") === "true";
+      if (!type || !name || !label) {
+        return json({ error: "Type, name, and label are required" }, { status: 400 });
+      }
+      let optionsArray: string[] | null = null;
+      if (["select", "radio", "checkbox"].includes(type)) {
+        if (!options) {
+          return json({ error: "Options are required for this field type" }, { status: 400 });
+        }
+        optionsArray = options.split(",").map((s) => s.trim()).filter((s) => s);
+      }
+      await prisma.field.update({
+        where: { id: fieldId },
+        data: {
+          type,
+          name,
+          label,
+          optionsJson: optionsArray ? { set: optionsArray } : undefined,
+          required,
+        },
+      });
+      return json({ success: true });
+    }
+
     // --- Handle Link / Unlink via productGid ---
     if (intent === "link") {
       const productGid = String(form.get("productGid") || "");
@@ -255,7 +285,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
 }
 
 export default function TemplateDetail() {
-  const { template, products, linkedProductIds, nextPageCursor, previousPageCursor, query } = useLoaderData<typeof loader>();
+  const { template, products, linkedProductIds, nextPageCursor, previousPageCursor, query } =
+    useLoaderData<typeof loader>();
   const submit = useSubmit();
 
   const [selectedTab, setSelectedTab] = useState(0);
@@ -284,14 +315,17 @@ export default function TemplateDetail() {
     setShowRuleForm(false);
   };
   const handleAddField = () => {
-    submit({
-      _intent: "addField",
-      type: fieldType,
-      name: fieldName,
-      label: fieldLabel,
-      options: fieldOptions,
-      required: fieldRequired.toString(),
-    }, { method: "post" });
+    submit(
+      {
+        _intent: "addField",
+        type: fieldType,
+        name: fieldName,
+        label: fieldLabel,
+        options: fieldOptions,
+        required: fieldRequired.toString(),
+      },
+      { method: "post" }
+    );
     setFieldType("text");
     setFieldName("");
     setFieldLabel("");
@@ -300,12 +334,53 @@ export default function TemplateDetail() {
     setShowFieldForm(false);
   };
 
+  // Inline editing state and handlers
+  const [editingFieldId, setEditingFieldId] = useState("");
+  const [editFieldType, setEditFieldType] = useState("");
+  const [editFieldName, setEditFieldName] = useState("");
+  const [editFieldLabel, setEditFieldLabel] = useState("");
+  const [editFieldOptions, setEditFieldOptions] = useState("");
+  const [editFieldRequired, setEditFieldRequired] = useState(false);
+
+  const handleEditField = (field: any) => {
+    setEditingFieldId(field.id);
+    setEditFieldType(field.type);
+    setEditFieldName(field.name);
+    setEditFieldLabel(field.label);
+    setEditFieldOptions(
+      field.optionsJson ? JSON.parse(JSON.stringify(field.optionsJson)).join(", ") : ""
+    );
+    setEditFieldRequired(field.required);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingFieldId("");
+  };
+
+  const handleUpdateField = (fieldId: string) => {
+    submit(
+      {
+        _intent: "updateField",
+        fieldId,
+        type: editFieldType,
+        name: editFieldName,
+        label: editFieldLabel,
+        options: editFieldOptions,
+        required: editFieldRequired.toString(),
+      },
+      { method: "post" }
+    );
+    setEditingFieldId("");
+  };
+
   const RulesView = (
     <BlockStack gap="400">
       <Card>
         <BlockStack gap="400">
           <InlineGrid columns={["1fr", "auto"]}>
-            <Text as="h3" variant="headingMd">Cascading Rules</Text>
+            <Text as="h3" variant="headingMd">
+              Cascading Rules
+            </Text>
             {template.fields.length >= 2 && !showRuleForm && (
               <Button onClick={() => setShowRuleForm(true)}>Add Rule</Button>
             )}
@@ -321,7 +396,9 @@ export default function TemplateDetail() {
           {showRuleForm && (
             <Card background="bg-surface-secondary">
               <BlockStack gap="400">
-                <Text as="h4" variant="headingSm">New Rule</Text>
+                <Text as="h4" variant="headingSm">
+                  New Rule
+                </Text>
                 <Select
                   label="Trigger Field"
                   helpText="Choose the field that controls this rule. When this field’s value matches the trigger value, it will activate the rule."
@@ -344,15 +421,21 @@ export default function TemplateDetail() {
                   helpText="Select the field that should be revealed when the trigger condition is met."
                   options={[
                     { label: "Select field", value: "" },
-                    ...template.fields.filter((f) => f.id !== parentFieldId).map((f) => ({ label: f.label, value: f.id })),
+                    ...template.fields
+                      .filter((f) => f.id !== parentFieldId)
+                      .map((f) => ({ label: f.label, value: f.id })),
                   ]}
                   value={childFieldId}
                   onChange={setChildFieldId}
                   disabled={!parentFieldId}
                 />
                 <Text as="p" variant="bodyMd">
-                  Show {template.fields.find(f => f.id === childFieldId)?.label || "[Field to Show]"}{" "}
-                  when {template.fields.find(f => f.id === parentFieldId)?.label || "[Trigger Field]"}{" "}
+                  Show{" "}
+                  {template.fields.find((f) => f.id === childFieldId)?.label ||
+                    "[Field to Show]"}{" "}
+                  when{" "}
+                  {template.fields.find((f) => f.id === parentFieldId)?.label ||
+                    "[Trigger Field]"}{" "}
                   equals {parentValue || "[Trigger Value]"}.
                 </Text>
                 <InlineGrid columns={2} gap="200">
@@ -388,10 +471,16 @@ export default function TemplateDetail() {
                 <ResourceItem id={rule.id}>
                   <InlineStack align="space-between">
                     <Text as="p" variant="bodyMd">
-                      Show {childField?.label || rule.childFieldId} when {parentField?.label || rule.parentFieldId} equals {rule.parentValue}.
+                      Show {childField?.label || rule.childFieldId} when{" "}
+                      {parentField?.label || rule.parentFieldId} equals {rule.parentValue}.
                     </Text>
                     <Button
-                      onClick={() => submit({ _intent: "deleteRule", ruleId: rule.id }, { method: "post" })}
+                      onClick={() =>
+                        submit(
+                          { _intent: "deleteRule", ruleId: rule.id },
+                          { method: "post" }
+                        )
+                      }
                       tone="critical"
                     >
                       Delete
@@ -411,7 +500,9 @@ export default function TemplateDetail() {
       <Card>
         <BlockStack gap="400">
           <InlineGrid columns={["1fr", "auto"]}>
-            <Text as="h3" variant="headingMd">Fields</Text>
+            <Text as="h3" variant="headingMd">
+              Fields
+            </Text>
             {!showFieldForm && (
               <Button onClick={() => setShowFieldForm(true)}>Add Field</Button>
             )}
@@ -422,7 +513,9 @@ export default function TemplateDetail() {
           {showFieldForm && (
             <Card background="bg-surface-secondary">
               <BlockStack gap="400">
-                <Text as="h4" variant="headingSm">New Field</Text>
+                <Text as="h4" variant="headingSm">
+                  New Field
+                </Text>
                 <Select
                   label="Field Type"
                   options={[
@@ -490,26 +583,90 @@ export default function TemplateDetail() {
             items={template.fields}
             renderItem={(field: any) => (
               <ResourceItem id={field.id}>
-                <InlineStack align="space-between">
-                  <BlockStack>
-                    <Text as="p" variant="bodyMd">
-                      {field.label} ({field.type}){field.required ? " (required)" : ""}
-                    </Text>
-                    {field.optionsJson && (
-                      <Text as="p" tone="subdued" variant="bodySm">
-                        Options: {JSON.parse(JSON.stringify(field.optionsJson)).join(", ")}
+                {editingFieldId !== field.id ? (
+                  <InlineStack align="space-between">
+                    <BlockStack>
+                      <Text as="p" variant="bodyMd">
+                        {field.label} ({field.type})
+                        {field.required ? " (required)" : ""}
                       </Text>
-                    )}
-                  </BlockStack>
-                  <InlineGrid columns={["auto"]} gap="100">
-                    <Button
-                      tone="critical"
-                      onClick={() => submit({ _intent: "deleteField", fieldId: field.id }, { method: "post" })}
-                    >
-                      Delete
-                    </Button>
-                  </InlineGrid>
-                </InlineStack>
+                      {field.optionsJson && (
+                        <Text as="p" tone="subdued" variant="bodySm">
+                          Options:{" "}
+                          {JSON.parse(JSON.stringify(field.optionsJson)).join(", ")}
+                        </Text>
+                      )}
+                    </BlockStack>
+                    <InlineGrid columns={["auto", "auto"]} gap="100">
+                      <Button onClick={() => handleEditField(field)}>Edit</Button>
+                      <Button
+                        tone="critical"
+                        onClick={() =>
+                          submit(
+                            { _intent: "deleteField", fieldId: field.id },
+                            { method: "post" }
+                          )
+                        }
+                      >
+                        Delete
+                      </Button>
+                    </InlineGrid>
+                  </InlineStack>
+                ) : (
+                  <Card background="bg-surface-secondary">
+                    <BlockStack gap="200">
+                      <Select
+                        label="Field Type"
+                        options={[
+                          { label: "Text", value: "text" },
+                          { label: "Select", value: "select" },
+                          { label: "Radio Buttons", value: "radio" },
+                          { label: "Checkboxes", value: "checkbox" },
+                        ]}
+                        value={editFieldType}
+                        onChange={setEditFieldType}
+                      />
+                      <TextField
+                        label="Field Name (identifier)"
+                        helpText="Unique identifier for this field (used in code)."
+                        value={editFieldName}
+                        onChange={setEditFieldName}
+                        autoComplete="off"
+                      />
+                      <TextField
+                        label="Field Label"
+                        helpText="Displayed label for this field."
+                        value={editFieldLabel}
+                        onChange={setEditFieldLabel}
+                        autoComplete="off"
+                      />
+                      {(["select", "radio", "checkbox"].includes(editFieldType)) && (
+                        <TextField
+                          label="Options (comma separated)"
+                          helpText="Specify options for select, radio, or checkbox fields."
+                          value={editFieldOptions}
+                          onChange={setEditFieldOptions}
+                          autoComplete="off"
+                        />
+                      )}
+                      <Checkbox
+                        label="Required"
+                        checked={editFieldRequired}
+                        onChange={setEditFieldRequired}
+                      />
+                      <InlineGrid columns={2} gap="200">
+                        <Button onClick={handleCancelEdit}>Cancel</Button>
+                        <Button
+                          primary
+                          onClick={() => handleUpdateField(field.id)}
+                          disabled={!editFieldName || !editFieldLabel}
+                        >
+                          Save
+                        </Button>
+                      </InlineGrid>
+                    </BlockStack>
+                  </Card>
+                )}
               </ResourceItem>
             )}
           />
@@ -523,7 +680,9 @@ export default function TemplateDetail() {
       <Card>
         <BlockStack gap="400">
           <InlineGrid columns={["1fr", "auto"]}>
-            <Text as="h3" variant="headingMd">Products</Text>
+            <Text as="h3" variant="headingMd">
+              Products
+            </Text>
           </InlineGrid>
           <Form method="get">
             <InlineGrid columns={["3fr", "1fr"]} gap="200">
@@ -535,7 +694,9 @@ export default function TemplateDetail() {
                 placeholder="Enter product title"
                 autoComplete="off"
               />
-              <Button primary submit>Search</Button>
+              <Button primary submit>
+                Search
+              </Button>
             </InlineGrid>
           </Form>
         </BlockStack>
@@ -556,12 +717,18 @@ export default function TemplateDetail() {
                   <BlockStack>
                     <Text variant="headingMd">{product.title}</Text>
                     {product.vendor && (
-                      <Text variant="bodySm" tone="subdued">{product.vendor}</Text>
+                      <Text variant="bodySm" tone="subdued">
+                        {product.vendor}
+                      </Text>
                     )}
                   </BlockStack>
                   <InlineGrid columns={["auto"]} gap="100">
                     <Form method="post">
-                      <input type="hidden" name="productGid" value={product.id} />
+                      <input
+                        type="hidden"
+                        name="productGid"
+                        value={product.id}
+                      />
                       <Button
                         submit
                         name="_intent"
@@ -579,9 +746,11 @@ export default function TemplateDetail() {
           }}
         />
         {/* Pagination Controls */}
-        <div style={{ display: "flex", justifyContent: "space-between", marginTop: "1rem" }}>
+        <div
+          style={{ display: "flex", justifyContent: "space-between", marginTop: "1rem" }}
+        >
           {previousPageCursor ? (
-            <Link 
+            <Link
               to={`/app/templates/${template.id}?before=${previousPageCursor}${query ? `&query=${query}` : ""}`}
               style={{ textDecoration: "none" }}
             >
@@ -591,14 +760,16 @@ export default function TemplateDetail() {
             <Button disabled>Previous Page</Button>
           )}
           {nextPageCursor ? (
-            <Link 
+            <Link
               to={`/app/templates/${template.id}?cursor=${nextPageCursor}${query ? `&query=${query}` : ""}`}
               style={{ textDecoration: "none" }}
             >
               <Button primary>Next Page</Button>
             </Link>
           ) : (
-            <Button disabled primary>Next Page</Button>
+            <Button disabled primary>
+              Next Page
+            </Button>
           )}
         </div>
       </Card>
