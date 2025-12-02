@@ -7,7 +7,7 @@ class CustomProductOptions {
     this.fields = [];
     this.rules = [];
     this.fieldValues = {};
-    
+
     this.init();
   }
 
@@ -18,6 +18,7 @@ class CustomProductOptions {
         this.render();
         this.attachEventListeners();
         this.evaluateAllRules();
+        this.applyButtonStyles();
       } else {
         this.container.innerHTML = '';
       }
@@ -29,10 +30,8 @@ class CustomProductOptions {
 
   async loadTemplate() {
     const response = await fetch(`https://${this.appUrl}.myshopify.com/apps/variantiq/api/template/${this.productId}`);
-    
     if (!response.ok) {
       if (response.status === 404) {
-        // No template for this product
         this.container.innerHTML = '';
         return;
       }
@@ -66,91 +65,58 @@ class CustomProductOptions {
   renderField(field) {
     const isRequired = field.required ? 'required' : '';
     const requiredLabel = field.required ? '<span style="color: red;">*</span>' : '';
-
     let inputHtml = '';
 
     switch (field.type) {
       case 'text':
         inputHtml = `
-          <input 
-            type="text" 
-            id="field-${field.id}" 
-            name="custom_${field.name}"
-            data-field-id="${field.id}"
-            ${isRequired}
-            style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 16px;"
-          />
+          <input type="text" id="field-${field.id}" name="custom_${field.name}" data-field-id="${field.id}" ${isRequired}
+            style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 16px;" />
         `;
         break;
-
       case 'select':
         const options = field.optionsJson || [];
         inputHtml = `
-          <select 
-            id="field-${field.id}" 
-            name="custom_${field.name}"
-            data-field-id="${field.id}"
-            ${isRequired}
-            style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 16px;"
-          >
+          <select id="field-${field.id}" name="custom_${field.name}" data-field-id="${field.id}" ${isRequired}
+            style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 16px;">
             <option value="">Select an option...</option>
             ${options.map(opt => `<option value="${opt}">${opt}</option>`).join('')}
           </select>
         `;
         break;
-
       case 'radio':
         const radioOptions = field.optionsJson || [];
         inputHtml = `
           <div style="display: flex; flex-direction: column; gap: 10px;">
             ${radioOptions.map((opt, idx) => `
               <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                <input 
-                  type="radio" 
-                  id="field-${field.id}-${idx}" 
-                  name="custom_${field.name}"
-                  data-field-id="${field.id}"
-                  value="${opt}"
-                  ${isRequired}
-                  style="cursor: pointer;"
-                />
+                <input type="radio" id="field-${field.id}-${idx}" name="custom_${field.name}" data-field-id="${field.id}" value="${opt}" ${isRequired} style="cursor: pointer;" />
                 <span>${opt}</span>
               </label>
             `).join('')}
           </div>
         `;
         break;
-
       case 'checkbox':
         const checkboxOptions = field.optionsJson || [];
         inputHtml = `
           <div style="display: flex; flex-direction: column; gap: 10px;">
             ${checkboxOptions.map((opt, idx) => `
               <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                <input 
-                  type="checkbox" 
-                  id="field-${field.id}-${idx}" 
-                  name="custom_${field.name}[]"
-                  data-field-id="${field.id}"
-                  value="${opt}"
-                  style="cursor: pointer;"
-                />
+                <input type="checkbox" id="field-${field.id}-${idx}" name="custom_${field.name}[]" data-field-id="${field.id}" value="${opt}" style="cursor: pointer;" />
                 <span>${opt}</span>
               </label>
             `).join('')}
           </div>
         `;
         break;
-
       default:
         inputHtml = '<p>Unsupported field type</p>';
     }
 
     return `
       <div class="custom-field" data-field-id="${field.id}" style="margin-bottom: 20px;">
-        <label style="display: block; margin-bottom: 8px; font-weight: 600;">
-          ${field.label}${requiredLabel}
-        </label>
+        <label style="display: block; margin-bottom: 8px; font-weight: 600;">${field.label}${requiredLabel}</label>
         ${inputHtml}
       </div>
     `;
@@ -160,7 +126,6 @@ class CustomProductOptions {
     const form = document.getElementById(`custom-options-form-${this.productId}`);
     if (!form) return;
 
-    // Listen to all input changes
     form.addEventListener('change', (e) => {
       this.updateFieldValue(e.target);
       this.evaluateAllRules();
@@ -173,7 +138,6 @@ class CustomProductOptions {
       }
     });
 
-    // Intercept add to cart
     this.interceptAddToCart();
   }
 
@@ -182,7 +146,6 @@ class CustomProductOptions {
     const fieldName = element.name.replace('custom_', '').replace('[]', '');
 
     if (element.type === 'checkbox') {
-      // For checkboxes, collect all checked values
       const checkboxes = document.querySelectorAll(`[data-field-id="${fieldId}"]:checked`);
       this.fieldValues[fieldName] = Array.from(checkboxes).map(cb => cb.value);
     } else if (element.type === 'radio') {
@@ -201,22 +164,16 @@ class CustomProductOptions {
 
   evaluateExpression(expression) {
     try {
-      // Replace field names with actual values
       let evalExpression = expression;
-
       for (const [fieldName, value] of Object.entries(this.fieldValues)) {
         const fieldValue = Array.isArray(value) ? JSON.stringify(value) : `"${value}"`;
         evalExpression = evalExpression.replace(new RegExp(`\\b${fieldName}\\b`, 'g'), fieldValue);
       }
 
-      // Handle includes operator for arrays
       evalExpression = evalExpression.replace(/(\[[^\]]+\])\s+includes\s+"([^"]+)"/g, '$1.includes("$2")');
-      
-      // Handle simple string comparisons
       evalExpression = evalExpression.replace(/"([^"]+)"\s*==\s*"([^"]+)"/g, '"$1" === "$2"');
       evalExpression = evalExpression.replace(/"([^"]+)"\s*!=\s*"([^"]+)"/g, '"$1" !== "$2"');
 
-      // eslint-disable-next-line no-eval
       return eval(evalExpression);
     } catch (error) {
       console.error('Failed to evaluate expression:', expression, error);
@@ -237,35 +194,25 @@ class CustomProductOptions {
       case 'show':
         fieldContainer.style.display = shouldTrigger ? 'block' : 'none';
         break;
-
       case 'hide':
         fieldContainer.style.display = shouldTrigger ? 'none' : 'block';
         break;
-
       case 'require':
         inputs.forEach(input => {
-          if (shouldTrigger) {
-            input.setAttribute('required', 'required');
-          } else {
-            input.removeAttribute('required');
-          }
+          if (shouldTrigger) input.setAttribute('required', 'required');
+          else input.removeAttribute('required');
         });
         break;
-
       case 'disable':
         inputs.forEach(input => {
           input.disabled = shouldTrigger;
         });
-        break;
-
-      default:
         break;
     }
   }
 
   interceptAddToCart() {
     const addToCartForms = document.querySelectorAll('form[action*="/cart/add"]');
-    
     addToCartForms.forEach(form => {
       form.addEventListener('submit', (e) => {
         if (!this.validateFields()) {
@@ -273,8 +220,6 @@ class CustomProductOptions {
           alert('Please fill in all required custom fields.');
           return false;
         }
-
-        // Add custom field data to form
         this.addCustomDataToCart(form);
       });
     });
@@ -285,15 +230,9 @@ class CustomProductOptions {
     if (!form) return true;
 
     const requiredInputs = form.querySelectorAll('[required]');
-    
     for (const input of requiredInputs) {
       const fieldContainer = input.closest('.custom-field');
-      
-      // Skip if field is hidden
-      if (fieldContainer && fieldContainer.style.display === 'none') {
-        continue;
-      }
-
+      if (fieldContainer && fieldContainer.style.display === 'none') continue;
       if (input.type === 'checkbox' || input.type === 'radio') {
         const name = input.name;
         const checked = form.querySelector(`[name="${name}"]:checked`);
@@ -302,35 +241,58 @@ class CustomProductOptions {
         return false;
       }
     }
-
     return true;
   }
 
   addCustomDataToCart(cartForm) {
-    // Add custom field data as product properties
     for (const [fieldName, value] of Object.entries(this.fieldValues)) {
       if (!value || (Array.isArray(value) && value.length === 0)) continue;
-
       const displayValue = Array.isArray(value) ? value.join(', ') : value;
-      
       const input = document.createElement('input');
       input.type = 'hidden';
       input.name = `properties[${fieldName}]`;
       input.value = displayValue;
-      
       cartForm.appendChild(input);
     }
   }
+
+  applyButtonStyles() {
+    const style = this.template || {};
+    const buttons = document.querySelectorAll('form[action*="/cart/add"] button[type="submit"], form[action*="/cart/add"] input[type="submit"]');
+
+    buttons.forEach(btn => {
+      if (style.fontFamily) btn.style.fontFamily = style.fontFamily;
+      if (style.fontSize) btn.style.fontSize = style.fontSize;
+      if (style.fontWeight) btn.style.fontWeight = style.fontWeight;
+      if (style.textColor) btn.style.color = style.textColor;
+      if (style.backgroundColor) btn.style.backgroundColor = style.backgroundColor;
+      if (style.borderColor) btn.style.border = `1px solid ${style.borderColor}`;
+      if (style.borderRadius) btn.style.borderRadius = style.borderRadius;
+      if (style.padding) btn.style.padding = style.padding;
+
+      if (style.hoverBackgroundColor || style.hoverTextColor) {
+        const originalBg = btn.style.backgroundColor;
+        const originalColor = btn.style.color;
+
+        btn.addEventListener('mouseenter', () => {
+          if (style.hoverBackgroundColor) btn.style.backgroundColor = style.hoverBackgroundColor;
+          if (style.hoverTextColor) btn.style.color = style.hoverTextColor;
+        });
+
+        btn.addEventListener('mouseleave', () => {
+          if (style.hoverBackgroundColor) btn.style.backgroundColor = originalBg;
+          if (style.hoverTextColor) btn.style.color = originalColor;
+        });
+      }
+    });
+  }
 }
 
-// Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
   const wrappers = document.querySelectorAll('.product-options-wrapper');
-  
   wrappers.forEach(wrapper => {
     const productId = wrapper.getAttribute('data-product-id');
     const appUrl = wrapper.getAttribute('data-app-url');
-    
     if (productId && appUrl) {
       new CustomProductOptions(productId, appUrl);
     }

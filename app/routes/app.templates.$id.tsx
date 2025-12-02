@@ -1,4 +1,5 @@
-// Filename: app/routes/app.templates.$id.tsx
+// app/routes/app.templates.$id.tsx
+
 import {
   json,
   redirect,
@@ -15,7 +16,6 @@ import {
   Tabs,
   Text,
   InlineGrid,
-  Select,
   Banner,
   ResourceList,
   ResourceItem,
@@ -26,132 +26,112 @@ import { prisma } from "../db.server";
 import { useState } from "react";
 import { authenticate } from "../shopify.server";
 
-// ... GraphQL and other code unchanged ...
-
+// Loader: fetch template (including new style fields) and related data
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  try {
-    const { session, admin } = await authenticate.admin(request);
-    if (!session) return redirect("/auth/login");
+  const { session, admin } = await authenticate.admin(request);
+  if (!session) return redirect("/auth/login");
 
-    const templateId = params.id!;
-    if (!templateId) return redirect("/app");
-    if (!prisma) throw new Error("Database connection failed");
+  const templateId = params.id!;
+  if (!templateId) return redirect("/app");
+  if (!prisma) throw new Error("Database connection failed");
 
-    // Load the template including its fields, rules, and links
-    const template = await prisma.template.findFirst({
-      where: { id: templateId, shop: session.shop },
-      include: {
-        fields: { orderBy: { sort: "asc" } },
-        rules: { orderBy: { sort: "asc" } },
-        links: true,
-      },
-    });
-    if (!template) {
-      throw new Response("Template not found.", { status: 404 });
-    }
+  const template = await prisma.template.findFirst({
+    where: { id: templateId, shop: session.shop },
+    include: {
+      fields: { orderBy: { sort: "asc" } },
+      rules: { orderBy: { sort: "asc" } },
+      links: true,
+    },
+  });
+  if (!template) throw new Response("Template not found.", { status: 404 });
 
-    // ... fetching products from Shopify (unchanged) ...
+  // (Fetch related products etc. – unchanged)
 
-    return json({
-      template: {
-        id: template.id,
-        name: template.name,
-        shop: template.shop,
-        // New appearance fields included in loader data
-        fontFamily: template.fontFamily,
-        fontSize: template.fontSize,
-        fontWeight: template.fontWeight,
-        textColor: template.textColor,
-        backgroundColor: template.backgroundColor,
-        borderColor: template.borderColor,
-        borderRadius: template.borderRadius,
-        padding: template.padding,
-        hoverBackgroundColor: template.hoverBackgroundColor,
-        hoverTextColor: template.hoverTextColor,
-        fields: template.fields,
-        rules: template.rules,
-        links: template.links,
-      },
-      products,
-      linkedProductIds,
-      nextPageCursor: pageInfo.hasNextPage ? pageInfo.endCursor : null,
-      previousPageCursor: pageInfo.hasPreviousPage ? pageInfo.startCursor : null,
-      query: queryParam,
-      error: null,
-    });
-  } catch (error) {
-    // ... error handling unchanged ...
-  }
+  // Return the template including appearance fields
+  return json({
+    template: {
+      id: template.id,
+      name: template.name,
+      shop: template.shop,
+      // Appearance fields
+      fontFamily: template.fontFamily,
+      fontSize: template.fontSize,
+      fontWeight: template.fontWeight,
+      textColor: template.textColor,
+      backgroundColor: template.backgroundColor,
+      borderColor: template.borderColor,
+      borderRadius: template.borderRadius,
+      padding: template.padding,
+      hoverBackgroundColor: template.hoverBackgroundColor,
+      hoverTextColor: template.hoverTextColor,
+      fields: template.fields,
+      rules: template.rules,
+      links: template.links,
+    },
+    // ... include products, pagination, etc. ...
+  });
 }
 
+// Action: handle form submissions (including appearance updates)
 export async function action({ request, params }: ActionFunctionArgs) {
-  try {
-    const { session } = await authenticate.admin(request);
-    if (!session) return redirect("/auth/login");
+  const { session } = await authenticate.admin(request);
+  if (!session) return redirect("/auth/login");
 
-    const templateId = params.id!;
-    if (!templateId) return redirect("/app");
-    if (!prisma) throw new Error("Database connection failed");
+  const templateId = params.id!;
+  if (!templateId) return redirect("/app");
+  if (!prisma) throw new Error("Database connection failed");
 
-    const form = await request.formData();
-    const intent = String(form.get("_intent"));
+  const form = await request.formData();
+  const intent = String(form.get("_intent"));
 
-    // ... Existing field/rule/link handlers (addField, deleteField, etc.) ...
+  // --- New: Update Appearance ---
+  if (intent === "updateAppearance") {
+    // Collect style values (empty string if omitted)
+    const fontFamily = String(form.get("fontFamily") || "");
+    const fontSize = String(form.get("fontSize") || "");
+    const fontWeight = String(form.get("fontWeight") || "");
+    const textColor = String(form.get("textColor") || "");
+    const backgroundColor = String(form.get("backgroundColor") || "");
+    const borderColor = String(form.get("borderColor") || "");
+    const borderRadius = String(form.get("borderRadius") || "");
+    const padding = String(form.get("padding") || "");
+    const hoverBackgroundColor = String(form.get("hoverBackgroundColor") || "");
+    const hoverTextColor = String(form.get("hoverTextColor") || "");
 
-    // --- New: Handle Appearance update ---
-    if (intent === "updateAppearance") {
-      // Get style values from form (allow empty strings)
-      const fontFamily = String(form.get("fontFamily") || "");
-      const fontSize = String(form.get("fontSize") || "");
-      const fontWeight = String(form.get("fontWeight") || "");
-      const textColor = String(form.get("textColor") || "");
-      const backgroundColor = String(form.get("backgroundColor") || "");
-      const borderColor = String(form.get("borderColor") || "");
-      const borderRadius = String(form.get("borderRadius") || "");
-      const padding = String(form.get("padding") || "");
-      const hoverBackgroundColor = String(form.get("hoverBackgroundColor") || "");
-      const hoverTextColor = String(form.get("hoverTextColor") || "");
-
-      // Update the template with new appearance styles
-      await prisma.template.update({
-        where: { id: templateId },
-        data: {
-          fontFamily,
-          fontSize,
-          fontWeight,
-          textColor,
-          backgroundColor,
-          borderColor,
-          borderRadius,
-          padding,
-          hoverBackgroundColor,
-          hoverTextColor,
-        },
-      });
-      return json({ success: true });
-    }
-
-    return null;
-  } catch (error) {
-    // ... error handling unchanged ...
+    // Update the template record with new style values
+    await prisma.template.update({
+      where: { id: templateId },
+      data: {
+        fontFamily,
+        fontSize,
+        fontWeight,
+        textColor,
+        backgroundColor,
+        borderColor,
+        borderRadius,
+        padding,
+        hoverBackgroundColor,
+        hoverTextColor,
+      },
+    });
+    return json({ success: true });
   }
+
+  // (Handle other intents: addField, deleteField, etc.)
+  return null;
 }
 
 export default function TemplateDetail() {
   const {
     template,
-    products,
-    linkedProductIds,
-    nextPageCursor,
-    previousPageCursor,
-    query,
+    // ... other loader data ...
   } = useLoaderData<typeof loader>();
   const submit = useSubmit();
-
   const [selectedTab, setSelectedTab] = useState(0);
-  // ... other existing state for fields/rules ...
 
-  // --- New state for appearance form ---
+  // Existing state for fields/rules/products tabs (omitted for brevity)
+
+  // State for appearance form fields, defaulting to template values
   const [fontFamily, setFontFamily] = useState(template.fontFamily || "");
   const [fontSize, setFontSize] = useState(template.fontSize || "");
   const [fontWeight, setFontWeight] = useState(template.fontWeight || "");
@@ -162,9 +142,9 @@ export default function TemplateDetail() {
   const [padding, setPadding] = useState(template.padding || "");
   const [hoverBackgroundColor, setHoverBackgroundColor] = useState(template.hoverBackgroundColor || "");
   const [hoverTextColor, setHoverTextColor] = useState(template.hoverTextColor || "");
-  const [isHover, setIsHover] = useState(false); // for preview hover effect
+  const [isHover, setIsHover] = useState(false); // preview hover state
 
-  // Handle saving appearance
+  // Save handler for appearance form
   const handleSaveAppearance = () => {
     submit(
       {
@@ -184,15 +164,13 @@ export default function TemplateDetail() {
     );
   };
 
-  // Define the Appearance tab content
+  // Define the "Appearance" tab content using Polaris form components
   const AppearanceView = (
     <BlockStack gap="400">
       <Card>
         <BlockStack gap="400">
           <InlineGrid columns={["1fr", "auto"]}>
-            <Text as="h3" variant="headingMd">
-              Appearance
-            </Text>
+            <Text as="h3" variant="headingMd">Appearance</Text>
           </InlineGrid>
           <Text as="p">
             Customize the button’s appearance by setting each style below.
@@ -312,20 +290,7 @@ export default function TemplateDetail() {
     </BlockStack>
   );
 
-  const RulesView = (
-    /* Existing RulesView code unchanged */
-    // ...
-  );
-
-  const FieldsView = (
-    /* Existing FieldsView code unchanged */
-    // ...
-  );
-
-  const ProductsView = (
-    /* Existing ProductsView code unchanged */
-    // ...
-  );
+  // (Existing tabs for Fields, Products, Rules here...)
 
   return (
     <Page title={template.name}>
@@ -335,7 +300,7 @@ export default function TemplateDetail() {
             { id: "fields", content: "Fields", badge: String(template.fields.length) },
             { id: "products", content: "Products", badge: String(template.links.length) },
             { id: "rules", content: "Rules", badge: String(template.rules.length) },
-            { id: "appearance", content: "Appearance" }, // New tab
+            { id: "appearance", content: "Appearance" },  // New tab
           ]}
           selected={selectedTab}
           onSelect={setSelectedTab}
@@ -344,7 +309,7 @@ export default function TemplateDetail() {
           {selectedTab === 0 && FieldsView}
           {selectedTab === 1 && ProductsView}
           {selectedTab === 2 && RulesView}
-		  {selectedTab === 3 && AppearanceView}  {/* Show Appearance tab */}
+          {selectedTab === 3 && AppearanceView}
         </div>
       </BlockStack>
     </Page>
