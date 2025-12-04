@@ -11,7 +11,7 @@ import { Page, Banner } from "@shopify/polaris";
 
 export default function App() {
   return (
-    <html>
+    <html lang="en">
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width,initial-scale=1" />
@@ -32,7 +32,6 @@ export default function App() {
   );
 }
 
-// 👇 ErrorBoundary handles 401, 404, and generic errors
 export function ErrorBoundary() {
   const error = useRouteError();
 
@@ -50,7 +49,7 @@ export function ErrorBoundary() {
   }
 
   return (
-    <html>
+    <html lang="en">
       <head>
         <title>{title}</title>
         <Meta />
