@@ -67,7 +67,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
     const borderRadius = String(form.get("borderRadius") || "");
     const padding = String(form.get("padding") || "");
     const hoverBackgroundColor = String(form.get("hoverBackgroundColor") || "");
-    const hoverTextColor = String(form.get("hoverTextColor") || "";
+    const hoverTextColor = String(form.get("hoverTextColor") || "");
 
     await prisma.template.update({
       where: { id: templateId },
