@@ -6,7 +6,7 @@ import {
   type ActionFunctionArgs,
   type LoaderFunctionArgs,
 } from "@remix-run/node";
-import { useLoaderData, useSubmit, Form, Link, useCatch } from "@remix-run/react";
+import { useLoaderData, useSubmit, Form, Link } from "@remix-run/react";
 import {
   Page,
   Card,
@@ -263,15 +263,6 @@ export default function TemplateDetail() {
           {selectedTab === 3 && AppearanceView}
         </div>
       </BlockStack>
-    </Page>
-  );
-}
-
-export function CatchBoundary() {
-  const caught = useCatch();
-  return (
-    <Page title="Error">
-      <Text tone="critical">Error: {caught.statusText}</Text>
     </Page>
   );
 }
