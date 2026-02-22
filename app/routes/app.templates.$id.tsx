@@ -20,6 +20,8 @@ import {
   ResourceList,
   ResourceItem,
   InlineStack,
+  Tag,
+  Divider,
 } from "@shopify/polaris";
 import { prisma } from "../db.server";
 import { useState, useEffect } from "react";
@@ -154,6 +156,56 @@ export async function action({ request, params }: ActionFunctionArgs) {
     return json({ success: true });
   }
 
+  // Add rule
+  if (intent === "addRule") {
+    const conditionsStr = String(form.get("conditionsJson") || "[]");
+    const targetFieldId = String(form.get("targetFieldId") || "");
+    const actionType = String(form.get("actionType") || "SHOW");
+    const targetOptionsStr = String(form.get("targetOptionsJson") || "null");
+
+    let conditionsJson = [];
+    try {
+      conditionsJson = JSON.parse(conditionsStr);
+    } catch (e) { }
+
+    let targetOptionsJson = null;
+    try {
+      if (targetOptionsStr !== "null" && targetOptionsStr !== "") {
+        targetOptionsJson = JSON.parse(targetOptionsStr);
+      }
+    } catch (e) { }
+
+    if (!conditionsJson.length || !targetFieldId) {
+      return json({ error: "Conditions and Target Field required" }, { status: 400 });
+    }
+
+    const maxSort = await prisma.rule.findFirst({
+      where: { templateId },
+      orderBy: { sort: "desc" },
+      select: { sort: true },
+    });
+
+    await prisma.rule.create({
+      data: {
+        templateId,
+        conditionsJson: conditionsJson as any,
+        targetFieldId,
+        actionType,
+        targetOptionsJson: targetOptionsJson as any,
+        sort: (maxSort?.sort || 0) + 1,
+      },
+    });
+
+    return json({ success: true });
+  }
+
+  // Delete rule
+  if (intent === "deleteRule") {
+    const ruleId = String(form.get("ruleId") || "");
+    await prisma.rule.delete({ where: { id: ruleId } });
+    return json({ success: true });
+  }
+
   // Delete template
   if (intent === "deleteTemplate") {
     await prisma.template.delete({ where: { id: templateId } });
@@ -202,7 +254,63 @@ export default function TemplateDetail() {
   );
   const [isHover, setIsHover] = useState(false);
 
+  // Rules form state
+  const [showRuleForm, setShowRuleForm] = useState(false);
+  const [ruleConditions, setRuleConditions] = useState<Array<{ fieldId: string, operator: string, value: string }>>([]);
+  const [tempCondFieldId, setTempCondFieldId] = useState("");
+  const [tempCondOperator, setTempCondOperator] = useState("EQUALS");
+  const [tempCondValue, setTempCondValue] = useState("");
+  const [ruleTargetFieldId, setRuleTargetFieldId] = useState("");
+  const [ruleActionType, setRuleActionType] = useState("SHOW");
+  const [ruleTargetOptions, setRuleTargetOptions] = useState<string[]>([]);
+  const [tempTargetOption, setTempTargetOption] = useState("");
+
   // Handlers
+  const handleAddCondition = () => {
+    if (tempCondFieldId && tempCondValue) {
+      setRuleConditions([...ruleConditions, { fieldId: tempCondFieldId, operator: tempCondOperator, value: tempCondValue }]);
+      setTempCondFieldId("");
+      setTempCondValue("");
+    }
+  };
+
+  const handleRemoveCondition = (index: number) => {
+    setRuleConditions(ruleConditions.filter((_, i) => i !== index));
+  };
+
+  const handleAddTargetOption = () => {
+    if (tempTargetOption && !ruleTargetOptions.includes(tempTargetOption)) {
+      setRuleTargetOptions([...ruleTargetOptions, tempTargetOption]);
+      setTempTargetOption("");
+    }
+  };
+
+  const handleRemoveTargetOption = (option: string) => {
+    setRuleTargetOptions(ruleTargetOptions.filter((o) => o !== option));
+  };
+
+  const handleSaveRule = () => {
+    submit({
+      _intent: "addRule",
+      conditionsJson: JSON.stringify(ruleConditions),
+      targetFieldId: ruleTargetFieldId,
+      actionType: ruleActionType,
+      targetOptionsJson: ruleActionType === "LIMIT_OPTIONS" ? JSON.stringify(ruleTargetOptions) : "null",
+    }, { method: "post" });
+
+    setShowRuleForm(false);
+    setRuleConditions([]);
+    setRuleTargetFieldId("");
+    setRuleActionType("SHOW");
+    setRuleTargetOptions([]);
+  };
+
+  const handleDeleteRule = (ruleId: string) => {
+    if (confirm("Delete this rule?")) {
+      submit({ _intent: "deleteRule", ruleId }, { method: "post" });
+    }
+  };
+
   const handleSaveAppearance = () => {
     submit(
       {
@@ -264,6 +372,8 @@ export default function TemplateDetail() {
     { label: "Radio Buttons", value: "radio" },
     { label: "Checkboxes", value: "checkbox" },
   ];
+
+  const getFieldLabel = (id: string) => template.fields.find(f => f.id === id)?.label || id;
 
   // Views
   const FieldsView = (
@@ -429,24 +539,156 @@ export default function TemplateDetail() {
     <BlockStack gap="400">
       <Card>
         <BlockStack gap="400">
-          <Text as="h3" variant="headingMd">
-            Cascading Rules
-          </Text>
-          <Text as="p">
-            Rules determine which fields appear based on previous selections.
-          </Text>
+          <InlineGrid columns="1fr auto">
+            <BlockStack gap="200">
+              <Text as="h3" variant="headingMd">
+                Cascading Rules
+              </Text>
+              <Text as="p">
+                Build advanced logic paths to hide, show, or limit field options.
+              </Text>
+            </BlockStack>
+            {!showRuleForm && (
+              <Button onClick={() => setShowRuleForm(true)} disabled={template.fields.length < 2}>
+                Add Rule
+              </Button>
+            )}
+          </InlineGrid>
+
           {template.fields.length < 2 && (
             <Banner tone="info">
               You need at least 2 fields to create cascading rules.
             </Banner>
           )}
+
+          {showRuleForm && (
+            <Card background="bg-surface-secondary">
+              <BlockStack gap="500">
+                <Text as="h4" variant="headingSm">New Logic Rule</Text>
+
+                {/* Conditions Builder */}
+                <BlockStack gap="300">
+                  <Text as="strong" variant="bodyMd">IF (Conditions)</Text>
+
+                  {ruleConditions.length > 0 && (
+                    <InlineStack gap="200" wrap>
+                      {ruleConditions.map((cond, index) => (
+                        <Tag key={index} onRemove={() => handleRemoveCondition(index)}>
+                          {getFieldLabel(cond.fieldId)} {cond.operator === "EQUALS" ? "=" : cond.operator} {cond.value}
+                        </Tag>
+                      ))}
+                    </InlineStack>
+                  )}
+
+                  <InlineGrid columns="1fr 1fr 1fr auto" gap="200">
+                    <Select
+                      label="Field"
+                      options={[{ label: "Select field...", value: "" }, ...template.fields.map(f => ({ label: f.label, value: f.id }))]}
+                      value={tempCondFieldId}
+                      onChange={setTempCondFieldId}
+                    />
+                    <Select
+                      label="Operator"
+                      options={[
+                        { label: "is", value: "EQUALS" },
+                        { label: "is not", value: "NOT_EQUALS" }
+                      ]}
+                      value={tempCondOperator}
+                      onChange={setTempCondOperator}
+                    />
+                    <TextField
+                      label="Value"
+                      value={tempCondValue}
+                      onChange={setTempCondValue}
+                      autoComplete="off"
+                    />
+                    <div style={{ marginTop: "24px" }}>
+                      <Button onClick={handleAddCondition} disabled={!tempCondFieldId || !tempCondValue}>
+                        Add Condition
+                      </Button>
+                    </div>
+                  </InlineGrid>
+                </BlockStack>
+
+                <Divider />
+
+                {/* Actions Builder */}
+                <BlockStack gap="300">
+                  <Text as="strong" variant="bodyMd">THEN (Action)</Text>
+
+                  <InlineGrid columns="auto 1fr" gap="200">
+                    <Select
+                      label="Action"
+                      options={[
+                        { label: "Show", value: "SHOW" },
+                        { label: "Hide", value: "HIDE" },
+                        { label: "Limit Options To", value: "LIMIT_OPTIONS" }
+                      ]}
+                      value={ruleActionType}
+                      onChange={setRuleActionType}
+                    />
+                    <Select
+                      label="Target Field"
+                      options={[{ label: "Select field...", value: "" }, ...template.fields.map(f => ({ label: f.label, value: f.id }))]}
+                      value={ruleTargetFieldId}
+                      onChange={setRuleTargetFieldId}
+                    />
+                  </InlineGrid>
+
+                  {ruleActionType === "LIMIT_OPTIONS" && (
+                    <BlockStack gap="300">
+                      <Text as="p" tone="subdued">Add allowed options for the target field:</Text>
+
+                      {ruleTargetOptions.length > 0 && (
+                        <InlineStack gap="200" wrap>
+                          {ruleTargetOptions.map((opt, index) => (
+                            <Tag key={index} onRemove={() => handleRemoveTargetOption(opt)}>
+                              {opt}
+                            </Tag>
+                          ))}
+                        </InlineStack>
+                      )}
+
+                      <InlineGrid columns="1fr auto" gap="200">
+                        <TextField
+                          label="Allowed Option"
+                          value={tempTargetOption}
+                          onChange={setTempTargetOption}
+                          autoComplete="off"
+                        />
+                        <div style={{ marginTop: "24px" }}>
+                          <Button onClick={handleAddTargetOption} disabled={!tempTargetOption}>
+                            Add Option
+                          </Button>
+                        </div>
+                      </InlineGrid>
+                    </BlockStack>
+                  )}
+                </BlockStack>
+
+                <InlineGrid columns={2} gap="200">
+                  <Button onClick={() => setShowRuleForm(false)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="primary"
+                    onClick={handleSaveRule}
+                    disabled={ruleConditions.length === 0 || !ruleTargetFieldId}
+                  >
+                    Save Rule
+                  </Button>
+                </InlineGrid>
+              </BlockStack>
+            </Card>
+          )}
+
         </BlockStack>
       </Card>
 
       {template.rules.length === 0 ? (
         <Card>
           <Text as="p" tone="subdued">
-            No rules yet. Coming soon: visual rule builder.
+            No rules yet. Click "Add Rule" to get started.
           </Text>
         </Card>
       ) : (
@@ -454,14 +696,40 @@ export default function TemplateDetail() {
           <ResourceList
             resourceName={{ singular: "rule", plural: "rules" }}
             items={template.rules}
-            renderItem={(rule: any) => (
-              <ResourceItem id={rule.id} onClick={() => { }}>
-                <Text as="p">
-                  When {rule.parentFieldId} = {rule.parentValue}, show{" "}
-                  {rule.childFieldId}
-                </Text>
-              </ResourceItem>
-            )}
+            renderItem={(rule: any) => {
+              const condText = (rule.conditionsJson as Array<any>)?.map(c => `${getFieldLabel(c.fieldId)} ${c.operator === 'EQUALS' ? '=' : '!='} ${c.value}`).join(" AND ") || "No condition";
+              const targetLabel = getFieldLabel(rule.targetFieldId);
+
+              let actionText = "";
+              if (rule.actionType === "SHOW") actionText = `Show ${targetLabel}`;
+              else if (rule.actionType === "HIDE") actionText = `Hide ${targetLabel}`;
+              else if (rule.actionType === "LIMIT_OPTIONS") {
+                let opts: string[] = [];
+                try { opts = rule.targetOptionsJson as string[]; } catch (e) { }
+                actionText = `Limit ${targetLabel} to [${opts?.join(", ")}]`;
+              }
+
+              return (
+                <ResourceItem id={rule.id} onClick={() => { }}>
+                  <InlineStack align="space-between" blockAlign="center">
+                    <BlockStack gap="100">
+                      <Text as="p" variant="bodyMd" fontWeight="semibold">
+                        IF {condText}
+                      </Text>
+                      <Text as="p" tone="subdued">
+                        THEN {actionText}
+                      </Text>
+                    </BlockStack>
+                    <Button
+                      onClick={() => handleDeleteRule(rule.id)}
+                      tone="critical"
+                    >
+                      Delete
+                    </Button>
+                  </InlineStack>
+                </ResourceItem>
+              );
+            }}
           />
         </Card>
       )}
@@ -560,26 +828,25 @@ export default function TemplateDetail() {
           <div
             onMouseEnter={() => setIsHover(true)}
             onMouseLeave={() => setIsHover(false)}
-            style={{ display: "inline-block" }}
+            style={{
+              display: "inline-block",
+              fontFamily: fontFamily || undefined,
+              fontSize: fontSize || undefined,
+              fontWeight: fontWeight || undefined,
+              color:
+                isHover && hoverTextColor
+                  ? hoverTextColor
+                  : textColor || undefined,
+              backgroundColor:
+                isHover && hoverBackgroundColor
+                  ? hoverBackgroundColor
+                  : backgroundColor || undefined,
+              border: borderColor ? `1px solid ${borderColor}` : undefined,
+              borderRadius: borderRadius || undefined,
+              padding: padding || undefined,
+            }}
           >
-            <Button
-              style={{
-                fontFamily: fontFamily || undefined,
-                fontSize: fontSize || undefined,
-                fontWeight: fontWeight || undefined,
-                color:
-                  isHover && hoverTextColor
-                    ? hoverTextColor
-                    : textColor || undefined,
-                backgroundColor:
-                  isHover && hoverBackgroundColor
-                    ? hoverBackgroundColor
-                    : backgroundColor || undefined,
-                border: borderColor ? `1px solid ${borderColor}` : undefined,
-                borderRadius: borderRadius || undefined,
-                padding: padding || undefined,
-              }}
-            >
+            <Button>
               Sample Button
             </Button>
           </div>
@@ -650,15 +917,6 @@ export default function TemplateDetail() {
           </div>
         </Tabs>
       </BlockStack>
-    </Page>
-  );
-}
-
-export function ErrorBoundary({ error }: { error: Error }) {
-  console.error(error);
-  return (
-    <Page title="App Error">
-      <Text tone="critical" as="p">Something went wrong: {error.message}</Text>
     </Page>
   );
 }

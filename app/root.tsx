@@ -56,11 +56,10 @@ export function ErrorBoundary() {
         <Links />
       </head>
       <body>
-        <Page title={title}>
-          <Banner status="critical">
-            <p>{message}</p>
-          </Banner>
-        </Page>
+        <div style={{ padding: "2rem", fontFamily: "system-ui, sans-serif", textAlign: "center" }}>
+          <h1 style={{ color: "red" }}>{title}</h1>
+          <p>{message}</p>
+        </div>
         <ScrollRestoration />
         <Scripts />
       </body>

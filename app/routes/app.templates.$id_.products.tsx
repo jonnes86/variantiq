@@ -84,8 +84,8 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     // 3. Fetch products from Shopify Admin GraphQL with pagination
     const response = await admin.graphql(PRODUCTS_QUERY, { variables });
     const responseJson = await response.json();
-    if (responseJson.errors) {
-      console.error("GraphQL Errors:", responseJson.errors);
+    if ((responseJson as any).errors) {
+      console.error("GraphQL Errors:", (responseJson as any).errors);
       throw new Error("Failed to fetch products from Shopify");
     }
     const productConnection = responseJson.data.products;
@@ -195,11 +195,12 @@ export default function TemplateProductsPage() {
                     id={product.id}
                     accessibilityLabel={`View details for ${product.title}`}
                     name={product.title}
+                    onClick={() => { }}
                   >
                     <LegacyStack alignment="center">
                       <LegacyStack.Item fill>
                         <Text variant="headingMd" as="h3">{product.title}</Text>
-                        <Text variant="bodySm" tone="subdued">{product.vendor}</Text>
+                        <Text variant="bodySm" as="p" tone="subdued">{product.vendor}</Text>
                       </LegacyStack.Item>
                       <LegacyStack.Item>
                         {isLinked && <Badge tone="success">Linked</Badge>}
@@ -207,11 +208,10 @@ export default function TemplateProductsPage() {
                       <LegacyStack.Item>
                         <Form method="post">
                           <input type="hidden" name="productGid" value={product.id} />
+                          <input type="hidden" name="_intent" value={isLinked ? "unlink" : "link"} />
                           <Button
                             submit
                             variant={isLinked ? undefined : "primary"}
-                            name="_intent"
-                            value={isLinked ? "unlink" : "link"}
                           >
                             {actionVerb}
                           </Button>
@@ -225,8 +225,8 @@ export default function TemplateProductsPage() {
             {/* Pagination Controls */}
             <div style={{ display: "flex", justifyContent: "space-between", marginTop: "1rem" }}>
               {previousPageCursor ? (
-                <Link 
-                  to={`/app/templates/${template.id}/products?before=${previousPageCursor}`} 
+                <Link
+                  to={`/app/templates/${template.id}/products?before=${previousPageCursor}`}
                   style={{ textDecoration: "none" }}
                 >
                   <Button>Previous Page</Button>
@@ -235,14 +235,14 @@ export default function TemplateProductsPage() {
                 <Button disabled>Previous Page</Button>
               )}
               {nextPageCursor ? (
-                <Link 
-                  to={`/app/templates/${template.id}/products?cursor=${nextPageCursor}`} 
+                <Link
+                  to={`/app/templates/${template.id}/products?cursor=${nextPageCursor}`}
                   style={{ textDecoration: "none" }}
                 >
-                  <Button primary>Next Page</Button>
+                  <Button variant="primary">Next Page</Button>
                 </Link>
               ) : (
-                <Button disabled primary>Next Page</Button>
+                <Button disabled variant="primary">Next Page</Button>
               )}
             </div>
           </Card>

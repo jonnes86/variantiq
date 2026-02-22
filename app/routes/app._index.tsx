@@ -38,7 +38,7 @@ export async function action({ request }: ActionFunctionArgs) {
   if (intent === "createTemplate") {
     const name = String(form.get("name") || "").trim();
     if (!name) return json({ error: "Name required" }, { status: 400 });
-    
+
     const t = await prisma.template.create({ data: { name, shop: session.shop } });
     return redirect(`/app/templates/${t.id}`);
   }
@@ -79,7 +79,7 @@ export default function Index() {
           <Text as="h2" variant="headingMd">Create New Template</Text>
           <Form method="post">
             <input type="hidden" name="_intent" value="createTemplate" />
-            <InlineGrid columns={["3fr", "1fr"]} gap="400" alignItems="end">
+            <InlineGrid columns="3fr 1fr" gap="400" alignItems="end">
               <TextField
                 label="Template Name"
                 labelHidden
@@ -89,7 +89,7 @@ export default function Index() {
                 autoComplete="off"
                 placeholder="e.g. T-Shirts"
               />
-              <Button submit primary disabled={!newTemplateName.trim()}>Create</Button>
+              <Button submit variant="primary" disabled={!newTemplateName.trim()}>Create</Button>
             </InlineGrid>
           </Form>
         </BlockStack>
@@ -104,7 +104,7 @@ export default function Index() {
             <BlockStack gap="300">
               {templates.map((t: any) => (
                 <Card key={t.id}>
-                  <InlineGrid columns={["1fr", "auto"]} gap="200" alignItems="center">
+                  <InlineGrid columns="1fr auto" gap="200" alignItems="center">
                     <BlockStack gap="100">
                       <Text as="h3" variant="headingMd">{t.name}</Text>
                       <Text as="p" tone="subdued" variant="bodySm">

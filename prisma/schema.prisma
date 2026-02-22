@@ -73,15 +73,24 @@ model Field {
 model Rule {
   id               String   @id @default(cuid())
   templateId       String
-  parentFieldId    String   // Field that triggers the rule
-  parentValue      String   // Value that triggers the rule
-  childFieldId     String   // Field to show when triggered
-  childOptionsJson Json?    // Options to show for the child field
+  
+  // E.g., [{ "fieldId": "A", "operator": "EQUALS", "value": "Adult" }]
+  conditionsJson   Json     
+  
+  // Field to act upon (e.g., 'Color')
+  targetFieldId    String   
+  
+  // "SHOW", "HIDE", "LIMIT_OPTIONS"
+  actionType       String   @default("SHOW") 
+  
+  // Allowed choices if LIMIT_OPTIONS (e.g., ["Red", "Blue"])
+  targetOptionsJson Json?   
+  
   sort             Int      @default(0)
   template         Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  
   @@index([templateId])
-  @@index([parentFieldId])
-  @@index([childFieldId])
+  @@index([targetFieldId])
 }
 
 model ProductTemplateLink {

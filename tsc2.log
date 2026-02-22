@@ -1,0 +1,29 @@
+app/root.tsx(60,19): error TS2322: Type '{ children: Element; status: string; }' is not assignable to type 'IntrinsicAttributes & BannerProps & RefAttributes<BannerHandles>'.
+  Property 'status' does not exist on type 'IntrinsicAttributes & BannerProps & RefAttributes<BannerHandles>'.
+app/routes/app._index.tsx(82,35): error TS2322: Type '"3fr"' is not assignable to type 'ColumnsAlias'.
+app/routes/app._index.tsx(82,42): error TS2322: Type '"1fr"' is not assignable to type 'ColumnsAlias'.
+app/routes/app._index.tsx(92,30): error TS2322: Type '{ children: string; submit: true; primary: true; disabled: boolean; }' is not assignable to type 'IntrinsicAttributes & ButtonProps'.
+  Property 'primary' does not exist on type 'IntrinsicAttributes & ButtonProps'.
+app/routes/app._index.tsx(107,41): error TS2322: Type '"1fr"' is not assignable to type 'ColumnsAlias'.
+app/routes/app._index.tsx(107,48): error TS2322: Type '"auto"' is not assignable to type 'ColumnsAlias'.
+app/routes/app.templates.$id.tsx(707,21): error TS7034: Variable 'opts' implicitly has type 'any[]' in some locations where its type cannot be determined.
+app/routes/app.templates.$id.tsx(709,58): error TS7005: Variable 'opts' implicitly has an 'any[]' type.
+app/routes/app.templates.$id.tsx(834,15): error TS2322: Type '{ children: string; style: { fontFamily: string | undefined; fontSize: string | undefined; fontWeight: string | undefined; color: string | undefined; backgroundColor: string | undefined; border: string | undefined; borderRadius: string | undefined; padding: string | undefined; }; }' is not assignable to type 'IntrinsicAttributes & ButtonProps'.
+  Property 'style' does not exist on type 'IntrinsicAttributes & ButtonProps'.
+app/routes/app.templates.$id_.products.tsx(87,22): error TS2339: Property 'errors' does not exist on type 'FetchResponseBody<any>'.
+app/routes/app.templates.$id_.products.tsx(88,53): error TS2339: Property 'errors' does not exist on type 'FetchResponseBody<any>'.
+app/routes/app.templates.$id_.products.tsx(194,20): error TS2322: Type '{ children: Element; id: any; accessibilityLabel: string; name: any; }' is not assignable to type 'IntrinsicAttributes & ResourceItemProps'.
+  Property 'onClick' is missing in type '{ children: Element; id: any; accessibilityLabel: string; name: any; }' but required in type 'PropsWithClick'.
+app/routes/app.templates.$id_.products.tsx(202,26): error TS2741: Property 'as' is missing in type '{ children: any; variant: "bodySm"; tone: "subdued"; }' but required in type 'TextProps'.
+app/routes/app.templates.$id_.products.tsx(213,29): error TS2322: Type '{ children: string; submit: true; variant: "primary" | undefined; name: string; value: string; }' is not assignable to type 'IntrinsicAttributes & ButtonProps'.
+  Property 'name' does not exist on type 'IntrinsicAttributes & ButtonProps'.
+app/routes/app.templates.$id_.products.tsx(242,27): error TS2322: Type '{ children: string; primary: true; }' is not assignable to type 'IntrinsicAttributes & ButtonProps'.
+  Property 'primary' does not exist on type 'IntrinsicAttributes & ButtonProps'.
+app/routes/app.templates.$id_.products.tsx(245,34): error TS2322: Type '{ children: string; disabled: true; primary: true; }' is not assignable to type 'IntrinsicAttributes & ButtonProps'.
+  Property 'primary' does not exist on type 'IntrinsicAttributes & ButtonProps'.
+app/routes/app.templates._index.tsx(97,37): error TS2322: Type '"3fr"' is not assignable to type 'ColumnsAlias'.
+app/routes/app.templates._index.tsx(97,44): error TS2322: Type '"1fr"' is not assignable to type 'ColumnsAlias'.
+app/routes/app.templates._index.tsx(107,32): error TS2322: Type '{ children: string; submit: true; primary: true; disabled: boolean; }' is not assignable to type 'IntrinsicAttributes & ButtonProps'.
+  Property 'primary' does not exist on type 'IntrinsicAttributes & ButtonProps'.
+app/routes/app.templates._index.tsx(124,43): error TS2322: Type '"1fr"' is not assignable to type 'ColumnsAlias'.
+app/routes/app.templates._index.tsx(124,50): error TS2322: Type '"auto"' is not assignable to type 'ColumnsAlias'.

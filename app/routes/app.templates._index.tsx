@@ -24,30 +24,30 @@ export async function loader({ request }: LoaderFunctionArgs) {
     if (!session) return redirect("/auth/login");
 
     if (!prisma) throw new Error("Database connection failed.");
-  
+
     const templates = await prisma.template.findMany({
       where: { shop: session.shop },
       orderBy: { updatedAt: "desc" },
     });
-    
+
     console.log(`Templates Loader: Found ${templates.length} templates`);
 
     return json(
       { templates, error: null },
-      { 
+      {
         // Force no-cache to ensure fresh data and prevent 304 Not Modified issues during dev
-        headers: { 
-          "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate" 
-        } 
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate"
+        }
       }
     );
 
   } catch (error) {
     console.error("Templates Loader: Error", error);
     if (error instanceof Response) throw error;
-    return json({ 
-      templates: [], 
-      error: "Failed to load templates. Please check server logs." 
+    return json({
+      templates: [],
+      error: "Failed to load templates. Please check server logs."
     });
   }
 }
@@ -58,7 +58,7 @@ export async function action({ request }: ActionFunctionArgs) {
     const { session } = await authenticate.admin(request);
     const form = await request.formData();
     const name = String(form.get("name") || "").trim();
-  
+
     if (!name) return json({ error: "Name is required" }, { status: 400 });
     if (!prisma) throw new Error("Database connection failed.");
 
@@ -94,7 +94,7 @@ export default function TemplatesIndex() {
           <BlockStack gap="400">
             <Text as="h2" variant="headingMd">Create New Template</Text>
             <Form method="post">
-              <InlineGrid columns={["3fr", "1fr"]} gap="400" alignItems="end">
+              <InlineGrid columns="3fr 1fr" gap="400" alignItems="end">
                 <TextField
                   label="Template Name"
                   labelHidden
@@ -104,7 +104,7 @@ export default function TemplatesIndex() {
                   name="name"
                   autoComplete="off"
                 />
-                <Button submit primary disabled={templateName.trim().length === 0}>
+                <Button submit variant="primary" disabled={templateName.trim().length === 0}>
                   Create
                 </Button>
               </InlineGrid>
@@ -121,7 +121,7 @@ export default function TemplatesIndex() {
               <BlockStack gap="300">
                 {templates.map((t: any) => (
                   <Card key={t.id}>
-                    <InlineGrid columns={["1fr", "auto"]} gap="200" alignItems="center">
+                    <InlineGrid columns="1fr auto" gap="200" alignItems="center">
                       <BlockStack gap="100">
                         <Text as="h3" variant="headingMd">
                           <Link to={`/app/templates/${t.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
