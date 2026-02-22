@@ -37,6 +37,18 @@ model Template {
   name      String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  fontFamily           String?
+  fontSize             String?
+  fontWeight           String?
+  textColor            String?
+  backgroundColor      String?
+  borderColor          String?
+  borderRadius         String?
+  padding              String?
+  hoverBackgroundColor String?
+  hoverTextColor       String?
+
   fields    Field[]
   rules     Rule[]
   links     ProductTemplateLink[]
