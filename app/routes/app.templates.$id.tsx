@@ -22,6 +22,7 @@ import {
   InlineStack,
   Tag,
   Divider,
+  Thumbnail
 } from "@shopify/polaris";
 import { prisma } from "../db.server";
 import { useState, useEffect } from "react";
@@ -29,7 +30,7 @@ import { authenticate } from "../shopify.server";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
   try {
-    const { session } = await authenticate.admin(request);
+    const { session, admin } = await authenticate.admin(request);
     if (!session) return redirect("/auth/login");
 
     const templateId = params.id;
@@ -46,7 +47,32 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
     if (!template) throw new Response("Template not found", { status: 404 });
 
-    return json({ template });
+    // Fetch product details for linked products
+    const linkedProductGids = template.links.map(link => link.productGid);
+    let linkedProductsData: any[] = [];
+
+    if (linkedProductGids.length > 0) {
+      // Create a query aliases string for each product to fetch them in a single batch
+      const queryAliases = linkedProductGids.map((gid, index) => `
+        product${index}: product(id: "${gid}") {
+          id
+          title
+          featuredImage { url altText }
+        }
+      `).join('\n');
+
+      const PRODUCTS_QUERY = `query { ${queryAliases} }`;
+
+      const response = await admin.graphql(PRODUCTS_QUERY);
+      const responseJson = await response.json();
+
+      if (!(responseJson as any).errors && responseJson.data) {
+        // Extract the products from the aliased query response
+        linkedProductsData = Object.values(responseJson.data).filter(Boolean);
+      }
+    }
+
+    return json({ template, linkedProductsData });
   } catch (error) {
     console.error("Loader Error:", error);
     throw new Response("Unexpected Server Error", { status: 500 });
@@ -106,8 +132,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
     return json({ success: true });
   }
 
-  // Add field
-  if (intent === "addField") {
+  // Add or Edit field
+  if (intent === "addField" || intent === "editField") {
     const type = String(form.get("fieldType") || "");
     const name = String(form.get("fieldName") || "").trim();
     const label = String(form.get("fieldLabel") || "").trim();
@@ -127,24 +153,38 @@ export async function action({ request, params }: ActionFunctionArgs) {
         .filter(Boolean);
     }
 
-    // Get max sort order
-    const maxSort = await prisma.field.findFirst({
-      where: { templateId },
-      orderBy: { sort: "desc" },
-      select: { sort: true },
-    });
+    // Get max sort order if new
+    let sortOrder = 0;
+    if (intent === "addField") {
+      const maxSort = await prisma.field.findFirst({
+        where: { templateId },
+        orderBy: { sort: "desc" },
+        select: { sort: true },
+      });
+      sortOrder = (maxSort?.sort || 0) + 1;
+    }
 
-    await prisma.field.create({
-      data: {
-        templateId,
-        type,
-        name,
-        label,
-        required,
-        optionsJson: optionsJson as any,
-        sort: (maxSort?.sort || 0) + 1,
-      },
-    });
+    if (intent === "editField") {
+      const fieldId = String(form.get("fieldId") || "");
+      if (!fieldId) return json({ error: "Field ID required for edit" }, { status: 400 });
+
+      await prisma.field.update({
+        where: { id: fieldId },
+        data: { type, name, label, required, optionsJson: optionsJson as any }
+      });
+    } else {
+      await prisma.field.create({
+        data: {
+          templateId,
+          type,
+          name,
+          label,
+          required,
+          optionsJson: optionsJson as any,
+          sort: sortOrder,
+        },
+      });
+    }
 
     return json({ success: true });
   }
@@ -216,7 +256,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
 }
 
 export default function TemplateDetail() {
-  const { template } = useLoaderData<typeof loader>();
+  const { template, linkedProductsData } = useLoaderData<typeof loader>();
   const submit = useSubmit();
   const [selectedTab, setSelectedTab] = useState(0);
 
@@ -225,6 +265,7 @@ export default function TemplateDetail() {
 
   // Field form state
   const [showFieldForm, setShowFieldForm] = useState(false);
+  const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
   const [fieldType, setFieldType] = useState("text");
   const [fieldName, setFieldName] = useState("");
   const [fieldLabel, setFieldLabel] = useState("");
@@ -330,24 +371,48 @@ export default function TemplateDetail() {
     );
   };
 
-  const handleAddField = () => {
+  const resetFieldForm = () => {
+    setShowFieldForm(false);
+    setEditingFieldId(null);
+    setFieldType("text");
+    setFieldName("");
+    setFieldLabel("");
+    setFieldRequired(false);
+    setFieldOptions("");
+  };
+
+  const handleAddFieldClick = () => {
+    resetFieldForm();
+    setShowFieldForm(true);
+  };
+
+  const handleEditFieldClick = (field: any) => {
+    setEditingFieldId(field.id);
+    setFieldType(field.type);
+    setFieldName(field.name);
+    setFieldLabel(field.label);
+    setFieldRequired(field.required);
+    setFieldOptions(field.optionsJson ? field.optionsJson.join(", ") : "");
+    setShowFieldForm(true);
+    // Scroll to top where form is
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleSaveField = () => {
     submit(
       {
-        _intent: "addField",
+        _intent: editingFieldId ? "editField" : "addField",
+        ...(editingFieldId ? { fieldId: editingFieldId } : {}),
         fieldType,
         fieldName,
         fieldLabel,
         fieldRequired: String(fieldRequired),
         fieldOptions,
       },
-      { method: "post" }
+      { method: "post" },
     );
 
-    setFieldName("");
-    setFieldLabel("");
-    setFieldRequired(false);
-    setFieldOptions("");
-    setShowFieldForm(false);
+    resetFieldForm();
   };
 
   const handleDeleteField = (fieldId: string) => {
@@ -403,7 +468,7 @@ export default function TemplateDetail() {
               </Card>
             </BlockStack>
             {!showFieldForm && (
-              <Button onClick={() => setShowFieldForm(true)}>Add Field</Button>
+              <Button onClick={handleAddFieldClick}>Add Field</Button>
             )}
           </InlineGrid>
 
@@ -411,7 +476,7 @@ export default function TemplateDetail() {
             <Card background="bg-surface-secondary">
               <BlockStack gap="400">
                 <Text as="h4" variant="headingSm">
-                  New Field
+                  {editingFieldId ? "Edit Field" : "New Field"}
                 </Text>
 
                 <Select
@@ -456,15 +521,15 @@ export default function TemplateDetail() {
                 />
 
                 <InlineGrid columns={2} gap="200">
-                  <Button onClick={() => setShowFieldForm(false)}>
+                  <Button onClick={resetFieldForm}>
                     Cancel
                   </Button>
                   <Button
                     variant="primary"
-                    onClick={handleAddField}
+                    onClick={handleSaveField}
                     disabled={!fieldName || !fieldLabel}
                   >
-                    Add Field
+                    {editingFieldId ? "Save Field" : "Add Field"}
                   </Button>
                 </InlineGrid>
               </BlockStack>
@@ -506,12 +571,17 @@ export default function TemplateDetail() {
                       </Text>
                     )}
                   </BlockStack>
-                  <Button
-                    onClick={() => handleDeleteField(field.id)}
-                    tone="critical"
-                  >
-                    Delete
-                  </Button>
+                  <InlineStack gap="200">
+                    <Button onClick={() => handleEditFieldClick(field)}>
+                      Edit
+                    </Button>
+                    <Button
+                      onClick={() => handleDeleteField(field.id)}
+                      tone="critical"
+                    >
+                      Delete
+                    </Button>
+                  </InlineStack>
                 </InlineStack>
               </ResourceItem>
             )}
@@ -537,16 +607,36 @@ export default function TemplateDetail() {
         </BlockStack>
       </Card>
 
-      {template.links.length > 0 && (
+      {linkedProductsData && linkedProductsData.length > 0 && (
         <Card>
           <ResourceList
             resourceName={{ singular: "product", plural: "products" }}
-            items={template.links}
-            renderItem={(link: any) => (
-              <ResourceItem id={link.id} onClick={() => { }}>
-                <Text as="p">{link.productGid}</Text>
-              </ResourceItem>
-            )}
+            items={linkedProductsData}
+            renderItem={(product: any) => {
+              const numericProductId = product.id.split('/').pop();
+              const media = (
+                <Thumbnail
+                  source={
+                    product.featuredImage?.url ||
+                    "https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_large.png?format=webp&v=1530129081"
+                  }
+                  alt={product.featuredImage?.altText || product.title}
+                />
+              );
+
+              return (
+                <ResourceItem id={product.id} media={media} onClick={() => { }}>
+                  <InlineStack align="space-between" blockAlign="center">
+                    <Text variant="bodyMd" fontWeight="bold" as="h3">
+                      {product.title}
+                    </Text>
+                    <Button url={`/app/templates/${template.id}/products/${numericProductId}`}>
+                      Customize Options
+                    </Button>
+                  </InlineStack>
+                </ResourceItem>
+              );
+            }}
           />
         </Card>
       )}
@@ -567,12 +657,23 @@ export default function TemplateDetail() {
               </Text>
               <Card background="bg-surface-secondary">
                 <BlockStack gap="200">
-                  <Text as="h4" variant="headingSm">💡 How it works (Example Scenario):</Text>
+                  <Text as="h4" variant="headingSm">💡 How it works (Examples):</Text>
+
                   <Text as="p" variant="bodyMd">
-                    Imagine you sell Clothing and Accessories. You only want the "Size" dropdown to appear if they choose "Clothing", and if it's a "T-Shirt", you want to restrict the sizes.<br /><br />
+                    <Text as="strong">Scenario 1 (Limiting Options):</Text><br />
+                    Imagine you sell Clothing. You only want the "Size" dropdown to appear if they choose "Clothing", and if it's a "T-Shirt", you want to restrict the sizes.<br />
                     <Text as="span" fontWeight="bold">IF</Text> [Category] is "Clothing"<br />
                     <Text as="span" fontWeight="bold">AND IF</Text> [Type] is "T-Shirt"<br />
                     <Text as="span" fontWeight="bold">THEN LIMIT</Text> [Size] to only allow "S, M, L, XL"
+                  </Text>
+
+                  <Divider />
+
+                  <Text as="p" variant="bodyMd">
+                    <Text as="strong">Scenario 2 (Hiding Options):</Text><br />
+                    Imagine you have a "Gift Wrap ($5)" checkbox, but it's not available for oversized items like "Furniture".<br />
+                    <Text as="span" fontWeight="bold">IF</Text> [Category] is "Furniture"<br />
+                    <Text as="span" fontWeight="bold">THEN HIDE</Text> [Gift Wrap]
                   </Text>
                 </BlockStack>
               </Card>
@@ -792,76 +893,117 @@ export default function TemplateDetail() {
               </Card>
             </BlockStack>
           </InlineGrid>
-          <TextField
+          <Select
             label="Font Family"
-            value={fontFamily}
-            onChange={setFontFamily}
-            placeholder="e.g. Arial"
-            autoComplete="off"
+            options={[
+              { label: "Theme Default", value: "" },
+              { label: "Arial", value: "Arial, sans-serif" },
+              { label: "Courier New", value: "'Courier New', Courier, monospace" },
+              { label: "Georgia", value: "Georgia, serif" },
+              { label: "Helvetica", value: "Helvetica, sans-serif" },
+              { label: "Tahoma", value: "Tahoma, sans-serif" },
+              { label: "Times New Roman", value: "'Times New Roman', Times, serif" },
+              { label: "Trebuchet MS", value: "'Trebuchet MS', sans-serif" },
+              { label: "Verdana", value: "Verdana, sans-serif" },
+              { label: "System Default", value: "system-ui, sans-serif" },
+              { label: "Custom...", value: "custom" }
+            ]}
+            value={fontFamily === "custom" ? "custom" : (fontFamily || "")}
+            onChange={(val) => setFontFamily(val)}
           />
-          <TextField
-            label="Font Size"
-            value={fontSize}
-            onChange={setFontSize}
-            placeholder="e.g. 16px"
-            autoComplete="off"
-          />
-          <TextField
-            label="Font Weight"
-            value={fontWeight}
-            onChange={setFontWeight}
-            placeholder="e.g. bold"
-            autoComplete="off"
-          />
-          <TextField
-            label="Text Color"
-            value={textColor}
-            onChange={setTextColor}
-            placeholder="#ffffff"
-            autoComplete="off"
-          />
-          <TextField
-            label="Background Color"
-            value={backgroundColor}
-            onChange={setBackgroundColor}
-            placeholder="#0000ff"
-            autoComplete="off"
-          />
-          <TextField
-            label="Border Color"
-            value={borderColor}
-            onChange={setBorderColor}
-            placeholder="#cccccc"
-            autoComplete="off"
-          />
-          <TextField
-            label="Border Radius"
-            value={borderRadius}
-            onChange={setBorderRadius}
-            placeholder="e.g. 4px"
-            autoComplete="off"
-          />
-          <TextField
-            label="Padding"
-            value={padding}
-            onChange={setPadding}
-            placeholder="e.g. 8px 16px"
-            autoComplete="off"
-          />
-          <TextField
-            label="Hover Background Color"
-            value={hoverBackgroundColor}
-            onChange={setHoverBackgroundColor}
-            placeholder="#0055aa"
-            autoComplete="off"
-          />
-          <TextField
-            label="Hover Text Color"
-            value={hoverTextColor}
-            onChange={setHoverTextColor}
-            placeholder="#ffffff"
-            autoComplete="off"
-          />
+          {fontFamily === "custom" && (
+            <TextField
+              label="Custom Font Family"
+              value={fontFamily === "custom" ? "" : fontFamily}
+              onChange={setFontFamily}
+              placeholder="e.g. 'Roboto', sans-serif"
+              autoComplete="off"
+              helpText="Enter the exact font name loaded by your theme."
+            />
+          )}
+
+          <InlineGrid columns={2} gap="400">
+            <TextField
+              label="Font Size (px)"
+              type="number"
+              value={fontSize ? fontSize.replace(/[^0-9.]/g, '') : ""}
+              onChange={(val) => setFontSize(val ? `${val}px` : "")}
+              autoComplete="off"
+            />
+            <Select
+              label="Font Weight"
+              options={[
+                { label: "Default", value: "" },
+                { label: "Normal (400)", value: "normal" },
+                { label: "Medium (500)", value: "500" },
+                { label: "Semi Bold (600)", value: "600" },
+                { label: "Bold (700)", value: "bold" },
+              ]}
+              value={fontWeight || ""}
+              onChange={setFontWeight}
+            />
+          </InlineGrid>
+
+          <InlineGrid columns={2} gap="400">
+            <TextField
+              label="Padding (em)"
+              type="number"
+              step={0.1}
+              value={padding ? padding.replace(/[^0-9.]/g, '') : ""}
+              onChange={(val) => setPadding(val ? `${val}em` : "")}
+              autoComplete="off"
+              helpText="Space inside the button."
+            />
+            <TextField
+              label="Border Radius (px)"
+              type="number"
+              value={borderRadius ? borderRadius.replace(/[^0-9.]/g, '') : ""}
+              onChange={(val) => setBorderRadius(val ? `${val}px` : "")}
+              autoComplete="off"
+              helpText="Higher numbers mean rounder corners."
+            />
+          </InlineGrid>
+
+          <InlineGrid columns={3} gap="400">
+            <BlockStack gap="100">
+              <Text as="span" variant="bodyMd">Text Color</Text>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <input type="color" value={textColor || "#000000"} onChange={(e) => setTextColor(e.target.value)} style={{ width: '40px', height: '40px', padding: 0, border: 'none', borderRadius: '4px', cursor: 'pointer' }} />
+                <Text as="span">{textColor || "#000000"}</Text>
+              </div>
+            </BlockStack>
+            <BlockStack gap="100">
+              <Text as="span" variant="bodyMd">Background Color</Text>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <input type="color" value={backgroundColor || "#ffffff"} onChange={(e) => setBackgroundColor(e.target.value)} style={{ width: '40px', height: '40px', padding: 0, border: 'none', borderRadius: '4px', cursor: 'pointer' }} />
+                <Text as="span">{backgroundColor || "#ffffff"}</Text>
+              </div>
+            </BlockStack>
+            <BlockStack gap="100">
+              <Text as="span" variant="bodyMd">Border Color</Text>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <input type="color" value={borderColor || "#000000"} onChange={(e) => setBorderColor(e.target.value)} style={{ width: '40px', height: '40px', padding: 0, border: 'none', borderRadius: '4px', cursor: 'pointer' }} />
+                <Text as="span">{borderColor || "#000000"}</Text>
+              </div>
+            </BlockStack>
+          </InlineGrid>
+
+          <InlineGrid columns={2} gap="400">
+            <BlockStack gap="100">
+              <Text as="span" variant="bodyMd">Hover Text Color</Text>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <input type="color" value={hoverTextColor || "#000000"} onChange={(e) => setHoverTextColor(e.target.value)} style={{ width: '40px', height: '40px', padding: 0, border: 'none', borderRadius: '4px', cursor: 'pointer' }} />
+                <Text as="span">{hoverTextColor || "#000000"}</Text>
+              </div>
+            </BlockStack>
+            <BlockStack gap="100">
+              <Text as="span" variant="bodyMd">Hover Background Color</Text>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <input type="color" value={hoverBackgroundColor || "#ffffff"} onChange={(e) => setHoverBackgroundColor(e.target.value)} style={{ width: '40px', height: '40px', padding: 0, border: 'none', borderRadius: '4px', cursor: 'pointer' }} />
+                <Text as="span">{hoverBackgroundColor || "#ffffff"}</Text>
+              </div>
+            </BlockStack>
+          </InlineGrid>
         </BlockStack>
       </Card>
       <Card>
