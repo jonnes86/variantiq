@@ -277,7 +277,7 @@ export default function TemplateDetail() {
   // Field form state
   const [showFieldForm, setShowFieldForm] = useState(false);
   const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
-  const [fieldType, setFieldType] = useState("text");
+  const [fieldType, setFieldType] = useState("select");
   const [fieldName, setFieldName] = useState("");
   const [fieldLabel, setFieldLabel] = useState("");
   const [fieldRequired, setFieldRequired] = useState(false);
@@ -385,7 +385,7 @@ export default function TemplateDetail() {
   const resetFieldForm = () => {
     setShowFieldForm(false);
     setEditingFieldId(null);
-    setFieldType("text");
+    setFieldType("select");
     setFieldName("");
     setFieldLabel("");
     setFieldRequired(false);
