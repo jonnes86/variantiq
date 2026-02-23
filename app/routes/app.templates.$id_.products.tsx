@@ -19,7 +19,7 @@ import {
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 import { prisma } from "../db.server";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 
 // --- GraphQL Query to fetch products with pagination ---
 const PRODUCTS_QUERY = `
@@ -193,9 +193,17 @@ export default function TemplateProductsPage() {
     []
   );
 
-  const handleSearchSubmit = () => {
-    submit(searchValue ? { search: searchValue } : {}, { method: "get" });
-  };
+  useEffect(() => {
+    // Debounce search as the user types
+    const timer = setTimeout(() => {
+      // Prevent unnecessary request if search hasn't changed from original load
+      if (searchValue !== searchQuery) {
+        submit(searchValue ? { search: searchValue } : {}, { method: "get", replace: true, preventScrollReset: true });
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [searchValue, submit, searchQuery]);
 
   const handleSearchClear = () => {
     setSearchValue("");
@@ -220,7 +228,7 @@ export default function TemplateProductsPage() {
   return (
     <Page
       title={`Link Products to: ${template.name}`}
-      backAction={{ content: "Template Detail", url: `/app/templates/${template.id}` }}
+      backAction={{ content: "Template Detail", url: `/app/templates/${template.id}?tab=products` }}
       subtitle="Select which Shopify products should use this template."
     >
       <Layout>
@@ -242,9 +250,6 @@ export default function TemplateProductsPage() {
                     onClearButtonClick={handleSearchClear}
                     autoComplete="off"
                     placeholder="Search by product title..."
-                    connectedRight={
-                      <Button onClick={handleSearchSubmit} loading={navigation.state === "loading"}>Search</Button>
-                    }
                   />
                 </div>
               </InlineStack>

@@ -4,7 +4,7 @@ import {
   type ActionFunctionArgs,
   type LoaderFunctionArgs,
 } from "@remix-run/node";
-import { useLoaderData, useSubmit, Form, Link } from "@remix-run/react";
+import { useLoaderData, useSubmit, Form, Link, useSearchParams } from "@remix-run/react";
 import {
   Page,
   Card,
@@ -267,7 +267,9 @@ export async function action({ request, params }: ActionFunctionArgs) {
 export default function TemplateDetail() {
   const { template, linkedProductsData } = useLoaderData<typeof loader>();
   const submit = useSubmit();
-  const [selectedTab, setSelectedTab] = useState(0);
+  const [searchParams] = useSearchParams();
+  const initialTab = searchParams.get("tab") === "products" ? 3 : 0;
+  const [selectedTab, setSelectedTab] = useState(initialTab);
 
   // Name state
   const [templateName, setTemplateName] = useState(template.name);
