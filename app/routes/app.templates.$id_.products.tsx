@@ -1,6 +1,6 @@
 // Filename: app/routes/app.templates.$id_.products.tsx
 import { json, redirect, type ActionFunctionArgs, type LoaderFunctionArgs } from "@remix-run/node";
-import { useLoaderData, Form, Link } from "@remix-run/react";
+import { useLoaderData, Form, Link, useSubmit, useNavigation } from "@remix-run/react";
 import {
   Page,
   Layout,
@@ -13,15 +13,18 @@ import {
   LegacyStack,
   Banner,
   InlineStack,
-  Thumbnail
+  Thumbnail,
+  TextField,
+  BlockStack,
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 import { prisma } from "../db.server";
+import { useState, useCallback } from "react";
 
 // --- GraphQL Query to fetch products with pagination ---
 const PRODUCTS_QUERY = `
-  query GetProducts($first: Int, $after: String, $last: Int, $before: String) {
-    products(first: $first, after: $after, last: $last, before: $before) {
+  query GetProducts($first: Int, $after: String, $last: Int, $before: String, $query: String) {
+    products(first: $first, after: $after, last: $last, before: $before, query: $query) {
       pageInfo {
         hasNextPage
         hasPreviousPage
@@ -74,7 +77,13 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     const beforeCursor = url.searchParams.get("before");
 
     // Setup GraphQL variables for forward (after) or backward (before) pagination
-    let variables: { first?: number; after?: string; last?: number; before?: string } = {};
+    let variables: { first?: number; after?: string; last?: number; before?: string; query?: string } = {};
+
+    const search = url.searchParams.get("search");
+    if (search) {
+      variables.query = `title:*${search}*`;
+    }
+
     if (beforeCursor) {
       // Going to previous page: use 'before' cursor with last:25
       variables.before = beforeCursor;
@@ -96,12 +105,23 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     }
     const productConnection = responseJson.data.products;
     const products = productConnection.edges.map((edge: any) => edge.node);
+
+    // Sort so linked products appear at the top locally
+    products.sort((a: any, b: any) => {
+      const aLinked = linkedProductIds.includes(a.id);
+      const bLinked = linkedProductIds.includes(b.id);
+      if (aLinked && !bLinked) return -1;
+      if (!aLinked && bLinked) return 1;
+      return 0;
+    });
+
     const pageInfo = productConnection.pageInfo;
 
     return json({
       template: { id: template.id, name: template.name },
       products,
       linkedProductIds,
+      searchQuery: search || "",
       // Include pagination cursors for UI navigation
       nextPageCursor: pageInfo.hasNextPage ? pageInfo.endCursor : null,
       previousPageCursor: pageInfo.hasPreviousPage ? pageInfo.startCursor : null,
@@ -114,6 +134,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       template: { id: "", name: "Error" },
       products: [],
       linkedProductIds: [],
+      searchQuery: "",
       nextPageCursor: null,
       previousPageCursor: null,
       error: "Failed to load products. Please check server logs."
@@ -160,7 +181,26 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
 // --- Component ---
 export default function TemplateProductsPage() {
-  const { template, products, linkedProductIds, nextPageCursor, previousPageCursor, error } = useLoaderData<typeof loader>();
+  const { template, products, linkedProductIds, searchQuery, nextPageCursor, previousPageCursor, error } = useLoaderData<typeof loader>();
+  const submit = useSubmit();
+  const navigation = useNavigation();
+  const [searchValue, setSearchValue] = useState(searchQuery);
+
+  const handleSearchChange = useCallback(
+    (value: string) => {
+      setSearchValue(value);
+    },
+    []
+  );
+
+  const handleSearchSubmit = () => {
+    submit(searchValue ? { search: searchValue } : {}, { method: "get" });
+  };
+
+  const handleSearchClear = () => {
+    setSearchValue("");
+    submit({}, { method: "get" });
+  };
 
   if (error) {
     return (
@@ -186,93 +226,114 @@ export default function TemplateProductsPage() {
       <Layout>
         <Layout.Section>
           <Card>
-            <Text as="h2" variant="headingMd">
-              Available Products ({products.length})
-            </Text>
-            <ResourceList
-              resourceName={resourceName}
-              items={products}
-              renderItem={(product: any) => {
-                const isLinked = linkedProductIds.includes(product.id);
-                const actionVerb = isLinked ? "Unlink" : "Link";
-                // product.id is a gid, we only want the numeric ID for the URL route
-                const numericProductId = product.id.split('/').pop();
+            <BlockStack gap="400">
+              <Text as="h2" variant="headingMd">
+                Available Products ({products.length})
+              </Text>
 
-                const media = (
-                  <Thumbnail
-                    source={
-                      product.featuredImage?.url ||
-                      "https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_large.png?format=webp&v=1530129081"
+              <InlineStack gap="300" blockAlign="center">
+                <div style={{ flexGrow: 1 }}>
+                  <TextField
+                    label="Search products"
+                    labelHidden
+                    value={searchValue}
+                    onChange={handleSearchChange}
+                    clearButton
+                    onClearButtonClick={handleSearchClear}
+                    autoComplete="off"
+                    placeholder="Search by product title..."
+                    connectedRight={
+                      <Button onClick={handleSearchSubmit} loading={navigation.state === "loading"}>Search</Button>
                     }
-                    alt={product.featuredImage?.altText || product.title}
                   />
-                );
+                </div>
+              </InlineStack>
 
-                return (
-                  <ResourceItem
-                    id={product.id}
-                    accessibilityLabel={`View details for ${product.title}`}
-                    name={product.title}
-                    media={media}
-                    onClick={() => { }}
+              <ResourceList
+                resourceName={resourceName}
+                items={products}
+                renderItem={(product: any) => {
+                  const isLinked = linkedProductIds.includes(product.id);
+                  const actionVerb = isLinked ? "Unlink" : "Link";
+                  // product.id is a gid, we only want the numeric ID for the URL route
+                  const numericProductId = product.id.split('/').pop();
+
+                  const media = (
+                    <Thumbnail
+                      source={
+                        product.featuredImage?.url ||
+                        "https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_large.png?format=webp&v=1530129081"
+                      }
+                      alt={product.featuredImage?.altText || product.title}
+                    />
+                  );
+
+                  return (
+                    <ResourceItem
+                      id={product.id}
+                      accessibilityLabel={`View details for ${product.title}`}
+                      name={product.title}
+                      media={media}
+                      onClick={() => { }}
+                    >
+                      <LegacyStack alignment="center">
+                        <LegacyStack.Item fill>
+                          <Text variant="headingMd" as="h3">{product.title}</Text>
+                          <Text variant="bodySm" as="p" tone="subdued">{product.vendor}</Text>
+                        </LegacyStack.Item>
+                        <LegacyStack.Item>
+                          {isLinked && <Badge tone="success">Linked</Badge>}
+                        </LegacyStack.Item>
+                        <LegacyStack.Item>
+                          <InlineStack gap="200" align="end">
+                            {isLinked && (
+                              <Button
+                                url={`/app/templates/${template.id}/products/${numericProductId}`}
+                              >
+                                Customize
+                              </Button>
+                            )}
+                            <Form method="post">
+                              <input type="hidden" name="productGid" value={product.id} />
+                              <input type="hidden" name="_intent" value={isLinked ? "unlink" : "link"} />
+                              <Button
+                                submit
+                                variant={isLinked ? undefined : "primary"}
+                              >
+                                {actionVerb}
+                              </Button>
+                            </Form>
+                          </InlineStack>
+                        </LegacyStack.Item>
+                      </LegacyStack>
+                    </ResourceItem>
+                  );
+                }}
+              />
+              {/* Pagination Controls */}
+              <div style={{ display: "flex", justifyContent: "space-between", marginTop: "1rem" }}>
+                {previousPageCursor ? (
+                  <Link
+                    to={`/app/templates/${template.id}/products?before=${previousPageCursor}`}
+                    style={{ textDecoration: "none" }}
                   >
-                    <LegacyStack alignment="center">
-                      <LegacyStack.Item fill>
-                        <Text variant="headingMd" as="h3">{product.title}</Text>
-                        <Text variant="bodySm" as="p" tone="subdued">{product.vendor}</Text>
-                      </LegacyStack.Item>
-                      <LegacyStack.Item>
-                        {isLinked && <Badge tone="success">Linked</Badge>}
-                      </LegacyStack.Item>
-                      <LegacyStack.Item>
-                        <InlineStack gap="200" align="end">
-                          {isLinked && (
-                            <Button
-                              url={`/app/templates/${template.id}/products/${numericProductId}`}
-                            >
-                              Customize
-                            </Button>
-                          )}
-                          <Form method="post">
-                            <input type="hidden" name="productGid" value={product.id} />
-                            <input type="hidden" name="_intent" value={isLinked ? "unlink" : "link"} />
-                            <Button
-                              submit
-                              variant={isLinked ? undefined : "primary"}
-                            >
-                              {actionVerb}
-                            </Button>
-                          </Form>
-                        </InlineStack>
-                      </LegacyStack.Item>
-                    </LegacyStack>
-                  </ResourceItem>
-                );
-              }}
-            />
-            {/* Pagination Controls */}
-            <div style={{ display: "flex", justifyContent: "space-between", marginTop: "1rem" }}>
-              {previousPageCursor ? (
-                <Link
-                  to={`/app/templates/${template.id}/products?before=${previousPageCursor}`}
-                  style={{ textDecoration: "none" }}
-                >
-                  <Button>Previous Page</Button>
-                </Link>
-              ) : (
-                <Button disabled>Previous Page</Button>
-              )}
-              {nextPageCursor ? (
-                <Link
-                  to={`/app/templates/${template.id}/products?cursor=${nextPageCursor}`}
-                  style={{ textDecoration: "none" }}
-                >
-                  <Button variant="primary">Next Page</Button>
-                </Link>
-              ) : (
-                <Button disabled variant="primary">Next Page</Button>
-              )}
-            </div>
+                    <Button>Previous Page</Button>
+                  </Link>
+                ) : (
+                  <Button disabled>Previous Page</Button>
+                )}
+                {nextPageCursor ? (
+                  <Link
+                    to={`/app/templates/${template.id}/products?cursor=${nextPageCursor}`}
+                    style={{ textDecoration: "none" }}
+                  >
+                    <Button variant="primary">Next Page</Button>
+                  </Link>
+                ) : (
+                  <Button disabled variant="primary">Next Page</Button>
+                )}
+              </div>
+            </BlockStack>
           </Card>
         </Layout.Section>
       </Layout>

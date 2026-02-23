@@ -246,6 +246,15 @@ export async function action({ request, params }: ActionFunctionArgs) {
     return json({ success: true });
   }
 
+  // Unlink product
+  if (intent === "unlinkProduct") {
+    const productGid = String(form.get("productGid") || "");
+    await prisma.productTemplateLink.deleteMany({
+      where: { templateId, productGid }
+    });
+    return json({ success: true });
+  }
+
   // Delete template
   if (intent === "deleteTemplate") {
     await prisma.template.delete({ where: { id: templateId } });
@@ -630,9 +639,13 @@ export default function TemplateDetail() {
                     <Text variant="bodyMd" fontWeight="bold" as="h3">
                       {product.title}
                     </Text>
-                    <Button url={`/app/templates/${template.id}/products/${numericProductId}`}>
-                      Customize Options
-                    </Button>
+                    <Form method="post">
+                      <input type="hidden" name="_intent" value="unlinkProduct" />
+                      <input type="hidden" name="productGid" value={product.id} />
+                      <Button submit tone="critical">
+                        Unlink
+                      </Button>
+                    </Form>
                   </InlineStack>
                 </ResourceItem>
               );
