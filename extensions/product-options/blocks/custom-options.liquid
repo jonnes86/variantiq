@@ -11,8 +11,8 @@
     --button-text: {{ section.settings.button_text | default: '#333333' }};
     --button-selected-bg: {{ section.settings.button_selected_background | default: '#121212' }};
     --button-selected-text: {{ section.settings.button_selected_text | default: '#ffffff' }};
-    --button-radius: {{ section.settings.button_border_radius | default: 40 }}px;
-    --button-padding: {{ section.settings.button_padding | default: 12 }}px;
+    --button-radius: {{ section.settings.button_border_radius | default: 4 }}px;
+    --button-padding: {{ section.settings.button_padding | default: 10 }}px;
   }
 </style>
 
@@ -100,7 +100,7 @@
       "max": 50,
       "step": 1,
       "unit": "px",
-      "default": 40
+      "default": 4
     },
     {
       "type": "range",
@@ -110,7 +110,7 @@
       "max": 24,
       "step": 2,
       "unit": "px",
-      "default": 12
+      "default": 10
     }
   ]
 }

@@ -52,11 +52,10 @@
 }
 
 .variantiq-field label {
-  font-weight: 600;
-  color: #333;
-  font-size: 1em;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  font-weight: 400;
+  color: #121212;
+  font-size: 13px;
+  letter-spacing: 0.4px;
 }
 
 .variantiq-field .required {
@@ -87,29 +86,30 @@
   border-color: #999;
 }
 
-/* Radio buttons styled as large clickable buttons */
 .variantiq-radio-group {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .variantiq-radio-label {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: var(--button-padding, 12px) 20px;
-  border: 1px solid var(--button-border, #e3e3e3);
-  border-radius: var(--button-radius, 40px);
+  padding: var(--button-padding, 10px) 20px;
+  border: 1px solid var(--button-border, #121212);
+  border-radius: var(--button-radius, 4px);
   cursor: pointer;
   transition: all 0.2s;
   background: var(--button-bg, white);
   color: var(--button-text, #121212);
   text-align: center;
-  font-weight: 500;
-  min-height: 46px;
+  font-weight: 400;
+  font-size: 14px;
+  min-height: 44px;
   position: relative;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.6px;
+  margin: 0;
 }
 
 .variantiq-radio-label:hover {
@@ -141,27 +141,29 @@
 
 /* Checkbox buttons styled similarly */
 .variantiq-checkbox-group {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .variantiq-checkbox-label {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: var(--button-padding, 12px) 20px;
-  border: 1px solid var(--button-border, #e3e3e3);
+  padding: var(--button-padding, 10px) 20px;
+  border: 1px solid var(--button-border, #121212);
   border-radius: var(--button-radius, 4px);
   cursor: pointer;
   transition: all 0.2s;
   background: var(--button-bg, white);
   color: var(--button-text, #121212);
   text-align: center;
-  font-weight: 500;
-  min-height: 46px;
+  font-weight: 400;
+  font-size: 14px;
+  min-height: 44px;
   position: relative;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.6px;
+  margin: 0;
 }
 
 .variantiq-checkbox-label:hover {
@@ -196,6 +198,7 @@
     opacity: 0;
     transform: translateY(-10px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -215,7 +218,8 @@
 
   .variantiq-input,
   .variantiq-select {
-    font-size: 16px; /* Prevents zoom on iOS */
+    font-size: 16px;
+    /* Prevents zoom on iOS */
   }
 
   .variantiq-radio-group,
