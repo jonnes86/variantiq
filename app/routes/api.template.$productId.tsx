@@ -8,17 +8,19 @@ import { prisma } from "../db.server";
  * Usage: GET /api/template/gid%3A%2F%2Fshopify%2FProduct%2F12345
  */
 
-// Handle OPTIONS for CORS preflight
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  // CORS preflight
+  // CORS Headers Helper
+  const corsHeaders = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  };
+
+  // Handle OPTIONS for CORS preflight
   if (request.method === "OPTIONS") {
     return new Response(null, {
       status: 204,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type",
-      },
+      headers: corsHeaders,
     });
   }
 
@@ -31,9 +33,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       { error: "Product ID required" },
       {
         status: 400,
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-        },
+        headers: corsHeaders,
       }
     );
   }
@@ -61,7 +61,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
         },
         {
           headers: {
-            "Access-Control-Allow-Origin": "*",
+            ...corsHeaders,
             "Cache-Control": "public, max-age=60", // Cache for 1 minute
           },
         }
@@ -91,10 +91,8 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       },
       {
         headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "GET, OPTIONS",
-          "Access-Control-Allow-Headers": "Content-Type",
-          "Cache-Control": "public, max-age=300", // Cache for 5 minutes
+          ...corsHeaders,
+          "Cache-Control": "public, max-age=60",
         },
       }
     );
@@ -104,9 +102,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       { error: "Internal server error" },
       {
         status: 500,
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-        },
+        headers: corsHeaders,
       }
     );
   }
