@@ -172,17 +172,30 @@ export default function ProductOverrideDetail() {
     const [fieldName, setFieldName] = useState("");
     const [fieldLabel, setFieldLabel] = useState("");
     const [fieldRequired, setFieldRequired] = useState(false);
-    const [fieldOptions, setFieldOptions] = useState("");
+    const [fieldOptionsList, setFieldOptionsList] = useState<Array<{ label: string, price: string }>>([]);
 
     const handleAddField = () => {
         if (!fieldType || !fieldName || !fieldLabel) return;
 
         let optionsJson = null;
-        if (["select", "radio", "checkbox"].includes(fieldType) && fieldOptions) {
-            optionsJson = fieldOptions
-                .split(",")
-                .map((o) => o.trim())
-                .filter(Boolean);
+        let priceAdjustmentsJson: Record<string, number> | null = null;
+
+        if (["select", "radio", "checkbox"].includes(fieldType) && fieldOptionsList.length > 0) {
+            const validOptions = fieldOptionsList.filter(o => o.label.trim() !== "");
+            optionsJson = validOptions.map(o => o.label.trim());
+
+            let hasPrices = false;
+            const priceMap: Record<string, number> = {};
+            validOptions.forEach(o => {
+                const price = parseFloat(o.price);
+                if (!isNaN(price) && price > 0) {
+                    priceMap[o.label.trim()] = price;
+                    hasPrices = true;
+                }
+            });
+            if (hasPrices) {
+                priceAdjustmentsJson = priceMap;
+            }
         }
 
         const newField = {
@@ -192,6 +205,7 @@ export default function ProductOverrideDetail() {
             label: fieldLabel,
             required: fieldRequired,
             optionsJson,
+            priceAdjustmentsJson,
             sort: fields.length + 1
         };
 
@@ -202,7 +216,7 @@ export default function ProductOverrideDetail() {
         setFieldName("");
         setFieldLabel("");
         setFieldRequired(false);
-        setFieldOptions("");
+        setFieldOptionsList([]);
         setShowFieldForm(false);
     };
 
@@ -336,7 +350,10 @@ export default function ProductOverrideDetail() {
                                                 </Text>
                                                 {Array.isArray(field.optionsJson) && field.optionsJson.length > 0 && (
                                                     <Text as="p" tone="subdued">
-                                                        Options: {field.optionsJson.join(", ")}
+                                                        Options: {field.optionsJson.map((opt: string) => {
+                                                            const price = field.priceAdjustmentsJson?.[opt];
+                                                            return price ? `${opt} (+$${price})` : opt;
+                                                        }).join(", ")}
                                                     </Text>
                                                 )}
                                             </BlockStack>
@@ -394,13 +411,52 @@ export default function ProductOverrideDetail() {
                                 />
 
                                 {["select", "radio", "checkbox"].includes(fieldType) && (
-                                    <TextField
-                                        label="Options (Comma separated)"
-                                        value={fieldOptions}
-                                        onChange={setFieldOptions}
-                                        autoComplete="off"
-                                        helpText="e.g., Small, Medium, Large"
-                                    />
+                                    <BlockStack gap="300">
+                                        <Text as="h5" variant="headingSm">Options & Pricing</Text>
+                                        {fieldOptionsList.map((opt, index) => (
+                                            <InlineGrid columns="1fr 120px auto" gap="200" key={index} alignItems="center">
+                                                <TextField
+                                                    labelHidden
+                                                    label={`Option ${index + 1}`}
+                                                    value={opt.label}
+                                                    onChange={(val) => {
+                                                        const newList = [...fieldOptionsList];
+                                                        newList[index].label = val;
+                                                        setFieldOptionsList(newList);
+                                                    }}
+                                                    placeholder="e.g., Small"
+                                                    autoComplete="off"
+                                                />
+                                                <TextField
+                                                    labelHidden
+                                                    label={`Price Adjustment ${index + 1}`}
+                                                    value={opt.price}
+                                                    onChange={(val) => {
+                                                        const newList = [...fieldOptionsList];
+                                                        newList[index].price = val;
+                                                        setFieldOptionsList(newList);
+                                                    }}
+                                                    prefix="$"
+                                                    type="number"
+                                                    placeholder="0.00"
+                                                    autoComplete="off"
+                                                />
+                                                <Button
+                                                    tone="critical"
+                                                    variant="plain"
+                                                    accessibilityLabel="Remove option"
+                                                    onClick={() => setFieldOptionsList(fieldOptionsList.filter((_, i) => i !== index))}
+                                                >
+                                                    Remove
+                                                </Button>
+                                            </InlineGrid>
+                                        ))}
+                                        <InlineStack>
+                                            <Button onClick={() => setFieldOptionsList([...fieldOptionsList, { label: "", price: "" }])}>
+                                                Add Option
+                                            </Button>
+                                        </InlineStack>
+                                    </BlockStack>
                                 )}
 
                                 <InlineStack gap="300">
