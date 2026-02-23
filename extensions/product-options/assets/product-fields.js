@@ -28,52 +28,53 @@ class VariantIQFields {
   async fetchTemplate() {
     const productGid = `gid://shopify/Product/${this.productId}`;
     const response = await fetch(`${this.apiUrl}/api/template/${encodeURIComponent(productGid)}`);
-    
+
     if (!response.ok) {
       throw new Error('Failed to fetch template');
     }
-    
+
     const data = await response.json();
     this.templateData = data;
   }
 
   render() {
     const container = document.getElementById(`variantiq-fields-${this.productId}`);
-    
+
     if (!this.templateData || !this.templateData.template) {
       container.innerHTML = '<p class="variantiq-no-options">No customization options available.</p>';
       return;
     }
 
-    const { fields, rules } = this.templateData.template;
-    
+    const { fields } = this.templateData.template;
+
     if (!fields || fields.length === 0) {
       container.innerHTML = '<p class="variantiq-no-options">No customization options available.</p>';
       return;
     }
 
-    // Find root fields (fields that aren't children in any rule)
-    const childFieldIds = new Set(rules.map(r => r.childFieldId));
-    const rootFields = fields.filter(f => !childFieldIds.has(f.id));
+    // Render ALL fields initially. The evaluation engine will hide them if necessary.
+    // Sort fields by their configured sort order just in case
+    const sortedFields = [...fields].sort((a, b) => a.sort - b.sort);
 
     let html = '<div class="variantiq-fields">';
-    
-    rootFields.forEach(field => {
+    sortedFields.forEach(field => {
       html += this.renderField(field);
     });
-    
     html += '</div>';
-    
+
     container.innerHTML = html;
+
+    // Run evaluation engine once purely on load to establish baseline visibility
+    this.evaluateRules();
   }
 
-  renderField(field, options = null) {
-    const fieldOptions = options || (field.optionsJson || []);
+  renderField(field) {
+    const fieldOptions = field.optionsJson || [];
     const isRequired = field.required ? 'required' : '';
     const requiredMark = field.required ? '<span class="required">*</span>' : '';
 
     let html = `
-      <div class="variantiq-field" data-field-id="${field.id}">
+      <div class="variantiq-field" data-field-id="${field.id}" style="display: none;">
         <label for="field-${field.id}">
           ${field.label}${requiredMark}
         </label>
@@ -98,11 +99,11 @@ class VariantIQFields {
           class="variantiq-select"
         >
           <option value="">Select ${field.label}...</option>`;
-        
+
         fieldOptions.forEach(option => {
-          html += `<option value="${option}">${option}</option>`;
+          html += `<option value="${option}" data-opt-value="${option}">${option}</option>`;
         });
-        
+
         html += `</select>`;
         break;
 
@@ -110,7 +111,7 @@ class VariantIQFields {
         html += `<div class="variantiq-radio-group">`;
         fieldOptions.forEach((option, index) => {
           html += `
-            <label class="variantiq-radio-label">
+            <label class="variantiq-radio-label" data-opt-value="${option}">
               <input 
                 type="radio" 
                 id="field-${field.id}-${index}" 
@@ -130,7 +131,7 @@ class VariantIQFields {
         html += `<div class="variantiq-checkbox-group">`;
         fieldOptions.forEach((option, index) => {
           html += `
-            <label class="variantiq-checkbox-label">
+            <label class="variantiq-checkbox-label" data-opt-value="${option}">
               <input 
                 type="checkbox" 
                 id="field-${field.id}-${index}" 
@@ -152,33 +153,209 @@ class VariantIQFields {
 
   attachEventListeners() {
     const container = document.getElementById(`variantiq-fields-${this.productId}`);
-    
-    container.addEventListener('change', (e) => {
-      const fieldElement = e.target.closest('.variantiq-field');
-      if (!fieldElement) return;
-      
-      const fieldId = fieldElement.dataset.fieldId;
-      const field = this.templateData.template.fields.find(f => f.id === fieldId);
-      
-      // Get value based on field type
-      let value;
-      if (field.type === 'checkbox') {
-        // For checkboxes, collect all checked values
-        const checkboxes = fieldElement.querySelectorAll('input[type="checkbox"]:checked');
-        value = Array.from(checkboxes).map(cb => cb.value).join(', ');
-      } else if (field.type === 'radio') {
-        const radio = fieldElement.querySelector('input[type="radio"]:checked');
-        value = radio ? radio.value : '';
-      } else {
-        value = e.target.value;
-      }
-      
-      this.fieldValues[fieldId] = value;
-      this.handleCascade(fieldId, value);
-    });
+
+    // Listen for both clicks (radio/checkboxes) and input (text/selects)
+    container.addEventListener('input', (e) => this.handleFieldChange(e));
+    container.addEventListener('change', (e) => this.handleFieldChange(e));
 
     // Intercept Add to Cart form submission
     this.interceptAddToCart();
+  }
+
+  handleFieldChange(e) {
+    const fieldElement = e.target.closest('.variantiq-field');
+    if (!fieldElement) return;
+
+    const fieldId = fieldElement.dataset.fieldId;
+    const field = this.templateData.template.fields.find(f => f.id === fieldId);
+
+    // Get value based on field type
+    let value;
+    if (field.type === 'checkbox') {
+      const checkboxes = fieldElement.querySelectorAll('input[type="checkbox"]:checked');
+      value = Array.from(checkboxes).map(cb => cb.value).join(', ');
+    } else if (field.type === 'radio') {
+      const radio = fieldElement.querySelector('input[type="radio"]:checked');
+      value = radio ? radio.value : '';
+    } else {
+      value = e.target.value;
+    }
+
+    this.fieldValues[fieldId] = value;
+
+    // Re-evaluate rules globally every time a generic field changes
+    this.evaluateRules();
+  }
+
+  evaluateRules() {
+    const { fields, rules } = this.templateData.template;
+
+    // Map target fields to the rules that affect them
+    const rulesByTarget = {};
+    fields.forEach(f => rulesByTarget[f.id] = []);
+
+    if (rules && rules.length > 0) {
+      rules.forEach(r => {
+        if (rulesByTarget[r.targetFieldId]) {
+          rulesByTarget[r.targetFieldId].push(r);
+        }
+      });
+    }
+
+    fields.forEach(field => {
+      const fieldElement = document.querySelector(`.variantiq-field[data-field-id="${field.id}"]`);
+      if (!fieldElement) return;
+
+      const fieldRules = rulesByTarget[field.id];
+
+      let shouldShow = true; // By default, everything is shown
+      let limitOptionsSet = null;
+
+      const showRules = fieldRules.filter(r => r.actionType === 'SHOW');
+      const hideRules = fieldRules.filter(r => r.actionType === 'HIDE');
+      const limitRules = fieldRules.filter(r => r.actionType === 'LIMIT_OPTIONS');
+
+      const evaluateRuleConditions = (rule) => {
+        const conditions = rule.conditionsJson || [];
+        if (!conditions || conditions.length === 0) return false;
+
+        // ALL conditions in a rule must pass (AND behavior)
+        return conditions.every(c => {
+          const val = this.fieldValues[c.fieldId] || "";
+
+          switch (c.operator) {
+            case 'EQUALS':
+              return val === c.value;
+            case 'NOT_EQUALS':
+              // A non-selection (empty string) implicitly means it doesn't EQUAL standard values, 
+              // but we generally only evaluate NOT_EQUALS passing if a field has SOME value.
+              // We'll treat strict inequality:
+              return val !== "" && val !== c.value;
+            case 'CONTAINS':
+              return val !== "" && val.includes(c.value);
+            default:
+              return false;
+          }
+        });
+      };
+
+      if (showRules.length > 0) {
+        // If there are SHOW rules targeting this field, it is HIDDEN by default
+        shouldShow = showRules.some(evaluateRuleConditions);
+      } else if (hideRules.length > 0) {
+        // If there are HIDE rules targeting this field, it is SHOWN by default,
+        // and hidden if any hide rule evaluates to true.
+        shouldShow = !hideRules.some(evaluateRuleConditions);
+      }
+
+      // Check for limits
+      const passingLimitRules = limitRules.filter(evaluateRuleConditions);
+      if (passingLimitRules.length > 0) {
+        limitOptionsSet = new Set();
+        // Union of all passing limit rules options
+        passingLimitRules.forEach(r => {
+          const opts = r.targetOptionsJson || [];
+          opts.forEach(o => limitOptionsSet.add(o));
+        });
+      }
+
+      // Apply visibility outcome
+      if (shouldShow) {
+        fieldElement.style.display = 'block';
+
+        // Apply Limit Options to DOM choices
+        if (limitOptionsSet !== null) {
+          this.applyLimitToOptions(field, fieldElement, limitOptionsSet);
+        } else {
+          this.restoreAllOptions(field, fieldElement);
+        }
+      } else {
+        fieldElement.style.display = 'none';
+        this.clearFieldValue(field, fieldElement);
+      }
+    });
+  }
+
+  applyLimitToOptions(field, fieldElement, limitSet) {
+    if (field.type === 'text') return; // Cannot limit a text field.
+
+    if (field.type === 'select') {
+      const options = fieldElement.querySelectorAll('option');
+      options.forEach(opt => {
+        if (!opt.value) return; // Skip placeholder option
+        if (limitSet.has(opt.value)) {
+          opt.style.display = '';
+        } else {
+          opt.style.display = 'none';
+          // If the currently selected option is now hidden, clear it
+          if (opt.selected) {
+            opt.selected = false;
+            fieldElement.querySelector('select').value = "";
+            this.fieldValues[field.id] = "";
+          }
+        }
+      });
+    } else if (field.type === 'radio' || field.type === 'checkbox') {
+      const labels = fieldElement.querySelectorAll('label[data-opt-value]');
+      labels.forEach(label => {
+        const val = label.dataset.optValue;
+        const input = label.querySelector('input');
+
+        if (limitSet.has(val)) {
+          label.style.display = '';
+        } else {
+          label.style.display = 'none';
+          if (input && input.checked) {
+            input.checked = false;
+            // update field value
+            this.updateValueFromDOM(field, fieldElement);
+          }
+        }
+      });
+    }
+  }
+
+  restoreAllOptions(field, fieldElement) {
+    if (field.type === 'text') return;
+
+    if (field.type === 'select') {
+      const options = fieldElement.querySelectorAll('option');
+      options.forEach(opt => opt.style.display = '');
+    } else if (field.type === 'radio' || field.type === 'checkbox') {
+      const labels = fieldElement.querySelectorAll('label[data-opt-value]');
+      labels.forEach(label => label.style.display = '');
+    }
+  }
+
+  clearFieldValue(field, fieldElement) {
+    // Prevent propagating hidden values into validations and line items
+    this.fieldValues[field.id] = "";
+
+    if (field.type === 'text') {
+      const input = fieldElement.querySelector('input');
+      if (input) input.value = '';
+    } else if (field.type === 'select') {
+      const select = fieldElement.querySelector('select');
+      if (select) select.value = '';
+    } else if (field.type === 'radio' || field.type === 'checkbox') {
+      const inputs = fieldElement.querySelectorAll('input');
+      inputs.forEach(i => i.checked = false);
+    }
+  }
+
+  updateValueFromDOM(field, fieldElement) {
+    let value;
+    if (field.type === 'checkbox') {
+      const checkboxes = fieldElement.querySelectorAll('input[type="checkbox"]:checked');
+      value = Array.from(checkboxes).map(cb => cb.value).join(', ');
+    } else if (field.type === 'radio') {
+      const radio = fieldElement.querySelector('input[type="radio"]:checked');
+      value = radio ? radio.value : '';
+    } else {
+      const input = fieldElement.querySelector('input, select');
+      value = input ? input.value : '';
+    }
+    this.fieldValues[field.id] = value;
   }
 
   interceptAddToCart() {
@@ -199,10 +376,10 @@ class VariantIQFields {
       // Intercept the click instead of form submit (works better with AJAX carts)
       addToCartButton.addEventListener('click', (e) => {
         console.log('VariantIQ: Add to Cart button clicked');
-        
+
         // Validate required fields
         const validation = this.validateFields();
-        
+
         if (!validation.valid) {
           console.log('VariantIQ: Validation failed:', validation.message);
           e.preventDefault();
@@ -213,7 +390,7 @@ class VariantIQFields {
         }
 
         console.log('VariantIQ: Validation passed, adding properties to form');
-        
+
         // Find the form
         const form = addToCartButton.closest('form') || document.querySelector('form[action*="/cart/add"]');
         if (form) {
@@ -238,11 +415,11 @@ class VariantIQFields {
   validateFields() {
     const { fields } = this.templateData.template;
     const visibleFields = this.getVisibleFields();
-    
+
     for (const field of visibleFields) {
       if (field.required) {
         const value = this.fieldValues[field.id];
-        
+
         if (!value || value.trim() === '') {
           return {
             valid: false,
@@ -251,40 +428,45 @@ class VariantIQFields {
         }
       }
     }
-    
+
     return { valid: true };
   }
 
   getVisibleFields() {
     // Get all currently visible fields in the DOM
     const visibleFieldElements = document.querySelectorAll('.variantiq-field');
-    const visibleFieldIds = Array.from(visibleFieldElements).map(el => el.dataset.fieldId);
-    
+    const visibleFieldIds = Array.from(visibleFieldElements)
+      .filter(el => el.style.display !== 'none')
+      .map(el => el.dataset.fieldId);
+
     return this.templateData.template.fields.filter(f => visibleFieldIds.includes(f.id));
   }
 
   addPropertiesToCart(form) {
     const { fields } = this.templateData.template;
-    
+
     // Remove any existing VariantIQ properties to avoid duplicates
     const existingProperties = form.querySelectorAll('input[name^="properties["]');
     existingProperties.forEach(input => {
-      if (input.name.includes('_variantiq_')) {
+      // If we flagged them previously we could remove them.
+      // Shopify uses properties[Label] by default.
+      if (input.className === 'variantiq-cart-prop') {
         input.remove();
       }
     });
 
     // Add each visible field value as a line item property
     const visibleFields = this.getVisibleFields();
-    
+
     visibleFields.forEach(field => {
       const value = this.fieldValues[field.id];
-      
+
       if (value && value.trim() !== '') {
         const input = document.createElement('input');
         input.type = 'hidden';
         input.name = `properties[${field.label}]`;
         input.value = value;
+        input.className = 'variantiq-cart-prop';
         form.appendChild(input);
       }
     });
@@ -316,63 +498,10 @@ class VariantIQFields {
     }, 5000);
   }
 
-  handleCascade(parentFieldId, parentValue) {
-    const { rules, fields } = this.templateData.template;
-    
-    // Find all rules where this field is the parent
-    const matchingRules = rules.filter(r => 
-      r.parentFieldId === parentFieldId && r.parentValue === parentValue
-    );
-
-    // Remove any child fields that are no longer valid
-    this.removeInvalidChildren(parentFieldId);
-
-    // Add new child fields
-    matchingRules.forEach(rule => {
-      const childField = fields.find(f => f.id === rule.childFieldId);
-      if (!childField) return;
-
-      const existingChild = document.querySelector(`.variantiq-field[data-field-id="${rule.childFieldId}"]`);
-      
-      if (existingChild) {
-        existingChild.remove();
-      }
-
-      // Find parent field element to insert after
-      const parentElement = document.querySelector(`.variantiq-field[data-field-id="${parentFieldId}"]`);
-      if (!parentElement) return;
-
-      // Render child field with rule-specific options
-      const childHtml = this.renderField(childField, rule.childOptionsJson);
-      parentElement.insertAdjacentHTML('afterend', childHtml);
-    });
-  }
-
-  removeInvalidChildren(parentFieldId) {
-    const { rules } = this.templateData.template;
-    
-    // Get all possible child field IDs for this parent
-    const childFieldIds = rules
-      .filter(r => r.parentFieldId === parentFieldId)
-      .map(r => r.childFieldId);
-
-    // Remove all child fields of this parent
-    childFieldIds.forEach(childId => {
-      const childElement = document.querySelector(`.variantiq-field[data-field-id="${childId}"]`);
-      if (childElement) {
-        childElement.remove();
-        delete this.fieldValues[childId];
-        
-        // Recursively remove children of this child
-        this.removeInvalidChildren(childId);
-      }
-    });
-  }
-
   showError() {
     const errorDiv = document.getElementById('variantiq-error');
     const container = document.getElementById(`variantiq-fields-${this.productId}`);
-    
+
     if (errorDiv) errorDiv.style.display = 'block';
     if (container) container.style.display = 'none';
   }

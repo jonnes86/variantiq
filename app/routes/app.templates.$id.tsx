@@ -381,9 +381,27 @@ export default function TemplateDetail() {
       <Card>
         <BlockStack gap="400">
           <InlineGrid columns="1fr auto">
-            <Text as="h3" variant="headingMd">
-              Template Fields
-            </Text>
+            <BlockStack gap="200">
+              <Text as="h3" variant="headingMd">
+                Template Fields (Product Options)
+              </Text>
+              <Text as="p">
+                Define the customizable options customers will see on the product page. These fields act as the building blocks for your product variations.
+              </Text>
+              <Card background="bg-surface-secondary">
+                <BlockStack gap="200">
+                  <Text as="h4" variant="headingSm">💡 How it works (Example):</Text>
+                  <Text as="p" variant="bodyMd">
+                    If you are selling a configurable PC, you might add the following fields:<br />
+                    • A <Text as="span" fontWeight="bold">Drop-down Select</Text> labeled "Processor" with options: i5, i7, i9<br />
+                    • A <Text as="span" fontWeight="bold">Radio Button</Text> labeled "RAM" with options: 16GB, 32GB<br />
+                    • A <Text as="span" fontWeight="bold">Text Input</Text> labeled "Custom Engraving"<br />
+                    <br />
+                    Once created, you can use the <Text as="span" fontWeight="bold">Rules</Text> tab to link these fields together (e.g., hide the Engraving text input unless they check a "Gift" checkbox).
+                  </Text>
+                </BlockStack>
+              </Card>
+            </BlockStack>
             {!showFieldForm && (
               <Button onClick={() => setShowFieldForm(true)}>Add Field</Button>
             )}
@@ -545,8 +563,19 @@ export default function TemplateDetail() {
                 Cascading Rules
               </Text>
               <Text as="p">
-                Build advanced logic paths to hide, show, or limit field options.
+                Build advanced logic paths to dynamically show, hide, or limit field options based on what the customer has already selected. This makes your product pages cleaner by only showing relevant options.
               </Text>
+              <Card background="bg-surface-secondary">
+                <BlockStack gap="200">
+                  <Text as="h4" variant="headingSm">💡 How it works (Example Scenario):</Text>
+                  <Text as="p" variant="bodyMd">
+                    Imagine you sell Clothing and Accessories. You only want the "Size" dropdown to appear if they choose "Clothing", and if it's a "T-Shirt", you want to restrict the sizes.<br /><br />
+                    <Text as="span" fontWeight="bold">IF</Text> [Category] is "Clothing"<br />
+                    <Text as="span" fontWeight="bold">AND IF</Text> [Type] is "T-Shirt"<br />
+                    <Text as="span" fontWeight="bold">THEN LIMIT</Text> [Size] to only allow "S, M, L, XL"
+                  </Text>
+                </BlockStack>
+              </Card>
             </BlockStack>
             {!showRuleForm && (
               <Button onClick={() => setShowRuleForm(true)} disabled={template.fields.length < 2}>

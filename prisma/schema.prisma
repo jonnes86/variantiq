@@ -94,12 +94,15 @@ model Rule {
 }
 
 model ProductTemplateLink {
-  id          String   @id @default(cuid())
-  shop        String
-  productGid  String   // gid://shopify/Product/...
-  templateId  String
-  template    Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
-  createdAt   DateTime @default(now())
+  id               String   @id @default(cuid())
+  shop             String
+  productGid       String   // gid://shopify/Product/...
+  templateId       String
+  template         Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  createdAt        DateTime @default(now())
+
+  customFieldsJson Json?
+  customRulesJson  Json?
 
   @@index([shop])
   @@index([productGid])

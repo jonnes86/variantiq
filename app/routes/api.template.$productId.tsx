@@ -70,10 +70,23 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
     console.log("[API] Template found:", link.template.name);
 
+    // Merge logic: If product has custom fields/rules, override the template ones natively.
+    const resolvedTemplate = { ...link.template };
+
+    if (link.customFieldsJson) {
+      console.log("[API] Injecting product-specific custom fields override");
+      resolvedTemplate.fields = link.customFieldsJson as any[];
+    }
+
+    if (link.customRulesJson) {
+      console.log("[API] Injecting product-specific custom rules override");
+      resolvedTemplate.rules = link.customRulesJson as any[];
+    }
+
     // Return template data
     return json(
       {
-        template: link.template,
+        template: resolvedTemplate,
         productGid,
       },
       {

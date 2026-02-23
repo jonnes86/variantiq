@@ -11,7 +11,8 @@ import {
   Badge,
   Button,
   LegacyStack,
-  Banner
+  Banner,
+  InlineStack
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 import { prisma } from "../db.server";
@@ -189,6 +190,8 @@ export default function TemplateProductsPage() {
               renderItem={(product: any) => {
                 const isLinked = linkedProductIds.includes(product.id);
                 const actionVerb = isLinked ? "Unlink" : "Link";
+                // product.id is a gid, we only want the numeric ID for the URL route
+                const numericProductId = product.id.split('/').pop();
 
                 return (
                   <ResourceItem
@@ -206,16 +209,25 @@ export default function TemplateProductsPage() {
                         {isLinked && <Badge tone="success">Linked</Badge>}
                       </LegacyStack.Item>
                       <LegacyStack.Item>
-                        <Form method="post">
-                          <input type="hidden" name="productGid" value={product.id} />
-                          <input type="hidden" name="_intent" value={isLinked ? "unlink" : "link"} />
-                          <Button
-                            submit
-                            variant={isLinked ? undefined : "primary"}
-                          >
-                            {actionVerb}
-                          </Button>
-                        </Form>
+                        <InlineStack gap="200" align="end">
+                          {isLinked && (
+                            <Button
+                              url={`/app/templates/${template.id}/products/${numericProductId}`}
+                            >
+                              Customize
+                            </Button>
+                          )}
+                          <Form method="post">
+                            <input type="hidden" name="productGid" value={product.id} />
+                            <input type="hidden" name="_intent" value={isLinked ? "unlink" : "link"} />
+                            <Button
+                              submit
+                              variant={isLinked ? undefined : "primary"}
+                            >
+                              {actionVerb}
+                            </Button>
+                          </Form>
+                        </InlineStack>
                       </LegacyStack.Item>
                     </LegacyStack>
                   </ResourceItem>
