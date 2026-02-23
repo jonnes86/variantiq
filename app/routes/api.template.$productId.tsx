@@ -1,4 +1,4 @@
-import { json, type LoaderFunctionArgs } from "@remix-run/node";
+import { json, type LoaderFunctionArgs, type ActionFunctionArgs } from "@remix-run/node";
 import { prisma } from "../db.server";
 
 /**
@@ -8,21 +8,23 @@ import { prisma } from "../db.server";
  * Usage: GET /api/template/gid%3A%2F%2Fshopify%2FProduct%2F12345
  */
 
-export async function loader({ request, params }: LoaderFunctionArgs) {
-  // CORS Headers Helper
-  const corsHeaders = {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
-  };
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
 
-  // Handle OPTIONS for CORS preflight
+export async function action({ request }: ActionFunctionArgs) {
   if (request.method === "OPTIONS") {
     return new Response(null, {
       status: 204,
       headers: corsHeaders,
     });
   }
+  return new Response("Method Not Allowed", { status: 405, headers: corsHeaders });
+}
+
+export async function loader({ request, params }: LoaderFunctionArgs) {
 
   const productGid = decodeURIComponent(params.productId || "");
 
