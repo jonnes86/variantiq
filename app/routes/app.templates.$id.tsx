@@ -449,7 +449,7 @@ export default function TemplateDetail() {
     { label: "Checkboxes", value: "checkbox" },
   ];
 
-  const getFieldLabel = (id: string) => template.fields.find(f => f.id === id)?.label || id;
+  const getFieldName = (id: string) => template.fields.find(f => f.id === id)?.name || id;
 
   // Views
   const FieldsView = (
@@ -565,7 +565,7 @@ export default function TemplateDetail() {
                 <InlineStack align="space-between">
                   <BlockStack gap="100">
                     <Text as="h4" variant="bodyMd" fontWeight="semibold">
-                      {field.label}
+                      {field.name}
                       {field.required && (
                         <Text as="span" tone="critical">
                           {" "}
@@ -574,7 +574,7 @@ export default function TemplateDetail() {
                       )}
                     </Text>
                     <Text as="p" tone="subdued" variant="bodySm">
-                      Type: {field.type} | Name: {field.name}
+                      Type: {field.type} | Label: {field.label}
                     </Text>
                     {field.optionsJson && (
                       <Text as="p" variant="bodySm">
@@ -719,7 +719,7 @@ export default function TemplateDetail() {
                     <InlineStack gap="200" wrap>
                       {ruleConditions.map((cond, index) => (
                         <Tag key={index} onRemove={() => handleRemoveCondition(index)}>
-                          {getFieldLabel(cond.fieldId)} {cond.operator === "EQUALS" ? "=" : cond.operator} {cond.value}
+                          {getFieldName(cond.fieldId)} {cond.operator === "EQUALS" ? "=" : cond.operator} {cond.value}
                         </Tag>
                       ))}
                     </InlineStack>
@@ -728,7 +728,7 @@ export default function TemplateDetail() {
                   <InlineGrid columns="1fr 1fr 1fr auto" gap="200">
                     <Select
                       label="Field"
-                      options={[{ label: "Select field...", value: "" }, ...template.fields.map(f => ({ label: f.label, value: f.id }))]}
+                      options={[{ label: "Select field...", value: "" }, ...template.fields.map(f => ({ label: f.name, value: f.id }))]}
                       value={tempCondFieldId}
                       onChange={setTempCondFieldId}
                     />
@@ -791,7 +791,7 @@ export default function TemplateDetail() {
                     />
                     <Select
                       label="Target Field"
-                      options={[{ label: "Select field...", value: "" }, ...template.fields.map(f => ({ label: f.label, value: f.id }))]}
+                      options={[{ label: "Select field...", value: "" }, ...template.fields.map(f => ({ label: f.name, value: f.id }))]}
                       value={ruleTargetFieldId}
                       onChange={setRuleTargetFieldId}
                     />
@@ -878,8 +878,8 @@ export default function TemplateDetail() {
             resourceName={{ singular: "rule", plural: "rules" }}
             items={template.rules}
             renderItem={(rule: any) => {
-              const condText = (rule.conditionsJson as Array<any>)?.map(c => `${getFieldLabel(c.fieldId)} ${c.operator === 'EQUALS' ? '=' : '!='} ${c.value}`).join(" AND ") || "No condition";
-              const targetLabel = getFieldLabel(rule.targetFieldId);
+              const condText = (rule.conditionsJson as Array<any>)?.map(c => `${getFieldName(c.fieldId)} ${c.operator === 'EQUALS' ? '=' : '!='} ${c.value}`).join(" AND ") || "No condition";
+              const targetLabel = getFieldName(rule.targetFieldId);
 
               let actionText = "";
               if (rule.actionType === "SHOW") actionText = `Show ${targetLabel}`;
