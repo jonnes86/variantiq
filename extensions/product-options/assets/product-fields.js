@@ -73,30 +73,53 @@ class VariantIQFields {
     const isRequired = field.required ? 'required' : '';
     const requiredMark = field.required ? '<span class="required">*</span>' : '';
 
-    let html = `
-      <div class="variantiq-field" data-field-id="${field.id}" style="display: none;">
-        <label for="field-${field.id}">
-          ${field.label}${requiredMark}
-        </label>
-    `;
+    if (field.type === 'radio' || field.type === 'checkbox') {
+      let html = `
+        <fieldset class="variantiq-field js product-form__input" data-field-id="${field.id}" style="display: none; border: none; padding: 0; margin: 0 0 2rem 0; display: flex; flex-wrap: wrap; gap: 10px;">
+          <legend class="form__label" style="width: 100%; margin-bottom: 0.5rem; text-align: left;">${field.label}${requiredMark}</legend>
+      `;
 
-    switch (field.type) {
-      case 'text':
+      fieldOptions.forEach((option, index) => {
+        html += `
+          <input 
+            type="${field.type}" 
+            id="field-${field.id}-${index}" 
+            name="${field.name}${field.type === 'checkbox' ? '[]' : ''}"
+            value="${option}"
+            ${isRequired}
+            class="variantiq-${field.type}"
+          />
+          <label for="field-${field.id}-${index}" data-opt-value="${option}" class="variantiq-${field.type}-label">
+            ${option}
+          </label>
+        `;
+      });
+      html += `</fieldset>`;
+      return html;
+    } else {
+      let html = `
+        <div class="variantiq-field product-form__input" data-field-id="${field.id}" style="display: none; margin: 0 0 2rem 0; text-align: left;">
+          <label class="form__label" for="field-${field.id}" style="margin-bottom: 0.5rem; display: block;">
+            ${field.label}${requiredMark}
+          </label>
+      `;
+
+      if (field.type === 'text') {
         html += `<input 
           type="text" 
           id="field-${field.id}" 
           name="${field.name}"
           ${isRequired}
           class="variantiq-input"
+          style="width: 100%; box-sizing: border-box;"
         />`;
-        break;
-
-      case 'select':
+      } else if (field.type === 'select') {
         html += `<select 
           id="field-${field.id}" 
           name="${field.name}"
           ${isRequired}
           class="variantiq-select"
+          style="width: 100%; display: block;"
         >
           <option value="">Select ${field.label}...</option>`;
 
@@ -105,50 +128,11 @@ class VariantIQFields {
         });
 
         html += `</select>`;
-        break;
+      }
 
-      case 'radio':
-        html += `<div class="variantiq-radio-group">`;
-        fieldOptions.forEach((option, index) => {
-          html += `
-            <label class="variantiq-radio-label" data-opt-value="${option}">
-              <input 
-                type="radio" 
-                id="field-${field.id}-${index}" 
-                name="${field.name}"
-                value="${option}"
-                ${isRequired}
-                class="variantiq-radio"
-              />
-              <span>${option}</span>
-            </label>
-          `;
-        });
-        html += `</div>`;
-        break;
-
-      case 'checkbox':
-        html += `<div class="variantiq-checkbox-group">`;
-        fieldOptions.forEach((option, index) => {
-          html += `
-            <label class="variantiq-checkbox-label" data-opt-value="${option}">
-              <input 
-                type="checkbox" 
-                id="field-${field.id}-${index}" 
-                name="${field.name}[]"
-                value="${option}"
-                class="variantiq-checkbox"
-              />
-              <span>${option}</span>
-            </label>
-          `;
-        });
-        html += `</div>`;
-        break;
+      html += `</div>`;
+      return html;
     }
-
-    html += `</div>`;
-    return html;
   }
 
   attachEventListeners() {
@@ -320,7 +304,8 @@ class VariantIQFields {
       const labels = fieldElement.querySelectorAll('label[data-opt-value]');
       labels.forEach(label => {
         const val = label.dataset.optValue;
-        const input = label.querySelector('input');
+        const inputId = label.getAttribute('for');
+        const input = document.getElementById(inputId);
 
         if (limitSet.has(val)) {
           label.style.display = '';
