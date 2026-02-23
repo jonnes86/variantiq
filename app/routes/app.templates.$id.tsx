@@ -770,13 +770,28 @@ export default function TemplateDetail() {
       <Card>
         <BlockStack gap="400">
           <InlineGrid columns="1fr auto">
-            <Text as="h3" variant="headingMd">
-              Appearance
-            </Text>
+            <BlockStack gap="200">
+              <Text as="h3" variant="headingMd">
+                Appearance Settings
+              </Text>
+              <Text as="p">
+                Customize the visual style of your storefront option buttons. These settings apply globally to all products using this template.
+              </Text>
+              <Card background="bg-surface-secondary">
+                <BlockStack gap="200">
+                  <Text as="h4" variant="headingSm">💡 How it works (Example):</Text>
+                  <Text as="p" variant="bodyMd">
+                    By default, option buttons look like standard text on your theme.<br />
+                    • Change <Text as="span" fontWeight="bold">Background Color</Text> to `#000000` to make them solid black.<br />
+                    • Change <Text as="span" fontWeight="bold">Text Color</Text> to `#ffffff` for white text.<br />
+                    • Adjust <Text as="span" fontWeight="bold">Border Radius</Text> to `8px` to give them softly rounded corners.<br />
+                    <br />
+                    Test your changes interactively using the Preview box below!
+                  </Text>
+                </BlockStack>
+              </Card>
+            </BlockStack>
           </InlineGrid>
-          <Text as="p">
-            Customize the button’s appearance by setting each style below.
-          </Text>
           <TextField
             label="Font Family"
             value={fontFamily}

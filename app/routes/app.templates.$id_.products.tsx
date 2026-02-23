@@ -12,7 +12,8 @@ import {
   Button,
   LegacyStack,
   Banner,
-  InlineStack
+  InlineStack,
+  Thumbnail
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 import { prisma } from "../db.server";
@@ -32,6 +33,10 @@ const PRODUCTS_QUERY = `
           id
           title
           vendor
+          featuredImage {
+            url
+            altText
+          }
         }
       }
     }
@@ -193,11 +198,22 @@ export default function TemplateProductsPage() {
                 // product.id is a gid, we only want the numeric ID for the URL route
                 const numericProductId = product.id.split('/').pop();
 
+                const media = (
+                  <Thumbnail
+                    source={
+                      product.featuredImage?.url ||
+                      "https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_large.png?format=webp&v=1530129081"
+                    }
+                    alt={product.featuredImage?.altText || product.title}
+                  />
+                );
+
                 return (
                   <ResourceItem
                     id={product.id}
                     accessibilityLabel={`View details for ${product.title}`}
                     name={product.title}
+                    media={media}
                     onClick={() => { }}
                   >
                     <LegacyStack alignment="center">
