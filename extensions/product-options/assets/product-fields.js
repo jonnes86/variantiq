@@ -89,8 +89,9 @@ class VariantIQFields {
 
     if (field.type === 'radio' || field.type === 'checkbox') {
       let html = `
-        <fieldset class="variantiq-field js product-form__input" data-field-id="${field.id}" style="display: none; border: none; padding: 0; margin: 0 0 2rem 0; display: flex; flex-wrap: wrap; gap: 10px;">
-          <legend class="form__label" style="width: 100%; margin-bottom: 0.5rem; text-align: left;">${field.label}${requiredMark}</legend>
+        <fieldset class="variantiq-field js product-form__input" data-field-id="${field.id}" style="display: none; border: none; padding: 0; margin: 0 0 2rem 0;">
+          <legend class="form__label" style="width: 100%; margin-bottom: 0.8rem; text-align: left; display: block;">${field.label}${requiredMark}</legend>
+          <div style="display: flex; flex-wrap: wrap; gap: 10px; width: 100%;">
       `;
 
       fieldOptions.forEach((option, index) => {
@@ -101,23 +102,23 @@ class VariantIQFields {
         html += `
           <input 
             type="${field.type}" 
-            id="field-${field.id}-${index}" 
-            name="${field.name}${field.type === 'checkbox' ? '[]' : ''}"
+            id="vq-${this.productId}-${field.id}-${index}" 
+            name="vq_${this.productId}_${field.id}${field.type === 'checkbox' ? '[]' : ''}"
             value="${option}"
             ${isRequired}
             class="variantiq-${field.type}"
           />
-          <label for="field-${field.id}-${index}" data-opt-value="${option}" class="variantiq-${field.type}-label">
+          <label for="vq-${this.productId}-${field.id}-${index}" data-opt-value="${option}" class="variantiq-${field.type}-label">
             ${option}${optionPrice}
           </label>
         `;
       });
-      html += `</fieldset>`;
+      html += `</div></fieldset>`;
       return html;
     } else {
       let html = `
         <div class="variantiq-field product-form__input" data-field-id="${field.id}" style="display: none; margin: 0 0 2rem 0; text-align: left;">
-          <label class="form__label" for="field-${field.id}" style="margin-bottom: 0.5rem; display: block;">
+          <label class="form__label" for="vq-${this.productId}-${field.id}" style="margin-bottom: 0.5rem; display: block;">
             ${field.label}${requiredMark}
           </label>
       `;
@@ -125,16 +126,16 @@ class VariantIQFields {
       if (field.type === 'text') {
         html += `<input 
           type="text" 
-          id="field-${field.id}" 
-          name="${field.name}"
+          id="vq-${this.productId}-${field.id}" 
+          name="vq_${this.productId}_${field.id}"
           ${isRequired}
           class="variantiq-input"
           style="width: 100%; box-sizing: border-box;"
         />`;
       } else if (field.type === 'select') {
         html += `<select 
-          id="field-${field.id}" 
-          name="${field.name}"
+          id="vq-${this.productId}-${field.id}" 
+          name="vq_${this.productId}_${field.id}"
           ${isRequired}
           class="variantiq-select"
           style="width: 100%; display: block;"
