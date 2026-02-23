@@ -268,7 +268,7 @@ export default function TemplateDetail() {
   const { template, linkedProductsData } = useLoaderData<typeof loader>();
   const submit = useSubmit();
   const [searchParams] = useSearchParams();
-  const initialTab = searchParams.get("tab") === "products" ? 3 : 0;
+  const initialTab = searchParams.get("tab") === "products" ? 1 : 0;
   const [selectedTab, setSelectedTab] = useState(initialTab);
 
   // Name state
@@ -741,12 +741,29 @@ export default function TemplateDetail() {
                       value={tempCondOperator}
                       onChange={setTempCondOperator}
                     />
-                    <TextField
-                      label="Value"
-                      value={tempCondValue}
-                      onChange={setTempCondValue}
-                      autoComplete="off"
-                    />
+                    {(() => {
+                      const selectedField = template.fields.find(f => f.id === tempCondFieldId);
+                      const hasOptions = selectedField?.optionsJson && Array.isArray(selectedField.optionsJson) && selectedField.optionsJson.length > 0;
+
+                      return hasOptions ? (
+                        <Select
+                          label="Value"
+                          options={[
+                            { label: "Select option...", value: "" },
+                            ...(selectedField.optionsJson as string[]).map(opt => ({ label: opt, value: opt }))
+                          ]}
+                          value={tempCondValue}
+                          onChange={setTempCondValue}
+                        />
+                      ) : (
+                        <TextField
+                          label="Value"
+                          value={tempCondValue}
+                          onChange={setTempCondValue}
+                          autoComplete="off"
+                        />
+                      );
+                    })()}
                     <div style={{ marginTop: "24px" }}>
                       <Button onClick={handleAddCondition} disabled={!tempCondFieldId || !tempCondValue}>
                         Add Condition
@@ -795,12 +812,31 @@ export default function TemplateDetail() {
                       )}
 
                       <InlineGrid columns="1fr auto" gap="200">
-                        <TextField
-                          label="Allowed Option"
-                          value={tempTargetOption}
-                          onChange={setTempTargetOption}
-                          autoComplete="off"
-                        />
+                        {(() => {
+                          const limitTargetField = template.fields.find(f => f.id === ruleTargetFieldId);
+                          const targetHasOptions = limitTargetField?.optionsJson && Array.isArray(limitTargetField.optionsJson) && limitTargetField.optionsJson.length > 0;
+
+                          return targetHasOptions ? (
+                            <Select
+                              label="Allowed Option"
+                              options={[
+                                { label: "Select option...", value: "" },
+                                ...(limitTargetField.optionsJson as string[])
+                                  .filter(opt => !ruleTargetOptions.includes(opt)) // Don't show already selected ones
+                                  .map(opt => ({ label: opt, value: opt }))
+                              ]}
+                              value={tempTargetOption}
+                              onChange={setTempTargetOption}
+                            />
+                          ) : (
+                            <TextField
+                              label="Allowed Option"
+                              value={tempTargetOption}
+                              onChange={setTempTargetOption}
+                              autoComplete="off"
+                            />
+                          );
+                        })()}
                         <div style={{ marginTop: "24px" }}>
                           <Button onClick={handleAddTargetOption} disabled={!tempTargetOption}>
                             Add Option
