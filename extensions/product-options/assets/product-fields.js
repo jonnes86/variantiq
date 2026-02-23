@@ -202,7 +202,12 @@ class VariantIQFields {
       });
     }
 
-    fields.forEach(field => {
+    let missingRequiredEncountered = false;
+
+    // Evaluate in exact sort order to support Waterfall logic
+    const sortedFields = [...fields].sort((a, b) => a.sort - b.sort);
+
+    sortedFields.forEach(field => {
       const fieldElement = document.querySelector(`.variantiq-field[data-field-id="${field.id}"]`);
       if (!fieldElement) return;
 
@@ -248,6 +253,12 @@ class VariantIQFields {
         shouldShow = !hideRules.some(evaluateRuleConditions);
       }
 
+      // --- WATERFALL LOGIC ---
+      // If a previous required field was not filled out, we enforce the waterfall cascade and hide this field
+      if (missingRequiredEncountered) {
+        shouldShow = false;
+      }
+
       // Check for limits
       const passingLimitRules = limitRules.filter(evaluateRuleConditions);
       if (passingLimitRules.length > 0) {
@@ -272,6 +283,16 @@ class VariantIQFields {
       } else {
         fieldElement.style.display = 'none';
         this.clearFieldValue(field, fieldElement);
+      }
+
+      // --- WATERFALL ADVANCE ---
+      // If this field is currently shown, is marked as required, but has no value selected...
+      // Flag it so that the NEXT field in the iteration loop gets hidden.
+      if (shouldShow && field.required) {
+        const val = this.fieldValues[field.id];
+        if (!val || val.trim() === '') {
+          missingRequiredEncountered = true;
+        }
       }
     });
   }

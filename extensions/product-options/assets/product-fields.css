@@ -98,17 +98,18 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: var(--button-padding, 16px) 12px;
-  border: 2px solid var(--button-border, #ddd);
-  border-radius: var(--button-radius, 4px);
+  padding: var(--button-padding, 12px) 20px;
+  border: 1px solid var(--button-border, #e3e3e3);
+  border-radius: var(--button-radius, 40px);
   cursor: pointer;
   transition: all 0.2s;
   background: var(--button-bg, white);
-  color: var(--button-text, #333);
+  color: var(--button-text, #121212);
   text-align: center;
   font-weight: 500;
-  min-height: 60px;
+  min-height: 46px;
   position: relative;
+  letter-spacing: 0.5px;
 }
 
 .variantiq-radio-label:hover {
@@ -149,17 +150,18 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: var(--button-padding, 16px) 12px;
-  border: 2px solid var(--button-border, #ddd);
+  padding: var(--button-padding, 12px) 20px;
+  border: 1px solid var(--button-border, #e3e3e3);
   border-radius: var(--button-radius, 4px);
   cursor: pointer;
   transition: all 0.2s;
   background: var(--button-bg, white);
-  color: var(--button-text, #333);
+  color: var(--button-text, #121212);
   text-align: center;
   font-weight: 500;
-  min-height: 60px;
+  min-height: 46px;
   position: relative;
+  letter-spacing: 0.5px;
 }
 
 .variantiq-checkbox-label:hover {
