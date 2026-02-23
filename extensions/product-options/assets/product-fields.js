@@ -16,12 +16,26 @@ class VariantIQFields {
 
   async init() {
     try {
+      this.findBasePrice();
       await this.fetchTemplate();
       this.render();
       this.attachEventListeners();
     } catch (error) {
       console.error('VariantIQ initialization error:', error);
       this.showError();
+    }
+  }
+
+  findBasePrice() {
+    this.priceElement = document.querySelector('.price-item--regular, .price__regular, .product__price, [data-product-price]');
+    if (this.priceElement) {
+      this.originalPriceHTML = this.priceElement.innerHTML;
+      this.originalPriceText = this.priceElement.innerText.trim();
+
+      const match = this.originalPriceText.match(/[\d,\.]+/);
+      if (match) {
+        this.basePrice = parseFloat(match[0].replace(/,/g, ''));
+      }
     }
   }
 
@@ -80,6 +94,10 @@ class VariantIQFields {
       `;
 
       fieldOptions.forEach((option, index) => {
+        const optionPrice = field.priceAdjustmentsJson && field.priceAdjustmentsJson[option]
+          ? ` (+$${parseFloat(field.priceAdjustmentsJson[option]).toFixed(2)})`
+          : '';
+
         html += `
           <input 
             type="${field.type}" 
@@ -90,7 +108,7 @@ class VariantIQFields {
             class="variantiq-${field.type}"
           />
           <label for="field-${field.id}-${index}" data-opt-value="${option}" class="variantiq-${field.type}-label">
-            ${option}
+            ${option}${optionPrice}
           </label>
         `;
       });
@@ -124,7 +142,10 @@ class VariantIQFields {
           <option value="">Select ${field.label}...</option>`;
 
         fieldOptions.forEach(option => {
-          html += `<option value="${option}" data-opt-value="${option}">${option}</option>`;
+          const optionPrice = field.priceAdjustmentsJson && field.priceAdjustmentsJson[option]
+            ? ` (+$${parseFloat(field.priceAdjustmentsJson[option]).toFixed(2)})`
+            : '';
+          html += `<option value="${option}" data-opt-value="${option}">${option}${optionPrice}</option>`;
         });
 
         html += `</select>`;
@@ -279,6 +300,46 @@ class VariantIQFields {
         }
       }
     });
+
+    // Update the base price mathematically after computing the active cascade
+    this.updatePriceDisplay();
+  }
+
+  updatePriceDisplay() {
+    if (!this.priceElement || typeof this.basePrice === 'undefined') return;
+
+    let adjustmentsTotal = 0;
+
+    // Sum active price upgrades for visible fields only
+    const visibleFields = this.getVisibleFields();
+    visibleFields.forEach(field => {
+      const val = this.fieldValues[field.id];
+      if (val && field.priceAdjustmentsJson) {
+        if (field.type === 'checkbox') {
+          const selectedOpts = val.split(', ').map(s => s.trim());
+          selectedOpts.forEach(opt => {
+            if (field.priceAdjustmentsJson[opt]) {
+              adjustmentsTotal += parseFloat(field.priceAdjustmentsJson[opt]);
+            }
+          });
+        } else {
+          if (field.priceAdjustmentsJson[val]) {
+            adjustmentsTotal += parseFloat(field.priceAdjustmentsJson[val]);
+          }
+        }
+      }
+    });
+
+    // Write DOM modification
+    if (adjustmentsTotal > 0) {
+      const newTotal = (this.basePrice + adjustmentsTotal).toFixed(2);
+      // Use string replace to safely insert the injected price while maintaining currency symbols
+      const newText = this.originalPriceText.replace(/[\d,\.]+/, newTotal);
+      this.priceElement.innerText = newText;
+    } else {
+      // Revert exactly to the initial parsed text node or HTML
+      this.priceElement.innerHTML = this.originalPriceHTML;
+    }
   }
 
   applyLimitToOptions(field, fieldElement, limitSet) {
@@ -379,8 +440,10 @@ class VariantIQFields {
 
       console.log('VariantIQ: Found Add to Cart button:', addToCartButton);
 
+      const form = addToCartButton.closest('form') || document.querySelector('form[action*="/cart/add"]');
+
       // Intercept the click instead of form submit (works better with AJAX carts)
-      addToCartButton.addEventListener('click', (e) => {
+      addToCartButton.addEventListener('click', async (e) => {
         console.log('VariantIQ: Add to Cart button clicked');
 
         // Validate required fields
@@ -395,12 +458,49 @@ class VariantIQFields {
           return false;
         }
 
-        console.log('VariantIQ: Validation passed, adding properties to form');
+        console.log('VariantIQ: Validation passed');
 
-        // Find the form
-        const form = addToCartButton.closest('form') || document.querySelector('form[action*="/cart/add"]');
         if (form) {
-          this.addPropertiesToCart(form);
+          // Calculate if there is an active price fee
+          let adjustmentsTotal = 0;
+          const visibleFields = this.getVisibleFields();
+          visibleFields.forEach(field => {
+            const val = this.fieldValues[field.id];
+            if (val && field.priceAdjustmentsJson) {
+              if (field.type === 'checkbox') {
+                val.split(', ').forEach(opt => {
+                  if (field.priceAdjustmentsJson[opt.trim()]) {
+                    adjustmentsTotal += parseFloat(field.priceAdjustmentsJson[opt.trim()]);
+                  }
+                });
+              } else {
+                if (field.priceAdjustmentsJson[val]) {
+                  adjustmentsTotal += parseFloat(field.priceAdjustmentsJson[val]);
+                }
+              }
+            }
+          });
+
+          if (adjustmentsTotal > 0) {
+            // Hijack the cart submit completely to push multiple items
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+
+            const originalText = addToCartButton.innerHTML;
+            addToCartButton.innerHTML = 'Syncing Cart...';
+            addToCartButton.disabled = true;
+
+            await this.addFeeAndPropertiesToCart(form, adjustmentsTotal);
+
+            // Redirect specifically to cart to view combined items
+            window.location.href = '/cart';
+            return false;
+          } else {
+            // Standard property injection
+            this.addPropertiesToCart(form);
+            // Allow native form submission / AJAX drawer to continue
+          }
         } else {
           console.error('VariantIQ: Could not find form to add properties');
         }
@@ -449,24 +549,14 @@ class VariantIQFields {
   }
 
   addPropertiesToCart(form) {
-    const { fields } = this.templateData.template;
-
     // Remove any existing VariantIQ properties to avoid duplicates
-    const existingProperties = form.querySelectorAll('input[name^="properties["]');
-    existingProperties.forEach(input => {
-      // If we flagged them previously we could remove them.
-      // Shopify uses properties[Label] by default.
-      if (input.className === 'variantiq-cart-prop') {
-        input.remove();
-      }
-    });
+    const existingProperties = form.querySelectorAll('.variantiq-cart-prop');
+    existingProperties.forEach(input => input.remove());
 
     // Add each visible field value as a line item property
     const visibleFields = this.getVisibleFields();
-
     visibleFields.forEach(field => {
       const value = this.fieldValues[field.id];
-
       if (value && value.trim() !== '') {
         const input = document.createElement('input');
         input.type = 'hidden';
@@ -476,6 +566,56 @@ class VariantIQFields {
         form.appendChild(input);
       }
     });
+  }
+
+  async addFeeAndPropertiesToCart(form, adjustmentsTotal) {
+    this.addPropertiesToCart(form);
+
+    // Create unique group ID to link the main product and the fee in the cart
+    const groupId = Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'properties[_variantiq_group]';
+    input.value = groupId;
+    input.className = 'variantiq-cart-prop';
+    form.appendChild(input);
+
+    const formData = new FormData(form);
+
+    try {
+      // Fetch dummy product variant ID directly from Shopify's open Storefront JSON wrapper
+      const optionsRes = await fetch('/products/variantiq-options-fee-hidden.js');
+      if (!optionsRes.ok) throw new Error('Dummy product missing from Shopify Storefront');
+      const dummyProduct = await optionsRes.json();
+      const dummyVariantId = dummyProduct.variants[0].id;
+
+      const feeQuantity = Math.round(adjustmentsTotal * 100);
+
+      // Inject Fee Product
+      const feeFormData = new URLSearchParams();
+      feeFormData.append('id', dummyVariantId);
+      feeFormData.append('quantity', feeQuantity);
+      feeFormData.append('properties[_variantiq_group]', groupId);
+      feeFormData.append('properties[_variantiq_fee]', 'true');
+
+      await fetch('/cart/add.js', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: feeFormData.toString(),
+      });
+
+      // Inject Main Product
+      await fetch('/cart/add.js', {
+        method: 'POST',
+        body: formData,
+      });
+
+    } catch (e) {
+      console.error('VariantIQ Cart Override Failed:', e);
+      // Fallback: Submit strictly to prevent blocking checkout completely
+      HTMLFormElement.prototype.submit.call(form);
+    }
   }
 
   showValidationError(message) {

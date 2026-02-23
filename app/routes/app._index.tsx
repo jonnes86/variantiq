@@ -19,7 +19,10 @@ import { prisma } from "../db.server";
 
 // --- LOADER ---
 export async function loader({ request }: LoaderFunctionArgs) {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
+
+  // Auto-generate the Dummy Product required for Cart-syncing Dynamic Prices
+  await ensureDummyProductExists(admin);
 
   const templates = await prisma.template.findMany({
     where: { shop: session.shop },
@@ -27,6 +30,66 @@ export async function loader({ request }: LoaderFunctionArgs) {
   });
 
   return json({ templates });
+}
+
+async function ensureDummyProductExists(admin: any) {
+  try {
+    const response = await admin.graphql(
+      `#graphql
+      query {
+        products(first: 1, query: "title:'VariantIQ Options Fee'") {
+          edges {
+            node {
+              id
+            }
+          }
+        }
+      }`
+    );
+    const data = await response.json();
+
+    if (data.data.products.edges.length === 0) {
+      console.log("[VariantIQ] Dummy price product not found. Auto-generating...");
+      await admin.graphql(
+        `#graphql
+        mutation createDummyProduct($input: ProductInput!) {
+          productCreate(input: $input) {
+            product { id }
+            userErrors { field message }
+          }
+        }`,
+        {
+          variables: {
+            input: {
+              title: "VariantIQ Options Fee",
+              handle: "variantiq-options-fee-hidden",
+              status: "ACTIVE",
+              published: true,
+              seo: {
+                title: "VariantIQ Options Fee",
+                description: "Hidden system product used for dynamic pricing.",
+              },
+              variants: [{
+                price: "0.01",
+                requiresShipping: false,
+                inventoryPolicy: "CONTINUE"
+              }],
+              metafields: [
+                {
+                  namespace: "seo",
+                  key: "hidden",
+                  type: "number_integer",
+                  value: "1"
+                }
+              ]
+            }
+          }
+        }
+      );
+    }
+  } catch (error) {
+    console.error("[VariantIQ] Failed to create dummy product:", error);
+  }
 }
 
 // --- ACTION ---

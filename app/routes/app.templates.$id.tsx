@@ -138,19 +138,39 @@ export async function action({ request, params }: ActionFunctionArgs) {
     const name = String(form.get("fieldName") || "").trim();
     const label = String(form.get("fieldLabel") || "").trim();
     const required = form.get("fieldRequired") === "true";
-    const optionsString = String(form.get("fieldOptions") || "").trim();
+    const optionsDataStr = String(form.get("optionsData") || "");
 
     if (!type || !name || !label) {
       return json({ error: "All fields required" }, { status: 400 });
     }
 
-    // Parse options for select/radio/checkbox
+    // Parse options and prices for select/radio/checkbox
     let optionsJson = null;
-    if (["select", "radio", "checkbox"].includes(type) && optionsString) {
-      optionsJson = optionsString
-        .split(",")
-        .map((o) => o.trim())
-        .filter(Boolean);
+    let priceAdjustmentsJson = null;
+
+    if (["select", "radio", "checkbox"].includes(type) && optionsDataStr) {
+      try {
+        const parsedOptions = JSON.parse(optionsDataStr);
+        if (Array.isArray(parsedOptions) && parsedOptions.length > 0) {
+          optionsJson = parsedOptions.map(o => o.label.trim()).filter(Boolean);
+
+          const priceMap: Record<string, number> = {};
+          let hasPrices = false;
+          parsedOptions.forEach(o => {
+            const price = parseFloat(o.price);
+            if (!isNaN(price) && price > 0) {
+              priceMap[o.label.trim()] = price;
+              hasPrices = true;
+            }
+          });
+
+          if (hasPrices) {
+            priceAdjustmentsJson = priceMap;
+          }
+        }
+      } catch (e) {
+        console.error("Failed to parse optionsData", e);
+      }
     }
 
     // Get max sort order if new
@@ -170,7 +190,14 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
       await prisma.field.update({
         where: { id: fieldId },
-        data: { type, name, label, required, optionsJson: optionsJson as any }
+        data: {
+          type,
+          name,
+          label,
+          required,
+          optionsJson: optionsJson as any,
+          priceAdjustmentsJson: priceAdjustmentsJson as any
+        }
       });
     } else {
       await prisma.field.create({
@@ -181,6 +208,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
           label,
           required,
           optionsJson: optionsJson as any,
+          priceAdjustmentsJson: priceAdjustmentsJson as any,
           sort: sortOrder,
         },
       });
@@ -281,7 +309,7 @@ export default function TemplateDetail() {
   const [fieldName, setFieldName] = useState("");
   const [fieldLabel, setFieldLabel] = useState("");
   const [fieldRequired, setFieldRequired] = useState(false);
-  const [fieldOptions, setFieldOptions] = useState("");
+  const [fieldOptionsList, setFieldOptionsList] = useState<Array<{ label: string, price: string }>>([]);
 
   useEffect(() => {
     setTemplateName(template.name);
@@ -389,7 +417,7 @@ export default function TemplateDetail() {
     setFieldName("");
     setFieldLabel("");
     setFieldRequired(false);
-    setFieldOptions("");
+    setFieldOptionsList([]);
   };
 
   const handleAddFieldClick = () => {
@@ -403,7 +431,16 @@ export default function TemplateDetail() {
     setFieldName(field.name);
     setFieldLabel(field.label);
     setFieldRequired(field.required);
-    setFieldOptions(field.optionsJson ? field.optionsJson.join(", ") : "");
+
+    // Map existing JSON options and pricing back to UI state
+    const initialOptions = field.optionsJson
+      ? field.optionsJson.map((opt: string) => ({
+        label: opt,
+        price: field.priceAdjustmentsJson?.[opt] ? String(field.priceAdjustmentsJson[opt]) : ""
+      }))
+      : [];
+    setFieldOptionsList(initialOptions);
+
     setShowFieldForm(true);
     // Scroll to top where form is
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -418,7 +455,7 @@ export default function TemplateDetail() {
         fieldName,
         fieldLabel,
         fieldRequired: String(fieldRequired),
-        fieldOptions,
+        optionsData: JSON.stringify(fieldOptionsList.filter(o => o.label.trim() !== "")),
       },
       { method: "post" },
     );
@@ -515,14 +552,52 @@ export default function TemplateDetail() {
                 />
 
                 {["select", "radio", "checkbox"].includes(fieldType) && (
-                  <TextField
-                    label="Options (comma-separated)"
-                    value={fieldOptions}
-                    onChange={setFieldOptions}
-                    placeholder="e.g., Small, Medium, Large, XL"
-                    multiline={2}
-                    autoComplete="off"
-                  />
+                  <BlockStack gap="300">
+                    <Text as="h5" variant="headingSm">Options & Pricing</Text>
+                    {fieldOptionsList.map((opt, index) => (
+                      <InlineGrid columns="1fr 120px auto" gap="200" key={index} alignItems="center">
+                        <TextField
+                          labelHidden
+                          label={`Option ${index + 1}`}
+                          value={opt.label}
+                          onChange={(val) => {
+                            const newList = [...fieldOptionsList];
+                            newList[index].label = val;
+                            setFieldOptionsList(newList);
+                          }}
+                          placeholder="e.g., Small"
+                          autoComplete="off"
+                        />
+                        <TextField
+                          labelHidden
+                          label={`Price Adjustment ${index + 1}`}
+                          value={opt.price}
+                          onChange={(val) => {
+                            const newList = [...fieldOptionsList];
+                            newList[index].price = val;
+                            setFieldOptionsList(newList);
+                          }}
+                          prefix="$"
+                          type="number"
+                          placeholder="0.00"
+                          autoComplete="off"
+                        />
+                        <Button
+                          tone="critical"
+                          variant="plain"
+                          accessibilityLabel="Remove option"
+                          onClick={() => setFieldOptionsList(fieldOptionsList.filter((_, i) => i !== index))}
+                        >
+                          Remove
+                        </Button>
+                      </InlineGrid>
+                    ))}
+                    <InlineStack>
+                      <Button onClick={() => setFieldOptionsList([...fieldOptionsList, { label: "", price: "" }])}>
+                        Add Option
+                      </Button>
+                    </InlineStack>
+                  </BlockStack>
                 )}
 
                 <Checkbox
@@ -578,7 +653,10 @@ export default function TemplateDetail() {
                     </Text>
                     {field.optionsJson && (
                       <Text as="p" variant="bodySm">
-                        Options: {field.optionsJson.join(", ")}
+                        Options: {field.optionsJson.map((opt: string) => {
+                          const price = field.priceAdjustmentsJson?.[opt];
+                          return price ? `${opt} (+$${price})` : opt;
+                        }).join(", ")}
                       </Text>
                     )}
                   </BlockStack>
