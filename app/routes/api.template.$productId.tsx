@@ -106,6 +106,42 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       resolvedTemplate.rules = link.customRulesJson as any[];
     }
 
+    // Hydrate Dataset Rules
+    const datasetRefs = new Set<string>();
+    resolvedTemplate.rules.forEach((rule: any) => {
+      if (rule.actionType === "LIMIT_OPTIONS_DATASET" && rule.targetOptionsJson) {
+        try {
+          const parsed = typeof rule.targetOptionsJson === 'string' ? JSON.parse(rule.targetOptionsJson) : rule.targetOptionsJson;
+          if (parsed.datasetId) datasetRefs.add(parsed.datasetId);
+        } catch (e) { }
+      }
+    });
+
+    if (datasetRefs.size > 0) {
+      console.log(`[API] Hydrating ${datasetRefs.size} datasets for template`);
+      const datasets = await prisma.dataset.findMany({ where: { id: { in: Array.from(datasetRefs) } } });
+      const dsMap = datasets.reduce((acc: any, d: any) => {
+        acc[d.id] = typeof d.optionsJson === 'string' ? JSON.parse(d.optionsJson) : (d.optionsJson || []);
+        return acc;
+      }, {});
+
+      resolvedTemplate.rules = resolvedTemplate.rules.map((rule: any) => {
+        if (rule.actionType === "LIMIT_OPTIONS_DATASET" && rule.targetOptionsJson) {
+          try {
+            const parsed = typeof rule.targetOptionsJson === 'string' ? JSON.parse(rule.targetOptionsJson) : rule.targetOptionsJson;
+            if (parsed.datasetId && dsMap[parsed.datasetId]) {
+              return {
+                ...rule,
+                actionType: "LIMIT_OPTIONS",
+                targetOptionsJson: JSON.stringify(dsMap[parsed.datasetId])
+              };
+            }
+          } catch (e) { }
+        }
+        return rule;
+      });
+    }
+
     // Return template data
     return json(
       {

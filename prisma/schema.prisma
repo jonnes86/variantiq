@@ -110,3 +110,14 @@ model ProductTemplateLink {
   @@index([productGid])
   @@index([templateId])
 }
+
+model Dataset {
+  id          String   @id @default(cuid())
+  shop        String
+  name        String
+  optionsJson Json?    // e.g., ["Red", "Blue", "Green"]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([shop])
+}

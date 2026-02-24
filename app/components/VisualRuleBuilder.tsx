@@ -10,6 +10,7 @@ import {
     Box,
     InlineStack,
     Icon,
+    Select,
 } from "@shopify/polaris";
 import { DragHandleIcon } from "@shopify/polaris-icons";
 import {
@@ -51,6 +52,7 @@ export interface Rule {
 interface VisualRuleBuilderProps {
     fields: Field[];
     rules: Rule[];
+    datasets?: any[];
     onSaveRules: (newRules: Partial<Rule>[]) => void;
 }
 
@@ -81,13 +83,19 @@ function SortableFieldNode({
     options,
     childrenObj,
     collapsedNodes,
-    onToggleCollapse
+    onToggleCollapse,
+    isNested,
+    datasetId,
+    onChangeDataset,
 }: {
     field: Field,
     options: string[],
     childrenObj?: Record<string, string[]>,
     collapsedNodes: Set<string>,
-    onToggleCollapse: (id: string) => void
+    onToggleCollapse: (id: string) => void,
+    isNested?: boolean,
+    datasetId?: string,
+    onChangeDataset?: (id: string, dataset: string) => void
 }) {
     const {
         attributes,
@@ -132,6 +140,15 @@ function SortableFieldNode({
                                 {collapsedNodes.has(field.id) ? `Expand ${options.length} Options` : `Collapse Options`}
                             </Button>
                         )}
+                        {isNested && globalDatasets.length > 0 && (
+                            <Select
+                                label="Limit options to dataset"
+                                labelHidden
+                                options={[{ label: 'All Options Available', value: '' }, ...globalDatasets.map(d => ({ label: `Limit to: ${d.name}`, value: d.id }))]}
+                                value={datasetId || ''}
+                                onChange={(value) => onChangeDataset && onChangeDataset(field.id, value)}
+                            />
+                        )}
                     </InlineStack>
 
                     {/* Child Dropzones for Options */}
@@ -165,6 +182,7 @@ function SortableFieldNode({
                                                                 fieldId={childId}
                                                                 collapsedNodes={collapsedNodes}
                                                                 onToggleCollapse={onToggleCollapse}
+                                                                isNested={true}
                                                             />
                                                         ))
                                                     )}
@@ -185,15 +203,19 @@ function SortableFieldNode({
 // Helper to pull the node from global map so we don't drill fields infinitely
 let globalFieldsMap: Record<string, Field> = {};
 let globalTree: Record<string, string[]> = {};
+let globalDatasets: any[] = [];
+let globalFieldDatasetMap: Record<string, string> = {};
 
 function RenderFieldNodeById({
     fieldId,
     collapsedNodes,
-    onToggleCollapse
+    onToggleCollapse,
+    isNested
 }: {
     fieldId: string,
     collapsedNodes: Set<string>,
-    onToggleCollapse: (id: string) => void
+    onToggleCollapse: (id: string) => void,
+    isNested?: boolean,
 }) {
     const f = globalFieldsMap[fieldId];
     if (!f) return null;
@@ -206,6 +228,13 @@ function RenderFieldNodeById({
             childrenObj={globalTree}
             collapsedNodes={collapsedNodes}
             onToggleCollapse={onToggleCollapse}
+            isNested={isNested}
+            datasetId={globalFieldDatasetMap[fieldId]}
+            onChangeDataset={(id, dataset) => {
+                // We dispatch a custom event to bubble this up to the parent builder
+                const event = new CustomEvent('variantiq:dataset-change', { detail: { fieldId: id, datasetId: dataset } });
+                window.dispatchEvent(event);
+            }}
         />
     );
 }
@@ -215,12 +244,25 @@ function RenderFieldNodeById({
 // MAIN BUILDER
 // ----------------------------------------------------
 
-export function VisualRuleBuilder({ fields, rules, onSaveRules }: VisualRuleBuilderProps) {
+export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules }: VisualRuleBuilderProps) {
     const [activeId, setActiveId] = useState<string | null>(null);
     const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(new Set());
 
     // tree shape: { "root": [id], "field1::opt1": [id, id] }
     const [tree, setTree] = useState<Record<string, string[]>>({ root: [] });
+    const [fieldDatasetMap, setFieldDatasetMap] = useState<Record<string, string>>({});
+
+    useEffect(() => {
+        const handler = (e: any) => {
+            setFieldDatasetMap(prev => ({ ...prev, [e.detail.fieldId]: e.detail.datasetId }));
+        };
+        window.addEventListener('variantiq:dataset-change', handler);
+        return () => window.removeEventListener('variantiq:dataset-change', handler);
+    }, []);
+
+    useMemo(() => {
+        globalDatasets = datasets || [];
+    }, [datasets]);
 
     const handleToggleCollapse = (id: string) => {
         setCollapsedNodes(prev => {
@@ -239,6 +281,10 @@ export function VisualRuleBuilder({ fields, rules, onSaveRules }: VisualRuleBuil
         globalTree = tree;
     }, [tree]);
 
+    useEffect(() => {
+        globalFieldDatasetMap = fieldDatasetMap;
+    }, [fieldDatasetMap]);
+
     // Init tree on load
     useEffect(() => {
         const newTree: Record<string, string[]> = { root: [] };
@@ -251,6 +297,7 @@ export function VisualRuleBuilder({ fields, rules, onSaveRules }: VisualRuleBuil
         });
 
         const fieldsInTree = new Set<string>();
+        const newFieldDatasetMap: Record<string, string> = {};
 
         rules.forEach(r => {
             // Right now the visual builder just maps the SHOW cascade
@@ -265,12 +312,20 @@ export function VisualRuleBuilder({ fields, rules, onSaveRules }: VisualRuleBuil
                         fieldsInTree.add(r.targetFieldId);
                     }
                 }
+            } else if (r.actionType === "LIMIT_OPTIONS_DATASET") {
+                try {
+                    const parsed = typeof r.targetOptionsJson === 'string' ? JSON.parse(r.targetOptionsJson) : r.targetOptionsJson;
+                    if (parsed && parsed.datasetId) {
+                        newFieldDatasetMap[r.targetFieldId] = parsed.datasetId;
+                    }
+                } catch (e) { }
             }
         });
 
         // Anything not nested sits at root (unconditional)
         newTree.root = fields.map(f => f.id).filter(id => !fieldsInTree.has(id));
         setTree(newTree);
+        setFieldDatasetMap(newFieldDatasetMap);
     }, [fields, rules]);
 
     // -------------------------
@@ -370,6 +425,15 @@ export function VisualRuleBuilder({ fields, rules, onSaveRules }: VisualRuleBuil
                     actionType: "SHOW",
                     conditionsJson: [{ fieldId: parentFieldId, operator: "EQUALS", value: parentValue }],
                 });
+
+                if (fieldDatasetMap[childId]) {
+                    compiledRules.push({
+                        targetFieldId: childId,
+                        actionType: "LIMIT_OPTIONS_DATASET",
+                        targetOptionsJson: { datasetId: fieldDatasetMap[childId] },
+                        conditionsJson: [{ fieldId: parentFieldId, operator: "EQUALS", value: parentValue }],
+                    });
+                }
             });
         });
 

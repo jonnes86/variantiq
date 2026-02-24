@@ -30,12 +30,12 @@ import { useState, useEffect } from "react";
 import { authenticate } from "../shopify.server";
 import { VisualRuleBuilder } from "../components/VisualRuleBuilder";
 
-export async function loader({ request, params }: LoaderFunctionArgs) {
+export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   try {
     const { session, admin } = await authenticate.admin(request);
     if (!session) return redirect("/auth/login");
 
-    const templateId = params.id;
+    const templateId = params.id as string;
     if (!templateId) return redirect("/app");
 
     const template = await prisma.template.findFirst({
@@ -43,7 +43,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       include: {
         fields: { orderBy: { sort: "asc" } },
         rules: { orderBy: { sort: "asc" } },
-        links: { include: { template: true } },
+        links: { select: { productGid: true } }, // Changed to select productGid only
       },
     });
 
@@ -74,12 +74,21 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       }
     }
 
-    return json({ template, linkedProductsData });
+    const datasets = await prisma.dataset.findMany({
+      where: { shop: session.shop },
+      orderBy: { name: "asc" },
+    });
+
+    return json({
+      template,
+      linkedProductsData, // Keep this from original loader
+      datasets,
+    });
   } catch (error) {
     console.error("Loader Error:", error);
     throw new Response("Unexpected Server Error", { status: 500 });
   }
-}
+};
 
 export async function action({ request, params }: ActionFunctionArgs) {
   const { session } = await authenticate.admin(request);
@@ -293,6 +302,39 @@ export async function action({ request, params }: ActionFunctionArgs) {
     return json({ success: true });
   }
 
+  // Bulk save rules (for VisualRuleBuilder)
+  if (intent === "bulkSaveRules") {
+    const rulesJsonStr = String(form.get("rulesJson") || "[]");
+    let newRulesData: any[] = [];
+    try {
+      newRulesData = JSON.parse(rulesJsonStr);
+    } catch (e) {
+      console.error("Failed to parse rulesJson for bulkSaveRules", e);
+      return json({ error: "Invalid rules data" }, { status: 400 });
+    }
+
+    // Delete existing rules for this template
+    await prisma.rule.deleteMany({
+      where: { templateId },
+    });
+
+    // Create new rules
+    const rulesToCreate = newRulesData.map((rule, index) => ({
+      templateId,
+      conditionsJson: rule.conditionsJson,
+      targetFieldId: rule.targetFieldId,
+      actionType: rule.actionType,
+      targetOptionsJson: rule.targetOptionsJson,
+      sort: index + 1, // Maintain order
+    }));
+
+    await prisma.rule.createMany({
+      data: rulesToCreate,
+    });
+
+    return json({ success: true });
+  }
+
   // Delete rule
   if (intent === "deleteRule") {
     const ruleId = String(form.get("ruleId") || "");
@@ -374,7 +416,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
 }
 
 export default function TemplateDetail() {
-  const { template, linkedProductsData } = useLoaderData<typeof loader>();
+  const { template, linkedProductsData, datasets } = useLoaderData<typeof loader>();
   const submit = useSubmit();
   const [searchParams] = useSearchParams();
   const initialTab = searchParams.get("tab") === "products" ? 1 : 0;
@@ -1206,6 +1248,7 @@ export default function TemplateDetail() {
           <VisualRuleBuilder
             fields={template.fields}
             rules={template.rules}
+            datasets={datasets}
             onSaveRules={(newRules) => {
               submit(
                 { _intent: "bulkSaveRules", rulesJson: JSON.stringify(newRules) },
