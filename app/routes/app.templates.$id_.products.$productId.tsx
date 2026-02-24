@@ -763,7 +763,7 @@ export default function ProductOverrideDetail() {
                                                                 {rule.actionType}
                                                                 <Text as="span" fontWeight="bold"> [{targetLabel}]</Text>
                                                                 {rule.actionType === 'LIMIT_OPTIONS' && rule.targetOptionsJson && (
-                                                                    <Text as="span"> allowing only: {rule.targetOptionsJson.join(', ')}</Text>
+                                                                    <Text as="span"> allowing only: {(Array.isArray(rule.targetOptionsJson) ? rule.targetOptionsJson : (typeof rule.targetOptionsJson === 'string' ? JSON.parse(rule.targetOptionsJson || "[]") : [])).join(', ')}</Text>
                                                                 )}
                                                                 {rule.actionType === 'LIMIT_OPTIONS_DATASET' && (() => {
                                                                     let dId = "";

@@ -73,7 +73,7 @@ function SortableFieldListItem({ field, handleEditFieldClick, handleDeleteField 
               </Text>
               {field.optionsJson && (
                 <Text as="p" variant="bodySm">
-                  Options: {field.optionsJson.map((opt: string) => {
+                  Options: {(Array.isArray(field.optionsJson) ? field.optionsJson : (typeof field.optionsJson === 'string' ? JSON.parse(field.optionsJson || "[]") : [])).map((opt: string) => {
                     const price = field.priceAdjustmentsJson?.[opt];
                     return price ? `${opt} (+$${price})` : opt;
                   }).join(", ")}
