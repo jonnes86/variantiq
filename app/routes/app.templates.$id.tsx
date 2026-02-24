@@ -917,30 +917,33 @@ export default function TemplateDetail() {
           <InlineGrid columns="1fr auto">
             <BlockStack gap="200">
               <Text as="h3" variant="headingMd">
-                Cascading Rules
+                Cascading Rules Architecture
               </Text>
               <Text as="p">
-                Build advanced logic paths to dynamically show, hide, or limit field options based on what the customer has already selected. This makes your product pages cleaner by only showing relevant options.
+                Easily dictate exactly when specific product fields should be shown based on what the customer has already selected using the Drag & Drop Visual Canvas.
               </Text>
               <Card background="bg-surface-secondary">
                 <BlockStack gap="200">
-                  <Text as="h4" variant="headingSm">💡 How it works (Examples):</Text>
+                  <Text as="h4" variant="headingSm">💡 How the Visual Builder Works:</Text>
 
                   <Text as="p" variant="bodyMd">
-                    <Text as="strong">Scenario 1 (Limiting Options):</Text><br />
-                    Imagine you sell Clothing. You only want the "Size" dropdown to appear if they choose "Clothing", and if it's a "T-Shirt", you want to restrict the sizes.<br />
-                    <Text as="span" fontWeight="bold">IF</Text> [Category] is "Clothing"<br />
-                    <Text as="span" fontWeight="bold">AND IF</Text> [Type] is "T-Shirt"<br />
-                    <Text as="span" fontWeight="bold">THEN LIMIT</Text> [Size] to only allow "S, M, L, XL"
+                    <Text as="strong">Step 1 (Unassigned):</Text><br />
+                    Fields that exist in the template but aren't governed by any specific logic remain in the <Text as="strong">Unassigned Pool</Text>. These will never naturally render to a customer if they aren't on the canvas.
                   </Text>
 
                   <Divider />
 
                   <Text as="p" variant="bodyMd">
-                    <Text as="strong">Scenario 2 (Hiding Options):</Text><br />
-                    Imagine you have a "Gift Wrap ($5)" checkbox, but it's not available for oversized items like "Furniture".<br />
-                    <Text as="span" fontWeight="bold">IF</Text> [Category] is "Furniture"<br />
-                    <Text as="span" fontWeight="bold">THEN HIDE</Text> [Gift Wrap]
+                    <Text as="strong">Step 2 (The Root Canvas):</Text><br />
+                    Dragging fields directly onto the <Text as="strong">Root Canvas</Text> will make them unconditionally visible to every customer on this product.
+                  </Text>
+
+                  <Divider />
+
+                  <Text as="p" variant="bodyMd">
+                    <Text as="strong">Step 3 (Nesting Dependencies):</Text><br />
+                    If you have an "Apparel Type" field with the options "Shirt" and "Pants", two sub-boxes (dropzones) will appear beneath the Apparel Type field.<br />
+                    By dragging a "Shirt Size" field directly into the "↳ IF is Apparel Type: Shirt" dropzone, the system automatically builds the cascade so that the Shirt Size dropdown ONLY appears when "Shirt" is chosen!
                   </Text>
                 </BlockStack>
               </Card>

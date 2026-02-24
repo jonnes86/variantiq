@@ -57,7 +57,19 @@ interface VisualRuleBuilderProps {
 // COMPONENTS
 // ----------------------------------------------------
 
-function SortableFieldNode({ field, options, childrenObj }: { field: Field, options: string[], childrenObj?: Record<string, string[]> }) {
+function SortableFieldNode({
+    field,
+    options,
+    childrenObj,
+    collapsedNodes,
+    onToggleCollapse
+}: {
+    field: Field,
+    options: string[],
+    childrenObj?: Record<string, string[]>,
+    collapsedNodes: Set<string>,
+    onToggleCollapse: (id: string) => void
+}) {
     const {
         attributes,
         listeners,
@@ -85,16 +97,26 @@ function SortableFieldNode({ field, options, childrenObj }: { field: Field, opti
                         </div>
                         <div style={{ flex: 1 }}>
                             <Text as="span" variant="bodyMd" fontWeight="semibold">
-                                {field.name}
+                                {field.label || field.name}
                             </Text>
                             <Text as="span" variant="bodySm" tone="subdued">
-                                {" "}— {field.type}
+                                {" "} {field.label ? `(Internal: ${field.name})` : `— ${field.type}`}
                             </Text>
                         </div>
+
+                        {options.length > 0 && (
+                            <Button
+                                size="micro"
+                                variant="tertiary"
+                                onClick={() => onToggleCollapse(field.id)}
+                            >
+                                {collapsedNodes.has(field.id) ? `Expand ${options.length} Options` : `Collapse Options`}
+                            </Button>
+                        )}
                     </InlineStack>
 
                     {/* Child Dropzones for Options */}
-                    {options.length > 0 && (
+                    {options.length > 0 && !collapsedNodes.has(field.id) && (
                         <div style={{ marginLeft: "28px", marginTop: "8px", display: "flex", flexDirection: "column", gap: "12px" }}>
                             {options.map((opt) => {
                                 const dropId = `${field.id}::${opt}`;
@@ -114,7 +136,14 @@ function SortableFieldNode({ field, options, childrenObj }: { field: Field, opti
                                                             Drop fields here to show...
                                                         </Text>
                                                     ) : (
-                                                        nestedChildIds.map(childId => <RenderFieldNodeById key={childId} fieldId={childId} />)
+                                                        nestedChildIds.map(childId => (
+                                                            <RenderFieldNodeById
+                                                                key={childId}
+                                                                fieldId={childId}
+                                                                collapsedNodes={collapsedNodes}
+                                                                onToggleCollapse={onToggleCollapse}
+                                                            />
+                                                        ))
                                                     )}
                                                 </div>
                                             </SortableContext>
@@ -134,11 +163,28 @@ function SortableFieldNode({ field, options, childrenObj }: { field: Field, opti
 let globalFieldsMap: Record<string, Field> = {};
 let globalTree: Record<string, string[]> = {};
 
-function RenderFieldNodeById({ fieldId }: { fieldId: string }) {
+function RenderFieldNodeById({
+    fieldId,
+    collapsedNodes,
+    onToggleCollapse
+}: {
+    fieldId: string,
+    collapsedNodes: Set<string>,
+    onToggleCollapse: (id: string) => void
+}) {
     const f = globalFieldsMap[fieldId];
     if (!f) return null;
     const opts = (Array.isArray(f.optionsJson) ? f.optionsJson : []) as string[];
-    return <SortableFieldNode field={f} options={opts} childrenObj={globalTree} />;
+
+    return (
+        <SortableFieldNode
+            field={f}
+            options={opts}
+            childrenObj={globalTree}
+            collapsedNodes={collapsedNodes}
+            onToggleCollapse={onToggleCollapse}
+        />
+    );
 }
 
 
@@ -148,9 +194,19 @@ function RenderFieldNodeById({ fieldId }: { fieldId: string }) {
 
 export function VisualRuleBuilder({ fields, rules, onSaveRules }: VisualRuleBuilderProps) {
     const [activeId, setActiveId] = useState<string | null>(null);
+    const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(new Set());
 
     // tree shape: { "unassigned": [id, id], "root": [id], "field1::opt1": [id, id] }
     const [tree, setTree] = useState<Record<string, string[]>>({ unassigned: [], root: [] });
+
+    const handleToggleCollapse = (id: string) => {
+        setCollapsedNodes(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    };
 
     useMemo(() => {
         fields.forEach(f => { globalFieldsMap[f.id] = f; });
@@ -324,7 +380,14 @@ export function VisualRuleBuilder({ fields, rules, onSaveRules }: VisualRuleBuil
 
                         <SortableContext id="unassigned" items={tree["unassigned"] || []} strategy={verticalListSortingStrategy}>
                             <div style={{ minHeight: "200px" }}>
-                                {tree["unassigned"]?.map((id) => <RenderFieldNodeById key={id} fieldId={id} />)}
+                                {tree["unassigned"]?.map((id) => (
+                                    <RenderFieldNodeById
+                                        key={id}
+                                        fieldId={id}
+                                        collapsedNodes={collapsedNodes}
+                                        onToggleCollapse={handleToggleCollapse}
+                                    />
+                                ))}
                             </div>
                         </SortableContext>
                     </BlockStack>
@@ -353,7 +416,14 @@ export function VisualRuleBuilder({ fields, rules, onSaveRules }: VisualRuleBuil
                                     {tree["root"]?.length === 0 && (
                                         <Text as="p" tone="subdued">Drop unconditional fields here...</Text>
                                     )}
-                                    {tree["root"]?.map((id) => <RenderFieldNodeById key={id} fieldId={id} />)}
+                                    {tree["root"]?.map((id) => (
+                                        <RenderFieldNodeById
+                                            key={id}
+                                            fieldId={id}
+                                            collapsedNodes={collapsedNodes}
+                                            onToggleCollapse={handleToggleCollapse}
+                                        />
+                                    ))}
                                 </div>
                             </SortableContext>
                         </Box>

@@ -668,11 +668,25 @@ export default function ProductOverrideDetail() {
                         </Text>
                         <Card background="bg-surface-secondary">
                             <BlockStack gap="200">
-                                <Text as="h4" variant="headingSm">💡 How it works (Example Scenario):</Text>
+                                <Text as="h4" variant="headingSm">💡 How the Visual Builder Works:</Text>
                                 <Text as="p" variant="bodyMd">
-                                    Imagine this specific product is a unique "Customizable Watch" that has a special "Band Type" that the global template doesn't know about. You only want the "Band Color" dropdown to appear if they choose a "Leather" band type.<br /><br />
-                                    <Text as="span" fontWeight="bold">IF</Text> [Band Type] is "Leather"<br />
-                                    <Text as="span" fontWeight="bold">THEN SHOW</Text> [Band Color]
+                                    <Text as="strong">Step 1 (Unassigned):</Text><br />
+                                    Fields that exist in the template but aren't governed by any specific logic remain in the <Text as="strong">Unassigned Pool</Text>. These will never naturally render to a customer if they aren't on the canvas.
+                                </Text>
+
+                                <Divider />
+
+                                <Text as="p" variant="bodyMd">
+                                    <Text as="strong">Step 2 (The Root Canvas):</Text><br />
+                                    Dragging fields directly onto the <Text as="strong">Root Canvas</Text> will make them unconditionally visible to every customer on this product.
+                                </Text>
+
+                                <Divider />
+
+                                <Text as="p" variant="bodyMd">
+                                    <Text as="strong">Step 3 (Nesting Dependencies):</Text><br />
+                                    If you have an "Apparel Type" field with the options "Shirt" and "Pants", two sub-boxes (dropzones) will appear beneath the Apparel Type field.<br />
+                                    By dragging a "Shirt Size" field directly into the "↳ IF is Apparel Type: Shirt" dropzone, the system automatically builds the cascade so that the Shirt Size dropdown ONLY appears when "Shirt" is chosen!
                                 </Text>
                             </BlockStack>
                         </Card>
