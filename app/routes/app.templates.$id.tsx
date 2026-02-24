@@ -145,8 +145,9 @@ export async function action({ request, params }: ActionFunctionArgs) {
     }
 
     // Parse options and prices for select/radio/checkbox
-    let optionsJson = null;
-    let priceAdjustmentsJson = null;
+    let optionsJson: any = null;
+    let priceAdjustmentsJson: any = null;
+    let variantMappingJson: any = null;
 
     if (["select", "radio", "checkbox"].includes(type) && optionsDataStr) {
       try {
@@ -155,18 +156,24 @@ export async function action({ request, params }: ActionFunctionArgs) {
           optionsJson = parsedOptions.map(o => o.label.trim()).filter(Boolean);
 
           const priceMap: Record<string, number> = {};
+          const mappingMap: Record<string, string> = {};
           let hasPrices = false;
+          let hasMappings = false;
+
           parsedOptions.forEach(o => {
             const price = parseFloat(o.price);
             if (!isNaN(price) && price > 0) {
               priceMap[o.label.trim()] = price;
               hasPrices = true;
             }
+            if (o.variantMapping && o.variantMapping.trim() !== "") {
+              mappingMap[o.label.trim()] = o.variantMapping.trim();
+              hasMappings = true;
+            }
           });
 
-          if (hasPrices) {
-            priceAdjustmentsJson = priceMap;
-          }
+          if (hasPrices) priceAdjustmentsJson = priceMap;
+          if (hasMappings) variantMappingJson = mappingMap;
         }
       } catch (e) {
         console.error("Failed to parse optionsData", e);
@@ -196,7 +203,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
           label,
           required,
           optionsJson: optionsJson as any,
-          priceAdjustmentsJson: priceAdjustmentsJson as any
+          priceAdjustmentsJson: priceAdjustmentsJson as any,
+          variantMappingJson: variantMappingJson as any
         }
       });
     } else {
@@ -209,6 +217,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
           required,
           optionsJson: optionsJson as any,
           priceAdjustmentsJson: priceAdjustmentsJson as any,
+          variantMappingJson: variantMappingJson as any,
           sort: sortOrder,
         },
       });
@@ -224,8 +233,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
     return json({ success: true });
   }
 
-  // Add rule
-  if (intent === "addRule") {
+  // Add or Edit rule
+  if (intent === "addRule" || intent === "editRule") {
     const conditionsStr = String(form.get("conditionsJson") || "[]");
     const targetFieldId = String(form.get("targetFieldId") || "");
     const actionType = String(form.get("actionType") || "SHOW");
@@ -247,22 +256,37 @@ export async function action({ request, params }: ActionFunctionArgs) {
       return json({ error: "Conditions and Target Field required" }, { status: 400 });
     }
 
-    const maxSort = await prisma.rule.findFirst({
-      where: { templateId },
-      orderBy: { sort: "desc" },
-      select: { sort: true },
-    });
+    if (intent === "editRule") {
+      const ruleId = String(form.get("ruleId") || "");
+      if (!ruleId) return json({ error: "Rule ID required for edit" }, { status: 400 });
 
-    await prisma.rule.create({
-      data: {
-        templateId,
-        conditionsJson: conditionsJson as any,
-        targetFieldId,
-        actionType,
-        targetOptionsJson: targetOptionsJson as any,
-        sort: (maxSort?.sort || 0) + 1,
-      },
-    });
+      await prisma.rule.update({
+        where: { id: ruleId },
+        data: {
+          conditionsJson: conditionsJson as any,
+          targetFieldId,
+          actionType,
+          targetOptionsJson: targetOptionsJson as any,
+        }
+      });
+    } else {
+      const maxSort = await prisma.rule.findFirst({
+        where: { templateId },
+        orderBy: { sort: "desc" },
+        select: { sort: true },
+      });
+
+      await prisma.rule.create({
+        data: {
+          templateId,
+          conditionsJson: conditionsJson as any,
+          targetFieldId,
+          actionType,
+          targetOptionsJson: targetOptionsJson as any,
+          sort: (maxSort?.sort || 0) + 1,
+        },
+      });
+    }
 
     return json({ success: true });
   }
@@ -271,6 +295,61 @@ export async function action({ request, params }: ActionFunctionArgs) {
   if (intent === "deleteRule") {
     const ruleId = String(form.get("ruleId") || "");
     await prisma.rule.delete({ where: { id: ruleId } });
+    return json({ success: true });
+  }
+
+  // Reorder field
+  if (intent === "reorderField") {
+    const fieldId = String(form.get("fieldId") || "");
+    const direction = form.get("direction") === "up" ? -1 : 1;
+
+    // Get all fields for this template ordered by sort
+    const fields = await prisma.field.findMany({
+      where: { templateId },
+      orderBy: { sort: 'asc' }
+    });
+
+    const currentIndex = fields.findIndex(f => f.id === fieldId);
+    if (currentIndex === -1) return json({ error: "Field not found" }, { status: 404 });
+    const targetIndex = currentIndex + direction;
+
+    if (targetIndex >= 0 && targetIndex < fields.length) {
+      const targetField = fields[targetIndex];
+      const currentField = fields[currentIndex];
+
+      // Swap their sorts
+      await prisma.$transaction([
+        prisma.field.update({ where: { id: currentField.id }, data: { sort: targetField.sort } }),
+        prisma.field.update({ where: { id: targetField.id }, data: { sort: currentField.sort } })
+      ]);
+    }
+    return json({ success: true });
+  }
+
+  // Reorder rule
+  if (intent === "reorderRule") {
+    const ruleId = String(form.get("ruleId") || "");
+    const direction = form.get("direction") === "up" ? -1 : 1;
+
+    const rules = await prisma.rule.findMany({
+      where: { templateId },
+      orderBy: { sort: 'asc' }
+    });
+
+    const currentIndex = rules.findIndex(r => r.id === ruleId);
+    if (currentIndex === -1) return json({ error: "Rule not found" }, { status: 404 });
+    const targetIndex = currentIndex + direction;
+
+    if (targetIndex >= 0 && targetIndex < rules.length) {
+      const targetRule = rules[targetIndex];
+      const currentRule = rules[currentIndex];
+
+      // Swap their sorts
+      await prisma.$transaction([
+        prisma.rule.update({ where: { id: currentRule.id }, data: { sort: targetRule.sort } }),
+        prisma.rule.update({ where: { id: targetRule.id }, data: { sort: currentRule.sort } })
+      ]);
+    }
     return json({ success: true });
   }
 
@@ -309,7 +388,7 @@ export default function TemplateDetail() {
   const [fieldName, setFieldName] = useState("");
   const [fieldLabel, setFieldLabel] = useState("");
   const [fieldRequired, setFieldRequired] = useState(false);
-  const [fieldOptionsList, setFieldOptionsList] = useState<Array<{ label: string, price: string }>>([]);
+  const [fieldOptionsList, setFieldOptionsList] = useState<Array<{ label: string, price: string, variantMapping: string }>>([]);
 
   useEffect(() => {
     setTemplateName(template.name);
@@ -336,6 +415,7 @@ export default function TemplateDetail() {
 
   // Rules form state
   const [showRuleForm, setShowRuleForm] = useState(false);
+  const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
   const [ruleConditions, setRuleConditions] = useState<Array<{ fieldId: string, operator: string, value: string }>>([]);
   const [tempCondFieldId, setTempCondFieldId] = useState("");
   const [tempCondOperator, setTempCondOperator] = useState("EQUALS");
@@ -371,24 +451,53 @@ export default function TemplateDetail() {
 
   const handleSaveRule = () => {
     submit({
-      _intent: "addRule",
+      _intent: editingRuleId ? "editRule" : "addRule",
+      ...(editingRuleId ? { ruleId: editingRuleId } : {}),
       conditionsJson: JSON.stringify(ruleConditions),
       targetFieldId: ruleTargetFieldId,
       actionType: ruleActionType,
       targetOptionsJson: ruleActionType === "LIMIT_OPTIONS" ? JSON.stringify(ruleTargetOptions) : "null",
     }, { method: "post" });
 
+    resetRuleForm();
+  };
+
+  const resetRuleForm = () => {
     setShowRuleForm(false);
+    setEditingRuleId(null);
     setRuleConditions([]);
     setRuleTargetFieldId("");
     setRuleActionType("SHOW");
     setRuleTargetOptions([]);
   };
 
+  const handleEditRuleClick = (rule: any) => {
+    setEditingRuleId(rule.id);
+    try {
+      setRuleConditions(rule.conditionsJson as any || []);
+    } catch (e) { setRuleConditions([]); }
+    setRuleTargetFieldId(rule.targetFieldId);
+    setRuleActionType(rule.actionType);
+    try {
+      setRuleTargetOptions(rule.targetOptionsJson as string[] || []);
+    } catch (e) { setRuleTargetOptions([]); }
+
+    setShowRuleForm(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   const handleDeleteRule = (ruleId: string) => {
     if (confirm("Delete this rule?")) {
       submit({ _intent: "deleteRule", ruleId }, { method: "post" });
     }
+  };
+
+  const handleMoveField = (fieldId: string, direction: "up" | "down") => {
+    submit({ _intent: "reorderField", fieldId, direction }, { method: "post" });
+  };
+
+  const handleMoveRule = (ruleId: string, direction: "up" | "down") => {
+    submit({ _intent: "reorderRule", ruleId, direction }, { method: "post" });
   };
 
   const handleSaveAppearance = () => {
@@ -436,7 +545,8 @@ export default function TemplateDetail() {
     const initialOptions = field.optionsJson
       ? field.optionsJson.map((opt: string) => ({
         label: opt,
-        price: field.priceAdjustmentsJson?.[opt] ? String(field.priceAdjustmentsJson[opt]) : ""
+        price: field.priceAdjustmentsJson?.[opt] ? String(field.priceAdjustmentsJson[opt]) : "",
+        variantMapping: field.variantMappingJson?.[opt] ? String(field.variantMappingJson[opt]) : ""
       }))
       : [];
     setFieldOptionsList(initialOptions);
@@ -553,9 +663,9 @@ export default function TemplateDetail() {
 
                 {["select", "radio", "checkbox"].includes(fieldType) && (
                   <BlockStack gap="300">
-                    <Text as="h5" variant="headingSm">Options & Pricing</Text>
+                    <Text as="h5" variant="headingSm">Options, Pricing & Shopify Variant Sync</Text>
                     {fieldOptionsList.map((opt, index) => (
-                      <InlineGrid columns="1fr 120px auto" gap="200" key={index} alignItems="center">
+                      <InlineGrid columns="1fr 100px 170px auto" gap="200" key={index} alignItems="center">
                         <TextField
                           labelHidden
                           label={`Option ${index + 1}`}
@@ -582,6 +692,18 @@ export default function TemplateDetail() {
                           placeholder="0.00"
                           autoComplete="off"
                         />
+                        <TextField
+                          labelHidden
+                          label={`Variant Mapping (Shopify ID)`}
+                          value={opt.variantMapping}
+                          onChange={(val) => {
+                            const newList = [...fieldOptionsList];
+                            newList[index].variantMapping = val;
+                            setFieldOptionsList(newList);
+                          }}
+                          placeholder="Variant ID (Optional)"
+                          autoComplete="off"
+                        />
                         <Button
                           tone="critical"
                           variant="plain"
@@ -593,7 +715,7 @@ export default function TemplateDetail() {
                       </InlineGrid>
                     ))}
                     <InlineStack>
-                      <Button onClick={() => setFieldOptionsList([...fieldOptionsList, { label: "", price: "" }])}>
+                      <Button onClick={() => setFieldOptionsList([...fieldOptionsList, { label: "", price: "", variantMapping: "" }])}>
                         Add Option
                       </Button>
                     </InlineStack>
@@ -661,6 +783,12 @@ export default function TemplateDetail() {
                     )}
                   </BlockStack>
                   <InlineStack gap="200">
+                    <Button onClick={() => handleMoveField(field.id, "up")}>
+                      ↑
+                    </Button>
+                    <Button onClick={() => handleMoveField(field.id, "down")}>
+                      ↓
+                    </Button>
                     <Button onClick={() => handleEditFieldClick(field)}>
                       Edit
                     </Button>
@@ -772,7 +900,7 @@ export default function TemplateDetail() {
               </Card>
             </BlockStack>
             {!showRuleForm && (
-              <Button onClick={() => setShowRuleForm(true)} disabled={template.fields.length < 2}>
+              <Button onClick={() => { resetRuleForm(); setShowRuleForm(true); }} disabled={template.fields.length < 2}>
                 Add Rule
               </Button>
             )}
@@ -787,7 +915,7 @@ export default function TemplateDetail() {
           {showRuleForm && (
             <Card background="bg-surface-secondary">
               <BlockStack gap="500">
-                <Text as="h4" variant="headingSm">New Logic Rule</Text>
+                <Text as="h4" variant="headingSm">{editingRuleId ? "Edit Logic Rule" : "New Logic Rule"}</Text>
 
                 {/* Conditions Builder */}
                 <BlockStack gap="300">
@@ -926,7 +1054,7 @@ export default function TemplateDetail() {
                 </BlockStack>
 
                 <InlineGrid columns={2} gap="200">
-                  <Button onClick={() => setShowRuleForm(false)}>
+                  <Button onClick={resetRuleForm}>
                     Cancel
                   </Button>
                   <Button
@@ -979,12 +1107,23 @@ export default function TemplateDetail() {
                         THEN {actionText}
                       </Text>
                     </BlockStack>
-                    <Button
-                      onClick={() => handleDeleteRule(rule.id)}
-                      tone="critical"
-                    >
-                      Delete
-                    </Button>
+                    <InlineStack gap="200">
+                      <Button onClick={() => handleMoveRule(rule.id, "up")}>
+                        ↑
+                      </Button>
+                      <Button onClick={() => handleMoveRule(rule.id, "down")}>
+                        ↓
+                      </Button>
+                      <Button onClick={() => handleEditRuleClick(rule)}>
+                        Edit
+                      </Button>
+                      <Button
+                        onClick={() => handleDeleteRule(rule.id)}
+                        tone="critical"
+                      >
+                        Delete
+                      </Button>
+                    </InlineStack>
                   </InlineStack>
                 </ResourceItem>
               );

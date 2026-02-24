@@ -168,11 +168,12 @@ export default function ProductOverrideDetail() {
 
     // Field form state
     const [showFieldForm, setShowFieldForm] = useState(false);
+    const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
     const [fieldType, setFieldType] = useState("text");
     const [fieldName, setFieldName] = useState("");
     const [fieldLabel, setFieldLabel] = useState("");
     const [fieldRequired, setFieldRequired] = useState(false);
-    const [fieldOptionsList, setFieldOptionsList] = useState<Array<{ label: string, price: string }>>([]);
+    const [fieldOptionsList, setFieldOptionsList] = useState<Array<{ label: string, price: string, variantMapping: string }>>([]);
 
     const handleAddField = () => {
         if (!fieldType || !fieldName || !fieldLabel) return;
@@ -180,44 +181,110 @@ export default function ProductOverrideDetail() {
         let optionsJson = null;
         let priceAdjustmentsJson: Record<string, number> | null = null;
 
+        let variantMappingJson: Record<string, string> | null = null;
+
         if (["select", "radio", "checkbox"].includes(fieldType) && fieldOptionsList.length > 0) {
             const validOptions = fieldOptionsList.filter(o => o.label.trim() !== "");
             optionsJson = validOptions.map(o => o.label.trim());
 
             let hasPrices = false;
+            let hasMappings = false;
             const priceMap: Record<string, number> = {};
+            const mappingMap: Record<string, string> = {};
+
             validOptions.forEach(o => {
                 const price = parseFloat(o.price);
                 if (!isNaN(price) && price > 0) {
                     priceMap[o.label.trim()] = price;
                     hasPrices = true;
                 }
+                if (o.variantMapping && o.variantMapping.trim() !== "") {
+                    mappingMap[o.label.trim()] = o.variantMapping.trim();
+                    hasMappings = true;
+                }
             });
-            if (hasPrices) {
-                priceAdjustmentsJson = priceMap;
-            }
+            if (hasPrices) priceAdjustmentsJson = priceMap;
+            if (hasMappings) variantMappingJson = mappingMap;
         }
 
-        const newField = {
-            id: "local_" + generateId(),
-            type: fieldType,
-            name: fieldName,
-            label: fieldLabel,
-            required: fieldRequired,
-            optionsJson,
-            priceAdjustmentsJson,
-            sort: fields.length + 1
-        };
+        if (editingFieldId) {
+            setFields(fields.map(f => f.id === editingFieldId ? {
+                ...f,
+                type: fieldType,
+                name: fieldName,
+                label: fieldLabel,
+                required: fieldRequired,
+                optionsJson,
+                priceAdjustmentsJson,
+                variantMappingJson,
+            } : f));
+        } else {
+            const newField = {
+                id: "local_" + generateId(),
+                type: fieldType,
+                name: fieldName,
+                label: fieldLabel,
+                required: fieldRequired,
+                optionsJson,
+                priceAdjustmentsJson,
+                variantMappingJson,
+                sort: fields.length + 1
+            };
+            setFields([...fields, newField]);
+        }
 
-        setFields([...fields, newField]);
+        resetFieldForm();
+    };
 
-        // reset form
+    const resetFieldForm = () => {
         setFieldType("text");
         setFieldName("");
         setFieldLabel("");
         setFieldRequired(false);
         setFieldOptionsList([]);
+        setEditingFieldId(null);
         setShowFieldForm(false);
+    };
+
+    const handleEditFieldClick = (field: any) => {
+        setEditingFieldId(field.id);
+        setFieldType(field.type);
+        setFieldName(field.name);
+        setFieldLabel(field.label);
+        setFieldRequired(field.required);
+
+        const list: Array<{ label: string, price: string, variantMapping: string }> = [];
+        if (field.optionsJson && Array.isArray(field.optionsJson)) {
+            field.optionsJson.forEach((opt: string) => {
+                const price = field.priceAdjustmentsJson?.[opt];
+                const mapping = field.variantMappingJson?.[opt];
+                list.push({
+                    label: opt,
+                    price: price ? price.toString() : "",
+                    variantMapping: mapping ? mapping.toString() : ""
+                });
+            });
+        }
+        setFieldOptionsList(list);
+
+        setShowFieldForm(true);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+    };
+
+    const handleMoveField = (fieldId: string, direction: "up" | "down") => {
+        const index = fields.findIndex(f => f.id === fieldId);
+        if (index === -1) return;
+        const newFields = [...fields];
+        if (direction === "up" && index > 0) {
+            const temp = newFields[index];
+            newFields[index] = newFields[index - 1];
+            newFields[index - 1] = temp;
+        } else if (direction === "down" && index < fields.length - 1) {
+            const temp = newFields[index];
+            newFields[index] = newFields[index + 1];
+            newFields[index + 1] = temp;
+        }
+        setFields(newFields);
     };
 
     const handleDeleteField = (id: string) => {
@@ -246,6 +313,7 @@ export default function ProductOverrideDetail() {
 
     // Rule visual builder state
     const [showRuleForm, setShowRuleForm] = useState(false);
+    const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
     const [ruleConditions, setRuleConditions] = useState<any[]>([]);
     const [targetFieldId, setTargetFieldId] = useState("");
     const [actionType, setActionType] = useState("SHOW");
@@ -283,23 +351,67 @@ export default function ProductOverrideDetail() {
             if (targetOptionsJson.length === 0) return; // Must select at least one limit option
         }
 
-        const newRule = {
-            id: "local_" + generateId(),
-            conditionsJson: validConditions,
-            targetFieldId,
-            actionType,
-            targetOptionsJson,
-            sort: rules.length + 1
-        };
+        if (editingRuleId) {
+            setRules(rules.map(r => r.id === editingRuleId ? {
+                ...r,
+                conditionsJson: validConditions,
+                targetFieldId,
+                actionType,
+                targetOptionsJson,
+            } : r));
+        } else {
+            const newRule = {
+                id: "local_" + generateId(),
+                conditionsJson: validConditions,
+                targetFieldId,
+                actionType,
+                targetOptionsJson,
+                sort: rules.length + 1
+            };
+            setRules([...rules, newRule]);
+        }
 
-        setRules([...rules, newRule]);
+        resetRuleForm();
+    };
 
-        // Reset rule form
+    const resetRuleForm = () => {
         setShowRuleForm(false);
+        setEditingRuleId(null);
         setRuleConditions([]);
         setTargetFieldId("");
         setActionType("SHOW");
         setSelectedLimitOptions([]);
+    };
+
+    const handleEditRuleClick = (rule: any) => {
+        setEditingRuleId(rule.id);
+        try {
+            setRuleConditions(rule.conditionsJson || []);
+        } catch (e) { setRuleConditions([]); }
+        setTargetFieldId(rule.targetFieldId);
+        setActionType(rule.actionType);
+        try {
+            setSelectedLimitOptions(rule.targetOptionsJson || []);
+        } catch (e) { setSelectedLimitOptions([]); }
+
+        setShowRuleForm(true);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+    };
+
+    const handleMoveRule = (ruleId: string, direction: "up" | "down") => {
+        const index = rules.findIndex(r => r.id === ruleId);
+        if (index === -1) return;
+        const newRules = [...rules];
+        if (direction === "up" && index > 0) {
+            const temp = newRules[index];
+            newRules[index] = newRules[index - 1];
+            newRules[index - 1] = temp;
+        } else if (direction === "down" && index < rules.length - 1) {
+            const temp = newRules[index];
+            newRules[index] = newRules[index + 1];
+            newRules[index + 1] = temp;
+        }
+        setRules(newRules);
     };
 
     const handleDeleteRule = (id: string) => {
@@ -357,9 +469,20 @@ export default function ProductOverrideDetail() {
                                                     </Text>
                                                 )}
                                             </BlockStack>
-                                            <Button tone="critical" onClick={() => handleDeleteField(field.id)}>
-                                                Remove
-                                            </Button>
+                                            <InlineStack gap="200">
+                                                <Button onClick={() => handleMoveField(field.id, "up")}>
+                                                    ↑
+                                                </Button>
+                                                <Button onClick={() => handleMoveField(field.id, "down")}>
+                                                    ↓
+                                                </Button>
+                                                <Button onClick={() => handleEditFieldClick(field)}>
+                                                    Edit
+                                                </Button>
+                                                <Button tone="critical" onClick={() => handleDeleteField(field.id)}>
+                                                    Remove
+                                                </Button>
+                                            </InlineStack>
                                         </InlineGrid>
                                     </ResourceItem>
                                 )}
@@ -376,7 +499,7 @@ export default function ProductOverrideDetail() {
                     {showFieldForm && (
                         <Card>
                             <BlockStack gap="400">
-                                <Text as="h3" variant="headingMd">New Field</Text>
+                                <Text as="h3" variant="headingMd">{editingFieldId ? "Edit Field" : "New Field"}</Text>
 
                                 <Select
                                     label="Field Type"
@@ -412,9 +535,9 @@ export default function ProductOverrideDetail() {
 
                                 {["select", "radio", "checkbox"].includes(fieldType) && (
                                     <BlockStack gap="300">
-                                        <Text as="h5" variant="headingSm">Options & Pricing</Text>
+                                        <Text as="h5" variant="headingSm">Options, Pricing & Shopify Variant Sync</Text>
                                         {fieldOptionsList.map((opt, index) => (
-                                            <InlineGrid columns="1fr 120px auto" gap="200" key={index} alignItems="center">
+                                            <InlineGrid columns="1fr 100px 170px auto" gap="200" key={index} alignItems="center">
                                                 <TextField
                                                     labelHidden
                                                     label={`Option ${index + 1}`}
@@ -441,6 +564,18 @@ export default function ProductOverrideDetail() {
                                                     placeholder="0.00"
                                                     autoComplete="off"
                                                 />
+                                                <TextField
+                                                    labelHidden
+                                                    label={`Variant Mapping (Shopify ID)`}
+                                                    value={opt.variantMapping}
+                                                    onChange={(val) => {
+                                                        const newList = [...fieldOptionsList];
+                                                        newList[index].variantMapping = val;
+                                                        setFieldOptionsList(newList);
+                                                    }}
+                                                    placeholder="Variant ID (Optional)"
+                                                    autoComplete="off"
+                                                />
                                                 <Button
                                                     tone="critical"
                                                     variant="plain"
@@ -452,7 +587,7 @@ export default function ProductOverrideDetail() {
                                             </InlineGrid>
                                         ))}
                                         <InlineStack>
-                                            <Button onClick={() => setFieldOptionsList([...fieldOptionsList, { label: "", price: "" }])}>
+                                            <Button onClick={() => setFieldOptionsList([...fieldOptionsList, { label: "", price: "", variantMapping: "" }])}>
                                                 Add Option
                                             </Button>
                                         </InlineStack>
@@ -460,15 +595,17 @@ export default function ProductOverrideDetail() {
                                 )}
 
                                 <InlineStack gap="300">
-                                    <Button onClick={() => setShowFieldForm(false)}>Cancel</Button>
-                                    <Button variant="primary" onClick={handleAddField}>Save Local Field</Button>
+                                    <Button onClick={resetFieldForm}>Cancel</Button>
+                                    <Button variant="primary" onClick={handleAddField}>
+                                        {editingFieldId ? "Save Local Field" : "Add Local Field"}
+                                    </Button>
                                 </InlineStack>
                             </BlockStack>
                         </Card>
                     )}
 
                     {!showFieldForm && (
-                        <Button variant="primary" onClick={() => setShowFieldForm(true)}>Add Custom Field</Button>
+                        <Button variant="primary" onClick={() => { resetFieldForm(); setShowFieldForm(true); }}>Add Custom Field</Button>
                     )}
                 </BlockStack>
             ),
@@ -535,7 +672,18 @@ export default function ProductOverrideDetail() {
                                                     </Text>
                                                 </BlockStack>
 
-                                                <Button tone="critical" onClick={() => handleDeleteRule(rule.id)}>Remove</Button>
+                                                <InlineStack gap="200">
+                                                    <Button onClick={() => handleMoveRule(rule.id, "up")}>
+                                                        ↑
+                                                    </Button>
+                                                    <Button onClick={() => handleMoveRule(rule.id, "down")}>
+                                                        ↓
+                                                    </Button>
+                                                    <Button onClick={() => handleEditRuleClick(rule)}>
+                                                        Edit
+                                                    </Button>
+                                                    <Button tone="critical" onClick={() => handleDeleteRule(rule.id)}>Remove</Button>
+                                                </InlineStack>
                                             </InlineGrid>
                                         </ResourceItem>
                                     );
@@ -553,7 +701,7 @@ export default function ProductOverrideDetail() {
                     {showRuleForm && (
                         <Card>
                             <BlockStack gap="500">
-                                <Text as="h3" variant="headingMd">Build Custom Logic Rule</Text>
+                                <Text as="h3" variant="headingMd">{editingRuleId ? "Edit Custom Logic Rule" : "Build Custom Logic Rule"}</Text>
 
                                 <BlockStack gap="300">
                                     <Text as="h4" variant="headingSm">If Conditions (AND)</Text>
@@ -653,9 +801,9 @@ export default function ProductOverrideDetail() {
                                 </BlockStack>
 
                                 <InlineStack gap="300">
-                                    <Button onClick={() => setShowRuleForm(false)}>Cancel</Button>
+                                    <Button onClick={resetRuleForm}>Cancel</Button>
                                     <Button variant="primary" onClick={handleAddRule} disabled={ruleConditions.length === 0 || !targetFieldId}>
-                                        Save Local Rule
+                                        {editingRuleId ? "Save Local Rule" : "Add Local Rule"}
                                     </Button>
                                 </InlineStack>
                             </BlockStack>
@@ -663,7 +811,7 @@ export default function ProductOverrideDetail() {
                     )}
 
                     {!showRuleForm && (
-                        <Button variant="primary" onClick={() => setShowRuleForm(true)}>Add Custom Rule</Button>
+                        <Button variant="primary" onClick={() => { resetRuleForm(); setShowRuleForm(true); }}>Add Custom Rule</Button>
                     )}
                 </BlockStack>
             ),

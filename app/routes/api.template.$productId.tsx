@@ -44,10 +44,33 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     // Find the template link for this product
     const link = await prisma.productTemplateLink.findFirst({
       where: { productGid },
-      include: {
+      select: { // Select specific fields for the productTemplateLink itself
+        id: true,
+        shop: true,
+        createdAt: true,
+        productGid: true,
+        templateId: true,
+        customFieldsJson: true, // Ensure these are selected
+        customRulesJson: true,   // Ensure these are selected
         template: {
           include: {
-            fields: { orderBy: { sort: "asc" } },
+            fields: {
+              orderBy: { sort: "asc" },
+              select: {
+                id: true,
+                templateId: true,
+                name: true,
+                label: true,
+                type: true,
+                optionsJson: true,
+                priceAdjustmentsJson: true,
+                variantMappingJson: true, // Include variantMappingJson
+                required: true,
+                sort: true,
+                createdAt: true,
+                updatedAt: true,
+              },
+            },
             rules: { orderBy: { sort: "asc" } },
           },
         },

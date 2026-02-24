@@ -1,0 +1,49 @@
+
+> dev
+> prisma db push && shopify app dev
+
+Environment variables loaded from .env
+Prisma schema loaded from prisma\schema.prisma
+Datasource "db": PostgreSQL database "railway", schema "public" at "yamanote.proxy.rlwy.net:10253"
+
+The database is already in sync with the Prisma schema.
+
+Running generate... (Use --skip-generate to skip the generators)
+[2K[1A[2K[GRunning generate... - Prisma Client
+[2K[1A[2K[GΓ£ö Generated Prisma Client (v6.19.0) to .\node_modules\@prisma\client in 96ms
+
+Γò¡ΓöÇ error ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓò«
+Γöé                                                                              Γöé
+Γöé                                                                              Γöé
+Γöé  The Partners GraphQL API responded unsuccessfully with the HTTP status 422  Γöé
+Γöé   and errors:                                                                Γöé
+Γöé                                                                              Γöé
+Γöé  [                                                                           Γöé
+Γöé    {                                                                         Γöé
+Γöé      "message": "CLI version 3.77.0 is no longer supported. Please upgrade   Γöé
+Γöé  to a version equal or greater than 3.84.1"                                  Γöé
+Γöé    }                                                                         Γöé
+Γöé  ]                                                                           Γöé
+Γöé                                                                              Γöé
+Γöé  Request ID: 8f188b58-f12f-4b71-82ab-c17619eac29c-1771880555                 Γöé
+Γöé                                                                              Γöé
+Γöé                                                                              Γöé
+Γöé  To investigate the issue, examine this stack trace:                         Γöé
+Γöé    at makeRequest (Users/jonat/AppData/Roaming/npm/node_modules/@shopify/cl  Γöé
+Γöé    i/dist/chunk-IX7XAR6F.js:27291)                                           Γöé
+Γöé    at processTicksAndRejections (node:internal/process/task_queues:105)      Γöé
+Γöé    at performRequest [as request] (Users/jonat/AppData/Roaming/npm/node_mod  Γöé
+Γöé    ules/@shopify/cli/dist/chunk-V5G4FJZH.js:136544)                          Γöé
+Γöé    at async runRequestWithNetworkLevelRetry (Users/jonat/AppData/Roaming/np  Γöé
+Γöé    m/node_modules/@shopify/cli/dist/chunk-IX7XAR6F.js:27346)                 Γöé
+Γöé    at async makeVerboseRequest (Users/jonat/AppData/Roaming/npm/node_module  Γöé
+Γöé    s/@shopify/cli/dist/chunk-IX7XAR6F.js:27357)                              Γöé
+Γöé    at async retryAwareRequest (Users/jonat/AppData/Roaming/npm/node_modules  Γöé
+Γöé    /@shopify/cli/dist/chunk-IX7XAR6F.js:27444)                               Γöé
+Γöé    at (Users/jonat/AppData/Roaming/npm/node_modules/@shopify/cli/dist/chunk  Γöé
+Γöé    -V5G4FJZH.js:136549)                                                      Γöé
+Γöé    at (Users/jonat/AppData/Roaming/npm/node_modules/@shopify/cli/dist/chunk  Γöé
+Γöé    -J3C7BGUW.js:29560)                                                       Γöé
+Γöé                                                                              Γöé
+Γò░ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓò»
+

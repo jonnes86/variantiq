@@ -11,6 +11,7 @@ class VariantIQFields {
     this.apiUrl = container.dataset.apiUrl;
     this.templateData = null;
     this.fieldValues = {};
+    this.instanceId = Math.random().toString(36).substr(2, 9);
     this.init();
   }
 
@@ -52,22 +53,21 @@ class VariantIQFields {
   }
 
   render() {
-    const container = document.getElementById(`variantiq-fields-${this.productId}`);
+    const fieldsContainer = this.container.querySelector('.variantiq-fields-container');
+    if (!fieldsContainer) return;
 
     if (!this.templateData || !this.templateData.template) {
-      container.innerHTML = '<p class="variantiq-no-options">No customization options available.</p>';
+      fieldsContainer.innerHTML = '<p class="variantiq-no-options">No customization options available.</p>';
       return;
     }
 
     const { fields } = this.templateData.template;
 
     if (!fields || fields.length === 0) {
-      container.innerHTML = '<p class="variantiq-no-options">No customization options available.</p>';
+      fieldsContainer.innerHTML = '<p class="variantiq-no-options">No customization options available.</p>';
       return;
     }
 
-    // Render ALL fields initially. The evaluation engine will hide them if necessary.
-    // Sort fields by their configured sort order just in case
     const sortedFields = [...fields].sort((a, b) => a.sort - b.sort);
 
     let html = '<div class="variantiq-fields">';
@@ -76,9 +76,8 @@ class VariantIQFields {
     });
     html += '</div>';
 
-    container.innerHTML = html;
+    fieldsContainer.innerHTML = html;
 
-    // Run evaluation engine once purely on load to establish baseline visibility
     this.evaluateRules();
   }
 
@@ -102,13 +101,13 @@ class VariantIQFields {
         html += `
           <input 
             type="${field.type}" 
-            id="vq-${this.productId}-${field.id}-${index}" 
-            name="vq_${this.productId}_${field.id}${field.type === 'checkbox' ? '[]' : ''}"
+            id="vq-${this.instanceId}-${field.id}-${index}" 
+            name="vq_${this.instanceId}_${field.id}${field.type === 'checkbox' ? '[]' : ''}"
             value="${option}"
             ${isRequired}
             class="variantiq-${field.type}"
           />
-          <label for="vq-${this.productId}-${field.id}-${index}" data-opt-value="${option}" class="variantiq-${field.type}-label">
+          <label for="vq-${this.instanceId}-${field.id}-${index}" data-opt-value="${option}" class="variantiq-${field.type}-label">
             ${option}${optionPrice}
           </label>
         `;
@@ -118,7 +117,7 @@ class VariantIQFields {
     } else {
       let html = `
         <div class="variantiq-field product-form__input" data-field-id="${field.id}" style="display: none; margin: 0 0 2rem 0; text-align: left;">
-          <label class="form__label" for="vq-${this.productId}-${field.id}" style="margin-bottom: 0.5rem; display: block;">
+          <label class="form__label" for="vq-${this.instanceId}-${field.id}" style="margin-bottom: 0.5rem; display: block;">
             ${field.label}${requiredMark}
           </label>
       `;
@@ -126,16 +125,16 @@ class VariantIQFields {
       if (field.type === 'text') {
         html += `<input 
           type="text" 
-          id="vq-${this.productId}-${field.id}" 
-          name="vq_${this.productId}_${field.id}"
+          id="vq-${this.instanceId}-${field.id}" 
+          name="vq_${this.instanceId}_${field.id}"
           ${isRequired}
           class="variantiq-input"
           style="width: 100%; box-sizing: border-box;"
         />`;
       } else if (field.type === 'select') {
         html += `<select 
-          id="vq-${this.productId}-${field.id}" 
-          name="vq_${this.productId}_${field.id}"
+          id="vq-${this.instanceId}-${field.id}" 
+          name="vq_${this.instanceId}_${field.id}"
           ${isRequired}
           class="variantiq-select"
           style="width: 100%; display: block;"
@@ -158,11 +157,9 @@ class VariantIQFields {
   }
 
   attachEventListeners() {
-    const container = document.getElementById(`variantiq-fields-${this.productId}`);
-
     // Listen for both clicks (radio/checkboxes) and input (text/selects)
-    container.addEventListener('input', (e) => this.handleFieldChange(e));
-    container.addEventListener('change', (e) => this.handleFieldChange(e));
+    this.container.addEventListener('input', (e) => this.handleFieldChange(e));
+    this.container.addEventListener('change', (e) => this.handleFieldChange(e));
 
     // Intercept Add to Cart form submission
     this.interceptAddToCart();
@@ -214,7 +211,7 @@ class VariantIQFields {
     const sortedFields = [...fields].sort((a, b) => a.sort - b.sort);
 
     sortedFields.forEach(field => {
-      const fieldElement = document.querySelector(`.variantiq-field[data-field-id="${field.id}"]`);
+      const fieldElement = this.container.querySelector(`.variantiq-field[data-field-id="${field.id}"]`);
       if (!fieldElement) return;
 
       const fieldRules = rulesByTarget[field.id];
@@ -367,7 +364,7 @@ class VariantIQFields {
       labels.forEach(label => {
         const val = label.dataset.optValue;
         const inputId = label.getAttribute('for');
-        const input = document.getElementById(inputId);
+        const input = this.container.querySelector('#' + inputId); // Unique ID globally per instance
 
         if (limitSet.has(val)) {
           label.style.display = '';
@@ -462,31 +459,63 @@ class VariantIQFields {
         console.log('VariantIQ: Validation passed');
 
         if (form) {
-          // Calculate if there is an active price fee
+          // Calculate active price fees and mapped variants
           let adjustmentsTotal = 0;
+          let mappedVariantId = null;
+
           const visibleFields = this.getVisibleFields();
           visibleFields.forEach(field => {
             const val = this.fieldValues[field.id];
-            if (val && field.priceAdjustmentsJson) {
-              if (field.type === 'checkbox') {
-                val.split(', ').forEach(opt => {
-                  if (field.priceAdjustmentsJson[opt.trim()]) {
-                    adjustmentsTotal += parseFloat(field.priceAdjustmentsJson[opt.trim()]);
+            if (val) {
+              // 1. Check for Variant Mappings FIRST (these take priority for base items)
+              if (field.variantMappingJson) {
+                if (field.type === 'checkbox') {
+                  val.split(', ').forEach(opt => {
+                    if (field.variantMappingJson[opt.trim()]) {
+                      mappedVariantId = field.variantMappingJson[opt.trim()];
+                    }
+                  });
+                } else if (field.variantMappingJson[val]) {
+                  mappedVariantId = field.variantMappingJson[val];
+                }
+              }
+
+              // 2. Tally Up Price Adjustments
+              if (field.priceAdjustmentsJson) {
+                if (field.type === 'checkbox') {
+                  val.split(', ').forEach(opt => {
+                    if (field.priceAdjustmentsJson[opt.trim()]) {
+                      adjustmentsTotal += parseFloat(field.priceAdjustmentsJson[opt.trim()]);
+                    }
+                  });
+                } else {
+                  if (field.priceAdjustmentsJson[val]) {
+                    adjustmentsTotal += parseFloat(field.priceAdjustmentsJson[val]);
                   }
-                });
-              } else {
-                if (field.priceAdjustmentsJson[val]) {
-                  adjustmentsTotal += parseFloat(field.priceAdjustmentsJson[val]);
                 }
               }
             }
           });
 
+          // If we found a mapped variant, inject it into the form's base ID field
+          if (mappedVariantId) {
+            console.log(`VariantIQ: Swapping Base Variant ID to Mapped ID: ${mappedVariantId}`);
+            let idInput = form.querySelector('input[name="id"]');
+            if (idInput) {
+              idInput.value = mappedVariantId;
+            } else {
+              idInput = document.createElement('input');
+              idInput.type = 'hidden';
+              idInput.name = 'id';
+              idInput.value = mappedVariantId;
+              form.appendChild(idInput);
+            }
+          }
+
           if (adjustmentsTotal > 0) {
             // Hijack the cart submit completely to push multiple items
             e.preventDefault();
             e.stopPropagation();
-            e.stopImmediatePropagation();
 
             const originalText = addToCartButton.innerHTML;
             addToCartButton.innerHTML = 'Syncing Cart...';
@@ -540,8 +569,8 @@ class VariantIQFields {
   }
 
   getVisibleFields() {
-    // Get all currently visible fields in the DOM
-    const visibleFieldElements = document.querySelectorAll('.variantiq-field');
+    // Get all currently visible fields in this component's DOM
+    const visibleFieldElements = this.container.querySelectorAll('.variantiq-field');
     const visibleFieldIds = Array.from(visibleFieldElements)
       .filter(el => el.style.display !== 'none')
       .map(el => el.dataset.fieldId);
@@ -606,7 +635,8 @@ class VariantIQFields {
         body: feeFormData.toString(),
       });
 
-      // Inject Main Product
+      // Let native fetch handle the base item
+      // Make sure the main form data contains the exact id that we swapped in line 496
       await fetch('/cart/add.js', {
         method: 'POST',
         body: formData,
@@ -620,8 +650,8 @@ class VariantIQFields {
   }
 
   showValidationError(message) {
-    // Remove any existing error
-    const existingError = document.querySelector('.variantiq-validation-error');
+    // Remove any existing error in this container
+    const existingError = this.container.querySelector('.variantiq-validation-error');
     if (existingError) {
       existingError.remove();
     }
@@ -632,9 +662,9 @@ class VariantIQFields {
     errorDiv.style.cssText = 'background: #fee; border: 2px solid #c33; padding: 12px; margin: 16px 0; border-radius: 4px; color: #c33; font-weight: 500;';
     errorDiv.textContent = message;
 
-    // Insert before the fields container
-    const container = this.container;
-    container.parentNode.insertBefore(errorDiv, container);
+    // Insert at the top of the form wrapper
+    const wrapper = this.container.querySelector('.variantiq-fields-container');
+    if (wrapper) wrapper.prepend(errorDiv);
 
     // Scroll to error
     errorDiv.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -646,8 +676,8 @@ class VariantIQFields {
   }
 
   showError() {
-    const errorDiv = document.getElementById('variantiq-error');
-    const container = document.getElementById(`variantiq-fields-${this.productId}`);
+    const errorDiv = this.container.querySelector('#variantiq-error');
+    const container = this.container.querySelector(`#variantiq-fields-${this.productId}`);
 
     if (errorDiv) errorDiv.style.display = 'block';
     if (container) container.style.display = 'none';
