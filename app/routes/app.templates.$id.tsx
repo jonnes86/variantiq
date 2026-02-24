@@ -308,12 +308,12 @@ export async function action({ request, params }: ActionFunctionArgs) {
   // Add or Edit rule
   if (intent === "addRule" || intent === "editRule") {
     const conditionsStr = String(form.get("conditionsJson") || "[]");
-    const targetFieldId = String(form.get("targetFieldId") || "");
+    let targetFieldId = String(form.get("targetFieldId") || "");
     const actionType = String(form.get("actionType") || "SHOW");
     const targetOptionsStr = String(form.get("targetOptionsJson") || "null");
     const targetPriceAdjustmentsStr = String(form.get("targetPriceAdjustmentsJson") || "null");
 
-    let conditionsJson = [];
+    let conditionsJson: any[] = [];
     try {
       conditionsJson = JSON.parse(conditionsStr);
     } catch (e) { }
@@ -331,6 +331,37 @@ export async function action({ request, params }: ActionFunctionArgs) {
         targetPriceAdjustmentsJson = JSON.parse(targetPriceAdjustmentsStr);
       }
     } catch (e) { }
+
+    // Intercept local fields sent alongside traditional rule save
+    const newFieldsStr = String(form.get("newFieldsJson") || "[]");
+    let newFieldsData: any[] = [];
+    try { newFieldsData = JSON.parse(newFieldsStr); } catch (e) { }
+
+    if (newFieldsData.length > 0) {
+      const idMap: Record<string, string> = {};
+      for (const nf of newFieldsData) {
+        const created = await prisma.field.create({
+          data: {
+            templateId,
+            type: nf.type,
+            name: nf.name,
+            label: nf.label,
+            optionsJson: nf.optionsJson,
+            required: nf.required || false,
+            sort: 999
+          }
+        });
+        idMap[nf.id] = created.id;
+      }
+
+      if (idMap[targetFieldId]) {
+        targetFieldId = idMap[targetFieldId];
+      }
+      conditionsJson = conditionsJson.map((c: any) => ({
+        ...c,
+        fieldId: idMap[c.fieldId] || c.fieldId
+      }));
+    }
 
     if (!conditionsJson.length || !targetFieldId) {
       return json({ error: "Conditions and Target Field required" }, { status: 400 });
@@ -376,28 +407,66 @@ export async function action({ request, params }: ActionFunctionArgs) {
   // Bulk save rules (for VisualRuleBuilder)
   if (intent === "bulkSaveRules") {
     const rulesJsonStr = String(form.get("rulesJson") || "[]");
+    const newFieldsStr = String(form.get("newFieldsJson") || "[]");
     let newRulesData: any[] = [];
+    let newFieldsData: any[] = [];
     try {
       newRulesData = JSON.parse(rulesJsonStr);
+      newFieldsData = JSON.parse(newFieldsStr);
     } catch (e) {
-      console.error("Failed to parse rulesJson for bulkSaveRules", e);
-      return json({ error: "Invalid rules data" }, { status: 400 });
+      console.error("Failed to parse data for bulkSaveRules", e);
+      return json({ error: "Invalid syntax payload" }, { status: 400 });
     }
+
+    // Create any new fields submitted and record their true ID mappings
+    const idMap: Record<string, string> = {};
+    for (const nf of newFieldsData) {
+      const created = await prisma.field.create({
+        data: {
+          templateId,
+          type: nf.type,
+          name: nf.name,
+          label: nf.label,
+          optionsJson: nf.optionsJson,
+          required: nf.required || false,
+          sort: 999
+        }
+      });
+      idMap[nf.id] = created.id;
+    }
+
+    const mapId = (id: string) => idMap[id] || id;
 
     // Delete existing rules for this template
     await prisma.rule.deleteMany({
       where: { templateId },
     });
 
-    // Create new rules
-    const rulesToCreate = newRulesData.map((rule, index) => ({
-      templateId,
-      conditionsJson: rule.conditionsJson,
-      targetFieldId: rule.targetFieldId,
-      actionType: rule.actionType,
-      targetOptionsJson: rule.targetOptionsJson,
-      sort: index + 1, // Maintain order
-    }));
+    // Create new rules, mapping any custom fields injected during the session
+    const rulesToCreate = newRulesData.map((rule, index) => {
+      let conds = rule.conditionsJson;
+      try {
+        if (typeof conds === 'string') conds = JSON.parse(conds);
+        if (Array.isArray(conds)) {
+          conds = conds.map((c: any) => ({ ...c, fieldId: mapId(c.fieldId) }));
+        }
+      } catch (e) { }
+
+      let targetOpts = rule.targetOptionsJson;
+      try {
+        if (typeof targetOpts === 'string') targetOpts = JSON.parse(targetOpts);
+        // We don't need to remap anything inside targetOptionsJson unless datasetId was tied to a local field, which it isn't, datasetIds are real.
+      } catch (e) { }
+
+      return {
+        templateId,
+        conditionsJson: conds,
+        targetFieldId: mapId(rule.targetFieldId),
+        actionType: rule.actionType,
+        targetOptionsJson: targetOpts,
+        sort: index + 1, // Maintain order
+      };
+    });
 
     await prisma.rule.createMany({
       data: rulesToCreate,
@@ -560,6 +629,7 @@ export default function TemplateDetail() {
   // Handlers
   const [ruleBuilderMode, setRuleBuilderMode] = useState<"TRADITIONAL" | "VISUAL">("VISUAL");
   const [isClient, setIsClient] = useState(false);
+  const [localFields, setLocalFields] = useState<any[]>([]);
 
   useEffect(() => {
     setIsClient(true);
@@ -612,8 +682,10 @@ export default function TemplateDetail() {
           ? JSON.stringify({ datasetId: tempTargetOption })
           : "null",
       targetPriceAdjustmentsJson: ruleActionType === "SET_PRICE" ? JSON.stringify(ruleTargetPriceAdjustments) : "null",
+      newFieldsJson: JSON.stringify(localFields)
     }, { method: "post" });
 
+    setLocalFields([]); // flush custom fields after pushing
     resetRuleForm();
   };
 
@@ -1214,9 +1286,45 @@ export default function TemplateDetail() {
                     />
                     <Select
                       label="Target Field"
-                      options={[{ label: "Select field...", value: "" }, ...template.fields.map(f => ({ label: f.name, value: f.id }))]}
+                      options={[
+                        { label: "Select field...", value: "" },
+                        ...[...template.fields, ...localFields].map(f => ({ label: `[Field] ${f.name}`, value: f.id })),
+                        ...datasets.map((d: any) => ({ label: `[Dataset] ${d.name}`, value: `dataset_${d.id}` }))
+                      ]}
                       value={ruleTargetFieldId}
-                      onChange={setRuleTargetFieldId}
+                      onChange={(val) => {
+                        if (val.startsWith("dataset_")) {
+                          const datasetId = val.replace("dataset_", "");
+                          const dataset = datasets.find((d: any) => d.id === datasetId);
+                          if (dataset) {
+                            let baseName = dataset.name.replace(/\s+/g, '_').toLowerCase();
+                            let finalName = baseName;
+                            let counter = 1;
+                            const combined = [...template.fields, ...localFields];
+                            while (combined.some(f => f.name === finalName)) {
+                              finalName = `${baseName}_${counter}`;
+                              counter++;
+                            }
+
+                            const newId = "local_" + Math.random().toString(36).substring(2, 9);
+                            const newField = {
+                              id: newId,
+                              type: "select",
+                              name: finalName,
+                              label: dataset.name,
+                              optionsJson: dataset.optionsJson,
+                              required: false
+                            };
+                            setLocalFields(prev => [...prev, newField]);
+
+                            setRuleTargetFieldId(newId);
+                            setRuleActionType("LIMIT_OPTIONS_DATASET");
+                            setTempTargetOption(dataset.id);
+                          }
+                        } else {
+                          setRuleTargetFieldId(val);
+                        }
+                      }}
                     />
                   </InlineGrid>
 
@@ -1398,15 +1506,24 @@ export default function TemplateDetail() {
       ) : (
         <Card background="bg-surface-secondary">
           <VisualRuleBuilder
-            fields={template.fields}
+            fields={[...template.fields, ...localFields]}
             rules={template.rules}
             datasets={datasets}
+            onAddNewField={(newField) => {
+              const newId = "local_" + Math.random().toString(36).substring(2, 9);
+              setLocalFields(prev => [...prev, { ...newField, id: newId }]);
+              return newId;
+            }}
             onSaveRules={(newRules) => {
               submit(
-                { _intent: "bulkSaveRules", rulesJson: JSON.stringify(newRules) },
+                {
+                  _intent: "bulkSaveRules",
+                  rulesJson: JSON.stringify(newRules),
+                  newFieldsJson: JSON.stringify(localFields)
+                },
                 { method: "post" }
               );
-              // Shopify toast banner will be triggered by Remix re-fetch automatically generally, but we could add a toast state if desired.
+              setLocalFields([]); // Reset on save
             }}
           />
         </Card>

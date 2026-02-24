@@ -869,10 +869,41 @@ export default function ProductOverrideDetail() {
                                                 />
                                                 <Select
                                                     label="Target Field"
-                                                    options={fields.map(f => ({ label: f.label, value: f.id }))}
+                                                    options={[
+                                                        { label: "Select field to modify...", value: "" },
+                                                        ...fields.map(f => ({ label: `[Field] ${f.label}`, value: f.id })),
+                                                        ...datasets.map((d: any) => ({ label: `[Dataset] ${d.name}`, value: `dataset_${d.id}` }))
+                                                    ]}
                                                     value={targetFieldId}
-                                                    onChange={setTargetFieldId}
-                                                    placeholder="Select field to modify..."
+                                                    onChange={(val) => {
+                                                        if (val.startsWith("dataset_")) {
+                                                            const datasetId = val.replace("dataset_", "");
+                                                            const dataset = datasets.find((d: any) => d.id === datasetId);
+                                                            if (dataset) {
+                                                                const safeName = dataset.name.replace(/\s+/g, '_').toLowerCase();
+                                                                let finalName = safeName;
+                                                                let counter = 1;
+                                                                while (fields.some(f => f.name === finalName)) {
+                                                                    finalName = `${safeName}_${counter}`;
+                                                                    counter++;
+                                                                }
+                                                                const newId = "local_" + Math.random().toString(36).substring(2, 9);
+                                                                setFields(prev => [...prev, {
+                                                                    id: newId,
+                                                                    type: "select",
+                                                                    name: finalName,
+                                                                    label: dataset.name,
+                                                                    optionsJson: dataset.optionsJson,
+                                                                    required: false
+                                                                } as any]);
+                                                                setTargetFieldId(newId);
+                                                                setActionType("LIMIT_OPTIONS_DATASET");
+                                                                setTempTargetOption(dataset.id);
+                                                            }
+                                                        } else {
+                                                            setTargetFieldId(val);
+                                                        }
+                                                    }}
                                                 />
                                             </InlineGrid>
 

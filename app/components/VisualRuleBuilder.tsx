@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
     Card,
     Text,
@@ -7,8 +7,12 @@ import {
     Box,
     InlineStack,
     Select,
+    Modal,
+    TextField,
+    Checkbox,
+    InlineGrid
 } from "@shopify/polaris";
-import { DeleteIcon } from "@shopify/polaris-icons";
+import { DeleteIcon, PlusIcon } from "@shopify/polaris-icons";
 
 export interface Field {
     id: string;
@@ -32,6 +36,7 @@ interface VisualRuleBuilderProps {
     rules: Rule[];
     datasets?: any[];
     onSaveRules: (newRules: Partial<Rule>[]) => void;
+    onAddNewField?: (newField: Omit<Field, "id">) => string; // Returns the generated ID
 }
 
 // ----------------------------------------------------
@@ -48,6 +53,7 @@ const VisualBuilderContext = React.createContext<{
     onAddField: (fieldId: string, containerId: string) => void;
     onRemoveField: (fieldId: string) => void;
     availableFields: Field[];
+    handleOpenNewFieldModal: (containerId: string) => void;
 } | null>(null);
 
 function useVisualBuilder() {
@@ -69,8 +75,25 @@ function FieldNode({
     options: string[],
     isNested?: boolean,
 }) {
-    const { tree, collapsedNodes, onToggleCollapse, datasets, fieldDatasetMap, onChangeDataset, onAddField, onRemoveField, availableFields } = useVisualBuilder();
+    const { tree, collapsedNodes, onToggleCollapse, datasets, fieldDatasetMap, onChangeDataset, onAddField, onRemoveField, availableFields, handleOpenNewFieldModal } = useVisualBuilder();
     const datasetId = fieldDatasetMap[field.id];
+
+    // Build the dropdown options to include Fields AND Datasets
+    const dropdownOptions = [
+        { label: "Assign rule: Show field...", value: "" },
+        { label: "+ Create New Field", value: "CREATE_NEW" },
+        ...availableFields.map(f => ({ label: `[Field] ${f.name}`, value: f.id })),
+        ...datasets.map(d => ({ label: `[Dataset] ${d.name}`, value: `dataset_${d.id}` }))
+    ];
+
+    const handleSelectChange = (val: string, containerId: string) => {
+        if (!val) return;
+        if (val === "CREATE_NEW") {
+            handleOpenNewFieldModal(containerId);
+        } else {
+            onAddField(val, containerId);
+        }
+    };
 
     return (
         <div style={{ marginBottom: "12px" }}>
@@ -149,17 +172,15 @@ function FieldNode({
                                                     ))
                                                 )}
 
-                                                {availableFields.length > 0 && (
-                                                    <div style={{ marginTop: "12px", maxWidth: "300px" }}>
-                                                        <Select
-                                                            label="Assign rule: Show field"
-                                                            labelHidden
-                                                            options={[{ label: "Assign rule: Show field...", value: "" }, ...availableFields.map(f => ({ label: f.name, value: f.id }))]}
-                                                            value=""
-                                                            onChange={(val) => { if (val) onAddField(val, dropId); }}
-                                                        />
-                                                    </div>
-                                                )}
+                                                <div style={{ marginTop: "12px", maxWidth: "300px" }}>
+                                                    <Select
+                                                        label="Assign rule: Show field"
+                                                        labelHidden
+                                                        options={dropdownOptions}
+                                                        value=""
+                                                        onChange={(val) => handleSelectChange(val, dropId)}
+                                                    />
+                                                </div>
                                             </div>
                                         </BlockStack>
                                     </div>
@@ -198,10 +219,18 @@ function RenderFieldNodeById({
 // MAIN BUILDER
 // ----------------------------------------------------
 
-export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules }: VisualRuleBuilderProps) {
+export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules, onAddNewField }: VisualRuleBuilderProps) {
     const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(new Set());
     const [tree, setTree] = useState<Record<string, string[]>>({ root: [] });
     const [fieldDatasetMap, setFieldDatasetMap] = useState<Record<string, string>>({});
+
+    // Modal state
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [modalTargetContainer, setModalTargetContainer] = useState("");
+    const [newFieldType, setNewFieldType] = useState("select");
+    const [newFieldLabel, setNewFieldLabel] = useState("");
+    const [newFieldName, setNewFieldName] = useState("");
+    const [newFieldOptions, setNewFieldOptions] = useState<string[]>([""]);
 
     const handleToggleCollapse = (id: string) => {
         setCollapsedNodes(prev => {
@@ -212,27 +241,51 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules }: Visu
         });
     };
 
-    const handleAddField = (fieldId: string, containerId: string) => {
+    const handleAddField = (rawVal: string, containerId: string) => {
+        let actualFieldId = rawVal;
+
+        // If a dataset was selected from the dropdown, generate a local field for it automatically
+        if (rawVal.startsWith("dataset_")) {
+            const datasetId = rawVal.replace("dataset_", "");
+            const dataset = datasets?.find(d => d.id === datasetId);
+            if (dataset && onAddNewField) {
+                // Determine a safe internal name
+                let safeName = dataset.name.replace(/\s+/g, '_').toLowerCase();
+                const baseName = safeName;
+                let counter = 1;
+                while (fields.some(f => f.name === safeName)) {
+                    safeName = `${baseName}_${counter}`;
+                    counter++;
+                }
+
+                actualFieldId = onAddNewField({
+                    type: "select",
+                    name: safeName,
+                    label: dataset.name,
+                    optionsJson: dataset.optionsJson,
+                    required: false
+                });
+
+                // Bind the dataset mapping
+                setFieldDatasetMap(prev => ({ ...prev, [actualFieldId]: datasetId }));
+            } else {
+                return; // Silently fail if dataset not found or hook not provided
+            }
+        }
+
         setTree(prev => ({
             ...prev,
-            [containerId]: [...(prev[containerId] || []), fieldId]
+            [containerId]: [...(prev[containerId] || []), actualFieldId]
         }));
     };
 
     const handleRemoveField = (fieldId: string) => {
-        // Recursively remove a field and all its descendants from the tree map so they go back into available pool
         setTree(prev => {
             const next = { ...prev };
-
-            // 1. Remove it from wherever it currently is nested
             const containerId = Object.keys(next).find(k => next[k].includes(fieldId));
             if (containerId) {
                 next[containerId] = next[containerId].filter(id => id !== fieldId);
             }
-
-            // 2. We don't necessarily delete the dict keys for its options, but we could orphan them.
-            // Actually, simply removing it from its parent is enough to hide it, 
-            // but to show those child fields back in `availableFields`, we should delete them from the tree entirely.
             const recursiveRemove = (id: string) => {
                 const f = fields.find(field => field.id === id);
                 if (!f) return;
@@ -241,15 +294,13 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules }: Visu
                     const dropId = `${id}::${opt}`;
                     const children = next[dropId] || [];
                     children.forEach(childId => recursiveRemove(childId));
-                    next[dropId] = []; // clear children
+                    next[dropId] = [];
                 });
             };
             recursiveRemove(fieldId);
-
             return next;
         });
 
-        // Remove associated dataset mapping
         setFieldDatasetMap(prev => {
             const next = { ...prev };
             delete next[fieldId];
@@ -273,6 +324,32 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules }: Visu
         return fields.filter(f => !activeFieldIds.has(f.id));
     }, [fields, activeFieldIds]);
 
+    const openNewFieldModal = (containerId: string) => {
+        setModalTargetContainer(containerId);
+        setNewFieldType("select");
+        setNewFieldLabel("");
+        setNewFieldName("");
+        setNewFieldOptions([""]);
+        setIsModalOpen(true);
+    };
+
+    const commitNewFieldModal = () => {
+        if (!newFieldLabel || !newFieldName || !onAddNewField) return;
+
+        const optionsJson = ["select", "radio", "checkbox"].includes(newFieldType) ? newFieldOptions.filter(o => o.trim() !== "") : null;
+
+        const actualId = onAddNewField({
+            type: newFieldType,
+            label: newFieldLabel,
+            name: newFieldName,
+            optionsJson,
+            required: false,
+        });
+
+        handleAddField(actualId, modalTargetContainer);
+        setIsModalOpen(false);
+    };
+
     const contextValue = useMemo(() => ({
         fieldsMap,
         tree,
@@ -285,10 +362,10 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules }: Visu
         },
         onAddField: handleAddField,
         onRemoveField: handleRemoveField,
-        availableFields
+        availableFields,
+        handleOpenNewFieldModal: openNewFieldModal
     }), [fieldsMap, tree, datasets, fieldDatasetMap, collapsedNodes, availableFields]);
 
-    // Init tree on load
     useEffect(() => {
         const newTree: Record<string, string[]> = { root: [] };
         fields.forEach(f => {
@@ -323,7 +400,6 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules }: Visu
             }
         });
 
-        // Anything not nested sits at root
         newTree.root = fields.map(f => f.id).filter(id => !fieldsInTree.has(id));
         setTree(newTree);
         setFieldDatasetMap(newFieldDatasetMap);
@@ -353,6 +429,22 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules }: Visu
         onSaveRules(compiledRules);
     };
 
+    const rootDropdownOptions = [
+        { label: "Add root field...", value: "" },
+        { label: "+ Create New Field", value: "CREATE_NEW" },
+        ...availableFields.map(f => ({ label: `[Field] ${f.name}`, value: f.id })),
+        ...datasets?.map(d => ({ label: `[Dataset] ${d.name}`, value: `dataset_${d.id}` })) || []
+    ];
+
+    const handleRootSelectChange = (val: string) => {
+        if (!val) return;
+        if (val === "CREATE_NEW") {
+            openNewFieldModal("root");
+        } else {
+            handleAddField(val, "root");
+        }
+    };
+
     return (
         <VisualBuilderContext.Provider value={contextValue}>
             <Card>
@@ -360,7 +452,7 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules }: Visu
                     <InlineStack align="space-between" blockAlign="center">
                         <BlockStack gap="100">
                             <Text as="h3" variant="headingMd">
-                                Visual Canvas
+                                Visual Rule Tree
                             </Text>
                             <Text as="p" tone="subdued">
                                 Select fields to add to the root to show them unconditionally. Select fields inside specific Option outcomes to show them conditionally.
@@ -383,21 +475,86 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules }: Visu
                                 />
                             ))}
 
-                            {availableFields.length > 0 && (
-                                <div style={{ marginTop: "16px", maxWidth: "300px" }}>
-                                    <Select
-                                        label="Add root field"
-                                        labelHidden
-                                        options={[{ label: "Add field to root...", value: "" }, ...availableFields.map(f => ({ label: f.name, value: f.id }))]}
-                                        value=""
-                                        onChange={(val) => { if (val) handleAddField(val, "root"); }}
-                                    />
-                                </div>
-                            )}
+                            <div style={{ marginTop: "16px", maxWidth: "300px" }}>
+                                <Select
+                                    label="Add root field"
+                                    labelHidden
+                                    options={rootDropdownOptions}
+                                    value=""
+                                    onChange={handleRootSelectChange}
+                                />
+                            </div>
                         </div>
                     </Box>
                 </BlockStack>
             </Card>
+
+            <Modal
+                title="Create New Field"
+                open={isModalOpen}
+                onClose={() => setIsModalOpen(false)}
+                primaryAction={{
+                    content: "Add Field",
+                    onAction: commitNewFieldModal,
+                    disabled: !newFieldLabel || !newFieldName
+                }}
+                secondaryActions={[
+                    { content: "Cancel", onAction: () => setIsModalOpen(false) }
+                ]}
+            >
+                <Modal.Section>
+                    <BlockStack gap="300">
+                        <Select
+                            label="Field Type"
+                            options={[
+                                { label: 'Dropdown / Select', value: 'select' },
+                                { label: 'Radio Buttons', value: 'radio' },
+                                { label: 'Checkboxes (Multiple Option)', value: 'checkbox' },
+                                { label: 'Short Text Input', value: 'text' },
+                            ]}
+                            value={newFieldType}
+                            onChange={setNewFieldType}
+                        />
+                        <TextField
+                            label="Display Label"
+                            value={newFieldLabel}
+                            onChange={(v) => {
+                                setNewFieldLabel(v);
+                                if (!newFieldName) setNewFieldName(v.replace(/\s+/g, '_').toLowerCase());
+                            }}
+                            autoComplete="off"
+                        />
+                        <TextField
+                            label="Internal Name (No Spaces, used for mapping to cart properties)"
+                            value={newFieldName}
+                            onChange={setNewFieldName}
+                            autoComplete="off"
+                        />
+                        {["select", "radio", "checkbox"].includes(newFieldType) && (
+                            <BlockStack gap="200">
+                                <Text as="h4" variant="headingSm">Options</Text>
+                                {newFieldOptions.map((opt, i) => (
+                                    <TextField
+                                        key={i}
+                                        labelHidden
+                                        label={`Option ${i + 1}`}
+                                        value={opt}
+                                        onChange={(v) => {
+                                            const next = [...newFieldOptions];
+                                            next[i] = v;
+                                            setNewFieldOptions(next);
+                                        }}
+                                        autoComplete="off"
+                                    />
+                                ))}
+                                <InlineStack>
+                                    <Button onClick={() => setNewFieldOptions([...newFieldOptions, ""])}>+ Add Option</Button>
+                                </InlineStack>
+                            </BlockStack>
+                        )}
+                    </BlockStack>
+                </Modal.Section>
+            </Modal>
         </VisualBuilderContext.Provider>
     );
 }
