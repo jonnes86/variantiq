@@ -152,9 +152,9 @@ function FieldNode({
                                                 {availableFields.length > 0 && (
                                                     <div style={{ marginTop: "12px", maxWidth: "300px" }}>
                                                         <Select
-                                                            label="Add nested field"
+                                                            label="Assign rule: Show field"
                                                             labelHidden
-                                                            options={[{ label: "Add nested field...", value: "" }, ...availableFields.map(f => ({ label: f.name, value: f.id }))]}
+                                                            options={[{ label: "Assign rule: Show field...", value: "" }, ...availableFields.map(f => ({ label: f.name, value: f.id }))]}
                                                             value=""
                                                             onChange={(val) => { if (val) onAddField(val, dropId); }}
                                                         />
