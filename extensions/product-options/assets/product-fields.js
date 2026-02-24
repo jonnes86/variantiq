@@ -88,7 +88,7 @@ class VariantIQFields {
 
     if (field.type === 'radio' || field.type === 'checkbox') {
       let html = `
-        <fieldset class="variantiq-field js product-form__input" data-field-id="${field.id}" style="display: none; border: none; padding: 0; margin: 0 0 2rem 0;">
+        <fieldset class="variantiq-field js product-form__input" data-field-id="${field.id}" style="display: none; border: none; padding: 0; margin: 0 0 1rem 0;">
           <legend class="form__label" style="width: 100%; margin-bottom: 0.8rem; text-align: left; display: block;">${field.label}${requiredMark}</legend>
           <div style="display: flex; flex-wrap: wrap; gap: 10px; width: 100%;">
       `;
@@ -116,7 +116,7 @@ class VariantIQFields {
       return html;
     } else {
       let html = `
-        <div class="variantiq-field product-form__input" data-field-id="${field.id}" style="display: none; margin: 0 0 2rem 0; text-align: left;">
+        <div class="variantiq-field product-form__input" data-field-id="${field.id}" style="display: none; margin: 0 0 1rem 0; text-align: left;">
           <label class="form__label" for="vq-${this.instanceId}-${field.id}" style="margin-bottom: 0.5rem; display: block;">
             ${field.label}${requiredMark}
           </label>

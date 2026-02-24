@@ -41,7 +41,7 @@
 .variantiq-fields {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
 }
 
 .variantiq-field {
@@ -88,12 +88,12 @@
 .variantiq-radio-group {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
 }
 
 .variantiq-radio-label {
   display: inline-block;
-  padding: var(--button-padding, 10px) 20px;
+  padding: var(--button-padding, 10px) 14px;
   border: 1px solid var(--button-border, #121212);
   border-radius: var(--button-radius, 4px);
   cursor: pointer;
@@ -133,12 +133,12 @@
 .variantiq-checkbox-group {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
 }
 
 .variantiq-checkbox-label {
   display: inline-block;
-  padding: var(--button-padding, 10px) 20px;
+  padding: var(--button-padding, 10px) 14px;
   border: 1px solid var(--button-border, #121212);
   border-radius: var(--button-radius, 4px);
   cursor: pointer;
