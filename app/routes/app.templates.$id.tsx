@@ -22,11 +22,13 @@ import {
   InlineStack,
   Tag,
   Divider,
-  Thumbnail
+  Thumbnail,
+  ButtonGroup
 } from "@shopify/polaris";
 import { prisma } from "../db.server";
 import { useState, useEffect } from "react";
 import { authenticate } from "../shopify.server";
+import { VisualRuleBuilder } from "../components/VisualRuleBuilder";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
   try {
@@ -426,6 +428,24 @@ export default function TemplateDetail() {
   const [tempTargetOption, setTempTargetOption] = useState("");
 
   // Handlers
+  const [ruleBuilderMode, setRuleBuilderMode] = useState<"TRADITIONAL" | "VISUAL">("VISUAL");
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+    const storedMode = localStorage.getItem("variantIqRuleBuilderMode");
+    if (storedMode === "VISUAL" || storedMode === "TRADITIONAL") {
+      setRuleBuilderMode(storedMode);
+    } else {
+      localStorage.setItem("variantIqRuleBuilderMode", "VISUAL");
+    }
+  }, []);
+
+  const handleRuleBuilderModeChange = (mode: "TRADITIONAL" | "VISUAL") => {
+    setRuleBuilderMode(mode);
+    localStorage.setItem("variantIqRuleBuilderMode", mode);
+  };
+
   const handleAddCondition = () => {
     if (tempCondFieldId && tempCondValue) {
       setRuleConditions([...ruleConditions, { fieldId: tempCondFieldId, operator: tempCondOperator, value: tempCondValue }]);
@@ -925,19 +945,42 @@ export default function TemplateDetail() {
                 </BlockStack>
               </Card>
             </BlockStack>
-            {!showRuleForm && (
+            {!showRuleForm && ruleBuilderMode === "TRADITIONAL" && (
               <Button onClick={() => { resetRuleForm(); setShowRuleForm(true); }} disabled={template.fields.length < 2}>
                 Add Rule
               </Button>
             )}
           </InlineGrid>
 
+          {isClient && (
+            <InlineStack gap="200" align="start">
+              <ButtonGroup>
+                <Button
+                  pressed={ruleBuilderMode === "VISUAL"}
+                  onClick={() => handleRuleBuilderModeChange("VISUAL")}
+                >
+                  Drag & Drop Visual Builder
+                </Button>
+                <Button
+                  pressed={ruleBuilderMode === "TRADITIONAL"}
+                  onClick={() => handleRuleBuilderModeChange("TRADITIONAL")}
+                >
+                  Traditional Logic Builder
+                </Button>
+              </ButtonGroup>
+            </InlineStack>
+          )}
+
           {template.fields.length < 2 && (
             <Banner tone="info">
               You need at least 2 fields to create cascading rules.
             </Banner>
           )}
+        </BlockStack>
+      </Card>
 
+      {ruleBuilderMode === "TRADITIONAL" ? (
+        <BlockStack gap="400">
           {showRuleForm && (
             <Card background="bg-surface-secondary">
               <BlockStack gap="500">
@@ -1095,64 +1138,77 @@ export default function TemplateDetail() {
             </Card>
           )}
 
+          {template.rules.length === 0 ? (
+            <Card>
+              <Text as="p" tone="subdued">
+                No rules yet. Click "Add Rule" to get started.
+              </Text>
+            </Card>
+          ) : (
+            <Card>
+              <ResourceList
+                resourceName={{ singular: "rule", plural: "rules" }}
+                items={template.rules}
+                renderItem={(rule: any) => {
+                  const condText = (rule.conditionsJson as Array<any>)?.map(c => `${getFieldName(c.fieldId)} ${c.operator === 'EQUALS' ? '=' : '!='} ${c.value}`).join(" AND ") || "No condition";
+                  const targetLabel = getFieldName(rule.targetFieldId);
+
+                  let actionText = "";
+                  if (rule.actionType === "SHOW") actionText = `Show ${targetLabel}`;
+                  else if (rule.actionType === "HIDE") actionText = `Hide ${targetLabel}`;
+                  else if (rule.actionType === "LIMIT_OPTIONS") {
+                    let opts: string[] = [];
+                    try { opts = rule.targetOptionsJson as string[]; } catch (e) { }
+                    actionText = `Limit ${targetLabel} to [${opts?.join(", ")}]`;
+                  }
+
+                  return (
+                    <ResourceItem id={rule.id} onClick={() => { }}>
+                      <InlineStack align="space-between" blockAlign="center">
+                        <BlockStack gap="100">
+                          <Text as="p" variant="bodyMd" fontWeight="semibold">
+                            IF {condText}
+                          </Text>
+                          <Text as="p" tone="subdued">
+                            THEN {actionText}
+                          </Text>
+                        </BlockStack>
+                        <InlineStack gap="200">
+                          <Button onClick={() => handleMoveRule(rule.id, "up")}>
+                            ↑
+                          </Button>
+                          <Button onClick={() => handleMoveRule(rule.id, "down")}>
+                            ↓
+                          </Button>
+                          <Button onClick={() => handleEditRuleClick(rule)}>
+                            Edit
+                          </Button>
+                          <Button
+                            onClick={() => handleDeleteRule(rule.id)}
+                            tone="critical"
+                          >
+                            Delete
+                          </Button>
+                        </InlineStack>
+                      </InlineStack>
+                    </ResourceItem>
+                  );
+                }}
+              />
+            </Card>
+          )}
         </BlockStack>
-      </Card>
-
-      {template.rules.length === 0 ? (
-        <Card>
-          <Text as="p" tone="subdued">
-            No rules yet. Click "Add Rule" to get started.
-          </Text>
-        </Card>
       ) : (
-        <Card>
-          <ResourceList
-            resourceName={{ singular: "rule", plural: "rules" }}
-            items={template.rules}
-            renderItem={(rule: any) => {
-              const condText = (rule.conditionsJson as Array<any>)?.map(c => `${getFieldName(c.fieldId)} ${c.operator === 'EQUALS' ? '=' : '!='} ${c.value}`).join(" AND ") || "No condition";
-              const targetLabel = getFieldName(rule.targetFieldId);
-
-              let actionText = "";
-              if (rule.actionType === "SHOW") actionText = `Show ${targetLabel}`;
-              else if (rule.actionType === "HIDE") actionText = `Hide ${targetLabel}`;
-              else if (rule.actionType === "LIMIT_OPTIONS") {
-                let opts: string[] = [];
-                try { opts = rule.targetOptionsJson as string[]; } catch (e) { }
-                actionText = `Limit ${targetLabel} to [${opts?.join(", ")}]`;
-              }
-
-              return (
-                <ResourceItem id={rule.id} onClick={() => { }}>
-                  <InlineStack align="space-between" blockAlign="center">
-                    <BlockStack gap="100">
-                      <Text as="p" variant="bodyMd" fontWeight="semibold">
-                        IF {condText}
-                      </Text>
-                      <Text as="p" tone="subdued">
-                        THEN {actionText}
-                      </Text>
-                    </BlockStack>
-                    <InlineStack gap="200">
-                      <Button onClick={() => handleMoveRule(rule.id, "up")}>
-                        ↑
-                      </Button>
-                      <Button onClick={() => handleMoveRule(rule.id, "down")}>
-                        ↓
-                      </Button>
-                      <Button onClick={() => handleEditRuleClick(rule)}>
-                        Edit
-                      </Button>
-                      <Button
-                        onClick={() => handleDeleteRule(rule.id)}
-                        tone="critical"
-                      >
-                        Delete
-                      </Button>
-                    </InlineStack>
-                  </InlineStack>
-                </ResourceItem>
+        <Card background="bg-surface-secondary">
+          <VisualRuleBuilder
+            fields={template.fields}
+            rules={template.rules}
+            onSaveRules={(newRules) => {
+              submit(
+                { _intent: "bulkSaveRules", rulesJson: JSON.stringify(newRules) },
+                { method: "post" }
               );
+              // Shopify toast banner will be triggered by Remix re-fetch automatically generally, but we could add a toast state if desired.
             }}
           />
         </Card>

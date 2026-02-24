@@ -23,11 +23,13 @@ import {
     Tag,
     Divider,
     Layout,
+    ButtonGroup,
 } from "@shopify/polaris";
 import { prisma } from "../db.server";
 import { Prisma } from "@prisma/client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { authenticate } from "../shopify.server";
+import { VisualRuleBuilder } from "../components/VisualRuleBuilder";
 
 // We use the same random IDs for in-memory unsaved items
 function generateId() {
@@ -161,6 +163,23 @@ export default function ProductOverrideDetail() {
     const submit = useSubmit();
     const navigate = useNavigate();
     const [selectedTab, setSelectedTab] = useState(0);
+
+    // Sticky UI Rule Toggle
+    const [ruleBuilderMode, setRuleBuilderMode] = useState<"TRADITIONAL" | "VISUAL">("VISUAL");
+    const [isClient, setIsClient] = useState(false);
+
+    useEffect(() => {
+        setIsClient(true);
+        const savedMode = localStorage.getItem("variantiq_rule_builder_mode");
+        if (savedMode === "TRADITIONAL" || savedMode === "VISUAL") {
+            setRuleBuilderMode(savedMode);
+        }
+    }, []);
+
+    const handleRuleBuilderModeChange = (mode: "TRADITIONAL" | "VISUAL") => {
+        setRuleBuilderMode(mode);
+        localStorage.setItem("variantiq_rule_builder_mode", mode);
+    };
 
     // In-memory state for fields and rules being edited
     const [fields, setFields] = useState<any[]>(initialFields as any[]);
@@ -659,185 +678,220 @@ export default function ProductOverrideDetail() {
                         </Card>
                     </BlockStack>
 
-                    {rules.length > 0 ? (
-                        <Card>
-                            <ResourceList
-                                resourceName={{ singular: "rule", plural: "rules" }}
-                                items={rules}
-                                renderItem={(rule) => {
-                                    const targetLabel = fields.find(f => f.id === rule.targetFieldId)?.label || "Unknown Field";
+                    {isClient && (
+                        <InlineStack gap="200" align="start">
+                            <ButtonGroup>
+                                <Button
+                                    pressed={ruleBuilderMode === "VISUAL"}
+                                    onClick={() => handleRuleBuilderModeChange("VISUAL")}
+                                >
+                                    Drag & Drop Visual Builder
+                                </Button>
+                                <Button
+                                    pressed={ruleBuilderMode === "TRADITIONAL"}
+                                    onClick={() => handleRuleBuilderModeChange("TRADITIONAL")}
+                                >
+                                    Traditional Logic Builder
+                                </Button>
+                            </ButtonGroup>
+                        </InlineStack>
+                    )}
 
-                                    return (
-                                        <ResourceItem id={rule.id} onClick={() => { }}>
-                                            <InlineGrid columns="1fr auto" alignItems="center">
-                                                <BlockStack gap="300">
+                    {ruleBuilderMode === "TRADITIONAL" ? (
+                        <BlockStack gap="400">
+                            {rules.length > 0 ? (
+                                <Card>
+                                    <ResourceList
+                                        resourceName={{ singular: "rule", plural: "rules" }}
+                                        items={rules}
+                                        renderItem={(rule) => {
+                                            const targetLabel = fields.find(f => f.id === rule.targetFieldId)?.label || "Unknown Field";
 
-                                                    <BlockStack gap="100">
-                                                        {rule.conditionsJson && Array.isArray(rule.conditionsJson) && rule.conditionsJson.map((cond: any, i: number) => {
-                                                            const parentLabel = fields.find(f => f.id === cond.fieldId)?.label || "Unknown Field";
-                                                            return (
-                                                                <Text key={i} as="p" variant="bodyMd">
-                                                                    {i === 0 ? <Text as="span" fontWeight="bold">IF </Text> : <Text as="span" fontWeight="bold">AND IF </Text>}
-                                                                    <Text as="span" fontWeight="bold">[{parentLabel}] </Text>
-                                                                    {cond.operator}
-                                                                    <Text as="span" fontWeight="bold"> "{cond.value}"</Text>
-                                                                </Text>
-                                                            );
-                                                        })}
+                                            return (
+                                                <ResourceItem id={rule.id} onClick={() => { }}>
+                                                    <InlineGrid columns="1fr auto" alignItems="center">
+                                                        <BlockStack gap="300">
+
+                                                            <BlockStack gap="100">
+                                                                {rule.conditionsJson && Array.isArray(rule.conditionsJson) && rule.conditionsJson.map((cond: any, i: number) => {
+                                                                    const parentLabel = fields.find(f => f.id === cond.fieldId)?.label || "Unknown Field";
+                                                                    return (
+                                                                        <Text key={i} as="p" variant="bodyMd">
+                                                                            {i === 0 ? <Text as="span" fontWeight="bold">IF </Text> : <Text as="span" fontWeight="bold">AND IF </Text>}
+                                                                            <Text as="span" fontWeight="bold">[{parentLabel}] </Text>
+                                                                            {cond.operator}
+                                                                            <Text as="span" fontWeight="bold"> "{cond.value}"</Text>
+                                                                        </Text>
+                                                                    );
+                                                                })}
+                                                            </BlockStack>
+
+                                                            <Divider />
+
+                                                            <Text as="p" variant="bodyMd">
+                                                                <Text as="span" fontWeight="bold">THEN </Text>
+                                                                {rule.actionType}
+                                                                <Text as="span" fontWeight="bold"> [{targetLabel}]</Text>
+                                                                {rule.actionType === 'LIMIT_OPTIONS' && rule.targetOptionsJson && (
+                                                                    <Text as="span"> allowing only: {rule.targetOptionsJson.join(', ')}</Text>
+                                                                )}
+                                                            </Text>
+                                                        </BlockStack>
+
+                                                        <InlineStack gap="200">
+                                                            <Button onClick={() => handleMoveRule(rule.id, "up")}>
+                                                                ↑
+                                                            </Button>
+                                                            <Button onClick={() => handleMoveRule(rule.id, "down")}>
+                                                                ↓
+                                                            </Button>
+                                                            <Button onClick={() => handleEditRuleClick(rule)}>
+                                                                Edit
+                                                            </Button>
+                                                            <Button tone="critical" onClick={() => handleDeleteRule(rule.id)}>Remove</Button>
+                                                        </InlineStack>
+                                                    </InlineGrid>
+                                                </ResourceItem>
+                                            );
+                                        }}
+                                    />
+                                </Card>
+                            ) : (
+                                <Card>
+                                    <BlockStack align="center" inlineAlign="center">
+                                        <Text as="p" tone="subdued">No custom rules defined.</Text>
+                                    </BlockStack>
+                                </Card>
+                            )}
+
+                            {showRuleForm && (
+                                <Card>
+                                    <BlockStack gap="500">
+                                        <Text as="h3" variant="headingMd">{editingRuleId ? "Edit Custom Logic Rule" : "Build Custom Logic Rule"}</Text>
+
+                                        <BlockStack gap="300">
+                                            <Text as="h4" variant="headingSm">If Conditions (AND)</Text>
+
+                                            {ruleConditions.map((cond, index) => (
+                                                <Card key={index} background="bg-surface-secondary">
+                                                    <BlockStack gap="200">
+                                                        <InlineGrid columns={{ xs: 1, md: 3 }} gap="300">
+                                                            <Select
+                                                                label="Target Field"
+                                                                options={fields.map(f => ({ label: f.label, value: f.id }))}
+                                                                value={cond.fieldId}
+                                                                onChange={(val) => updateCondition(index, "fieldId", val)}
+                                                                placeholder="Select field..."
+                                                            />
+                                                            <Select
+                                                                label="Operator"
+                                                                options={[
+                                                                    { label: 'Equals', value: 'EQUALS' },
+                                                                    { label: 'Does Not Equal', value: 'NOT_EQUALS' },
+                                                                    { label: 'Contains', value: 'CONTAINS' }
+                                                                ]}
+                                                                value={cond.operator}
+                                                                onChange={(val) => updateCondition(index, "operator", val)}
+                                                            />
+                                                            <TextField
+                                                                label="Value"
+                                                                value={cond.value}
+                                                                onChange={(val) => updateCondition(index, "value", val)}
+                                                                autoComplete="off"
+                                                            />
+                                                        </InlineGrid>
+                                                        <InlineStack align="end">
+                                                            <Button size="micro" tone="critical" variant="plain" onClick={() => removeCondition(index)}>Remove Condition</Button>
+                                                        </InlineStack>
                                                     </BlockStack>
+                                                </Card>
+                                            ))}
 
-                                                    <Divider />
+                                            <InlineStack>
+                                                <Button icon={undefined} onClick={addBlankCondition}>+ Add Condition</Button>
+                                            </InlineStack>
+                                        </BlockStack>
 
-                                                    <Text as="p" variant="bodyMd">
-                                                        <Text as="span" fontWeight="bold">THEN </Text>
-                                                        {rule.actionType}
-                                                        <Text as="span" fontWeight="bold"> [{targetLabel}]</Text>
-                                                        {rule.actionType === 'LIMIT_OPTIONS' && rule.targetOptionsJson && (
-                                                            <Text as="span"> allowing only: {rule.targetOptionsJson.join(', ')}</Text>
-                                                        )}
-                                                    </Text>
-                                                </BlockStack>
+                                        <Divider />
 
-                                                <InlineStack gap="200">
-                                                    <Button onClick={() => handleMoveRule(rule.id, "up")}>
-                                                        ↑
-                                                    </Button>
-                                                    <Button onClick={() => handleMoveRule(rule.id, "down")}>
-                                                        ↓
-                                                    </Button>
-                                                    <Button onClick={() => handleEditRuleClick(rule)}>
-                                                        Edit
-                                                    </Button>
-                                                    <Button tone="critical" onClick={() => handleDeleteRule(rule.id)}>Remove</Button>
-                                                </InlineStack>
+                                        <BlockStack gap="300">
+                                            <Text as="h4" variant="headingSm">Then Action</Text>
+
+                                            <InlineGrid columns={{ xs: 1, md: 2 }} gap="300">
+                                                <Select
+                                                    label="Action Type"
+                                                    options={[
+                                                        { label: 'Show Field', value: 'SHOW' },
+                                                        { label: 'Hide Field', value: 'HIDE' },
+                                                        { label: 'Limit Options', value: 'LIMIT_OPTIONS' }
+                                                    ]}
+                                                    value={actionType}
+                                                    onChange={setActionType}
+                                                />
+                                                <Select
+                                                    label="Target Field"
+                                                    options={fields.map(f => ({ label: f.label, value: f.id }))}
+                                                    value={targetFieldId}
+                                                    onChange={setTargetFieldId}
+                                                    placeholder="Select field to modify..."
+                                                />
                                             </InlineGrid>
-                                        </ResourceItem>
-                                    );
+
+                                            {actionType === "LIMIT_OPTIONS" && targetFieldObj && (
+                                                <Card background="bg-surface-secondary">
+                                                    <BlockStack gap="200">
+                                                        <Text as="p" variant="headingSm">Select Allowed Options</Text>
+                                                        {targetFieldObj.optionsJson && Array.isArray(targetFieldObj.optionsJson) ? (
+                                                            <BlockStack gap="100">
+                                                                {targetFieldObj.optionsJson.map((opt: string) => (
+                                                                    <Checkbox
+                                                                        key={opt}
+                                                                        label={opt}
+                                                                        checked={selectedLimitOptions.includes(opt)}
+                                                                        onChange={(checked) => {
+                                                                            if (checked) {
+                                                                                setSelectedLimitOptions([...selectedLimitOptions, opt]);
+                                                                            } else {
+                                                                                setSelectedLimitOptions(selectedLimitOptions.filter(o => o !== opt));
+                                                                            }
+                                                                        }}
+                                                                    />
+                                                                ))}
+                                                            </BlockStack>
+                                                        ) : (
+                                                            <Text as="p" tone="subdued">Target field must be a Select, Checkbox, or Radio with options defined to use Limit Options.</Text>
+                                                        )}
+                                                    </BlockStack>
+                                                </Card>
+                                            )}
+                                        </BlockStack>
+
+                                        <InlineStack gap="300">
+                                            <Button onClick={resetRuleForm}>Cancel</Button>
+                                            <Button variant="primary" onClick={handleAddRule} disabled={ruleConditions.length === 0 || !targetFieldId}>
+                                                {editingRuleId ? "Save Local Rule" : "Add Local Rule"}
+                                            </Button>
+                                        </InlineStack>
+                                    </BlockStack>
+                                </Card>
+                            )}
+
+                            {!showRuleForm && (
+                                <Button variant="primary" onClick={() => { resetRuleForm(); setShowRuleForm(true); }}>Add Custom Rule</Button>
+                            )}
+                        </BlockStack>
+                    ) : (
+                        <Card background="bg-surface-secondary">
+                            <VisualRuleBuilder
+                                fields={fields}
+                                rules={rules}
+                                onSaveRules={(newRules: any) => {
+                                    const nonShowRules = rules.filter(r => r.actionType !== "SHOW");
+                                    const newShowRules = newRules.map((r: any) => ({ ...r, id: Math.random().toString(36).substr(2, 9) }));
+                                    setRules([...nonShowRules, ...newShowRules]);
                                 }}
                             />
                         </Card>
-                    ) : (
-                        <Card>
-                            <BlockStack align="center" inlineAlign="center">
-                                <Text as="p" tone="subdued">No custom rules defined.</Text>
-                            </BlockStack>
-                        </Card>
-                    )}
-
-                    {showRuleForm && (
-                        <Card>
-                            <BlockStack gap="500">
-                                <Text as="h3" variant="headingMd">{editingRuleId ? "Edit Custom Logic Rule" : "Build Custom Logic Rule"}</Text>
-
-                                <BlockStack gap="300">
-                                    <Text as="h4" variant="headingSm">If Conditions (AND)</Text>
-
-                                    {ruleConditions.map((cond, index) => (
-                                        <Card key={index} background="bg-surface-secondary">
-                                            <BlockStack gap="200">
-                                                <InlineGrid columns={{ xs: 1, md: 3 }} gap="300">
-                                                    <Select
-                                                        label="Target Field"
-                                                        options={fields.map(f => ({ label: f.label, value: f.id }))}
-                                                        value={cond.fieldId}
-                                                        onChange={(val) => updateCondition(index, "fieldId", val)}
-                                                        placeholder="Select field..."
-                                                    />
-                                                    <Select
-                                                        label="Operator"
-                                                        options={[
-                                                            { label: 'Equals', value: 'EQUALS' },
-                                                            { label: 'Does Not Equal', value: 'NOT_EQUALS' },
-                                                            { label: 'Contains', value: 'CONTAINS' }
-                                                        ]}
-                                                        value={cond.operator}
-                                                        onChange={(val) => updateCondition(index, "operator", val)}
-                                                    />
-                                                    <TextField
-                                                        label="Value"
-                                                        value={cond.value}
-                                                        onChange={(val) => updateCondition(index, "value", val)}
-                                                        autoComplete="off"
-                                                    />
-                                                </InlineGrid>
-                                                <InlineStack align="end">
-                                                    <Button size="micro" tone="critical" variant="plain" onClick={() => removeCondition(index)}>Remove Condition</Button>
-                                                </InlineStack>
-                                            </BlockStack>
-                                        </Card>
-                                    ))}
-
-                                    <InlineStack>
-                                        <Button icon={undefined} onClick={addBlankCondition}>+ Add Condition</Button>
-                                    </InlineStack>
-                                </BlockStack>
-
-                                <Divider />
-
-                                <BlockStack gap="300">
-                                    <Text as="h4" variant="headingSm">Then Action</Text>
-
-                                    <InlineGrid columns={{ xs: 1, md: 2 }} gap="300">
-                                        <Select
-                                            label="Action Type"
-                                            options={[
-                                                { label: 'Show Field', value: 'SHOW' },
-                                                { label: 'Hide Field', value: 'HIDE' },
-                                                { label: 'Limit Options', value: 'LIMIT_OPTIONS' }
-                                            ]}
-                                            value={actionType}
-                                            onChange={setActionType}
-                                        />
-                                        <Select
-                                            label="Target Field"
-                                            options={fields.map(f => ({ label: f.label, value: f.id }))}
-                                            value={targetFieldId}
-                                            onChange={setTargetFieldId}
-                                            placeholder="Select field to modify..."
-                                        />
-                                    </InlineGrid>
-
-                                    {actionType === "LIMIT_OPTIONS" && targetFieldObj && (
-                                        <Card background="bg-surface-secondary">
-                                            <BlockStack gap="200">
-                                                <Text as="p" variant="headingSm">Select Allowed Options</Text>
-                                                {targetFieldObj.optionsJson && Array.isArray(targetFieldObj.optionsJson) ? (
-                                                    <BlockStack gap="100">
-                                                        {targetFieldObj.optionsJson.map((opt: string) => (
-                                                            <Checkbox
-                                                                key={opt}
-                                                                label={opt}
-                                                                checked={selectedLimitOptions.includes(opt)}
-                                                                onChange={(checked) => {
-                                                                    if (checked) {
-                                                                        setSelectedLimitOptions([...selectedLimitOptions, opt]);
-                                                                    } else {
-                                                                        setSelectedLimitOptions(selectedLimitOptions.filter(o => o !== opt));
-                                                                    }
-                                                                }}
-                                                            />
-                                                        ))}
-                                                    </BlockStack>
-                                                ) : (
-                                                    <Text as="p" tone="subdued">Target field must be a Select, Checkbox, or Radio with options defined to use Limit Options.</Text>
-                                                )}
-                                            </BlockStack>
-                                        </Card>
-                                    )}
-                                </BlockStack>
-
-                                <InlineStack gap="300">
-                                    <Button onClick={resetRuleForm}>Cancel</Button>
-                                    <Button variant="primary" onClick={handleAddRule} disabled={ruleConditions.length === 0 || !targetFieldId}>
-                                        {editingRuleId ? "Save Local Rule" : "Add Local Rule"}
-                                    </Button>
-                                </InlineStack>
-                            </BlockStack>
-                        </Card>
-                    )}
-
-                    {!showRuleForm && (
-                        <Button variant="primary" onClick={() => { resetRuleForm(); setShowRuleForm(true); }}>Add Custom Rule</Button>
                     )}
                 </BlockStack>
             ),
