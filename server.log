@@ -1,0 +1,92 @@
+
+> start
+> prisma db push --accept-data-loss && remix-serve ./build/server/index.js
+
+Environment variables loaded from .env
+Prisma schema loaded from prisma\schema.prisma
+Datasource "db": PostgreSQL database "railway", schema "public" at "yamanote.proxy.rlwy.net:10253"
+
+The database is already in sync with the Prisma schema.
+
+Running generate... (Use --skip-generate to skip the generators)
+[2K[1A[2K[GRunning generate... - Prisma Client
+[2K[1A[2K[GΓ£ö Generated Prisma Client (v6.19.0) to .\node_modules\@prisma\client in 77ms
+
+≡ƒöì SCOPES environment variable: read_products,write_products
+≡ƒöì Parsed scopes: [ 'read_products', 'write_products' ]
+[shopify-api/INFO] version 11.14.1, environment Remix
+[remix-serve] http://localhost:3002 (http://192.168.1.6:3002)
+[API] Template request for product: gid://shopify/Product/7971803889721
+[API] Error fetching template: PrismaClientValidationError: 
+Invalid `prisma.productTemplateLink.findFirst()` invocation:
+
+{
+  where: {
+    productGid: "gid://shopify/Product/7971803889721"
+  },
+  select: {
+    id: true,
+    shop: true,
+    createdAt: true,
+    productGid: true,
+    templateId: true,
+    customFieldsJson: true,
+    customRulesJson: true,
+    template: {
+      include: {
+        fields: {
+          orderBy: {
+            sort: "asc"
+          },
+          select: {
+            id: true,
+            templateId: true,
+            name: true,
+            label: true,
+            type: true,
+            optionsJson: true,
+            priceAdjustmentsJson: true,
+            variantMappingJson: true,
+            required: true,
+            sort: true,
+            createdAt: true,
+            ~~~~~~~~~
+            updatedAt: true,
+?           template?: true
+          }
+        },
+        rules: {
+          orderBy: {
+            sort: "asc"
+          }
+        }
+      }
+    }
+  }
+}
+
+Unknown field `createdAt` for select statement on model `Field`. Available options are marked with ?.
+    at throwValidationException (D:\OneDrive\Shopify\variantiq\variant-iq\node_modules\@prisma\client\src\runtime\core\errorRendering\throwValidationException.ts:45:9)
+    at ei.handleRequestError (D:\OneDrive\Shopify\variantiq\variant-iq\node_modules\@prisma\client\src\runtime\RequestHandler.ts:202:7)
+    at ei.handleAndLogRequestError (D:\OneDrive\Shopify\variantiq\variant-iq\node_modules\@prisma\client\src\runtime\RequestHandler.ts:174:12)
+    at ei.request (D:\OneDrive\Shopify\variantiq\variant-iq\node_modules\@prisma\client\src\runtime\RequestHandler.ts:143:12)
+    at a (D:\OneDrive\Shopify\variantiq\variant-iq\node_modules\@prisma\client\src\runtime\getPrismaClient.ts:833:24)
+    at loader$c (file:///D:/OneDrive/Shopify/variantiq/variant-iq/build/server/index.js?t=1771900082258.1233:246:18)
+    at Object.callRouteLoader (D:\OneDrive\Shopify\variantiq\variant-iq\node_modules\@remix-run\server-runtime\dist\data.js:59:16)
+    at D:\OneDrive\Shopify\variantiq\variant-iq\node_modules\@remix-run\router\router.ts:4934:19
+    at callLoaderOrAction (D:\OneDrive\Shopify\variantiq\variant-iq\node_modules\@remix-run\router\router.ts:4998:16)
+    at async Promise.all (index 0) {
+  clientVersion: '6.19.0'
+}
+ReferenceError: require is not defined
+    at loader$c (file:///D:/OneDrive/Shopify/variantiq/variant-iq/build/server/index.js?t=1771900082258.1233:324:5)
+    at Object.callRouteLoader (D:\OneDrive\Shopify\variantiq\variant-iq\node_modules\@remix-run\server-runtime\dist\data.js:59:16)
+    at D:\OneDrive\Shopify\variantiq\variant-iq\node_modules\@remix-run\router\router.ts:4934:19
+    at callLoaderOrAction (D:\OneDrive\Shopify\variantiq\variant-iq\node_modules\@remix-run\router\router.ts:4998:16)
+    at async Promise.all (index 0)
+    at defaultDataStrategy (D:\OneDrive\Shopify\variantiq\variant-iq\node_modules\@remix-run\router\router.ts:4807:17)
+    at callDataStrategyImpl (D:\OneDrive\Shopify\variantiq\variant-iq\node_modules\@remix-run\router\router.ts:4870:17)
+    at callDataStrategy (D:\OneDrive\Shopify\variantiq\variant-iq\node_modules\@remix-run\router\router.ts:4027:19)
+    at loadRouteData (D:\OneDrive\Shopify\variantiq\variant-iq\node_modules\@remix-run\router\router.ts:3972:19)
+    at queryImpl (D:\OneDrive\Shopify\variantiq\variant-iq\node_modules\@remix-run\router\router.ts:3731:20)
+GET /api/template/gid%3A%2F%2Fshopify%2FProduct%2F7971803889721 500 - - 208.153 ms

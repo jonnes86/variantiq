@@ -67,8 +67,6 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
                 variantMappingJson: true, // Include variantMappingJson
                 required: true,
                 sort: true,
-                createdAt: true,
-                updatedAt: true,
               },
             },
             rules: { orderBy: { sort: "asc" } },
@@ -121,7 +119,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
         },
       }
     );
-  } catch (error) {
+  } catch (error: any) {
     console.error("[API] Error fetching template:", error);
     return json(
       { error: "Internal server error" },
