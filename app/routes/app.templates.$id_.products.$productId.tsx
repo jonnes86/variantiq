@@ -935,6 +935,7 @@ export default function ProductOverrideDetail() {
                             <VisualRuleBuilder
                                 fields={fields}
                                 rules={rules}
+                                datasets={datasets}
                                 onSaveRules={(newRules: any) => {
                                     const nonShowRules = rules.filter(r => r.actionType !== "SHOW");
                                     const newShowRules = newRules.map((r: any) => ({ ...r, id: Math.random().toString(36).substr(2, 9) }));

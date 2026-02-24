@@ -57,6 +57,25 @@ interface VisualRuleBuilderProps {
 }
 
 // ----------------------------------------------------
+// CONTEXT
+// ----------------------------------------------------
+const VisualBuilderContext = React.createContext<{
+    fieldsMap: Record<string, Field>;
+    tree: Record<string, string[]>;
+    datasets: any[];
+    fieldDatasetMap: Record<string, string>;
+    collapsedNodes: Set<string>;
+    onToggleCollapse: (id: string) => void;
+    onChangeDataset: (fieldId: string, datasetId: string) => void;
+} | null>(null);
+
+function useVisualBuilder() {
+    const context = React.useContext(VisualBuilderContext);
+    if (!context) throw new Error("Missing VisualBuilderContext");
+    return context;
+}
+
+// ----------------------------------------------------
 // COMPONENTS
 // ----------------------------------------------------
 
@@ -81,22 +100,14 @@ function DroppableZone({ id, children, isNested }: { id: string, children: React
 function SortableFieldNode({
     field,
     options,
-    childrenObj,
-    collapsedNodes,
-    onToggleCollapse,
     isNested,
-    datasetId,
-    onChangeDataset,
 }: {
     field: Field,
     options: string[],
-    childrenObj?: Record<string, string[]>,
-    collapsedNodes: Set<string>,
-    onToggleCollapse: (id: string) => void,
     isNested?: boolean,
-    datasetId?: string,
-    onChangeDataset?: (id: string, dataset: string) => void
 }) {
+    const { tree, collapsedNodes, onToggleCollapse, datasets, fieldDatasetMap, onChangeDataset } = useVisualBuilder();
+    const datasetId = fieldDatasetMap[field.id];
     const {
         attributes,
         listeners,
@@ -140,13 +151,13 @@ function SortableFieldNode({
                                 {collapsedNodes.has(field.id) ? `Expand ${options.length} Options` : `Collapse Options`}
                             </Button>
                         )}
-                        {isNested && globalDatasets.length > 0 && (
+                        {isNested && datasets.length > 0 && (
                             <Select
                                 label="Limit options to dataset"
                                 labelHidden
-                                options={[{ label: 'All Options Available', value: '' }, ...globalDatasets.map(d => ({ label: `Limit to: ${d.name}`, value: d.id }))]}
+                                options={[{ label: 'All Options Available', value: '' }, ...datasets.map(d => ({ label: `Limit to: ${d.name}`, value: d.id }))]}
                                 value={datasetId || ''}
-                                onChange={(value) => onChangeDataset && onChangeDataset(field.id, value)}
+                                onChange={(value) => onChangeDataset(field.id, value)}
                             />
                         )}
                     </InlineStack>
@@ -156,7 +167,7 @@ function SortableFieldNode({
                         <div style={{ marginLeft: "14px", marginTop: "8px", display: "flex", flexDirection: "column", gap: "8px" }}>
                             {options.map((opt) => {
                                 const dropId = `${field.id}::${opt}`;
-                                const nestedChildIds = childrenObj?.[dropId] || [];
+                                const nestedChildIds = tree[dropId] || [];
 
                                 return (
                                     <div key={opt} style={{
@@ -180,8 +191,6 @@ function SortableFieldNode({
                                                             <RenderFieldNodeById
                                                                 key={childId}
                                                                 fieldId={childId}
-                                                                collapsedNodes={collapsedNodes}
-                                                                onToggleCollapse={onToggleCollapse}
                                                                 isNested={true}
                                                             />
                                                         ))
@@ -200,24 +209,15 @@ function SortableFieldNode({
     );
 }
 
-// Helper to pull the node from global map so we don't drill fields infinitely
-let globalFieldsMap: Record<string, Field> = {};
-let globalTree: Record<string, string[]> = {};
-let globalDatasets: any[] = [];
-let globalFieldDatasetMap: Record<string, string> = {};
-
 function RenderFieldNodeById({
     fieldId,
-    collapsedNodes,
-    onToggleCollapse,
     isNested
 }: {
     fieldId: string,
-    collapsedNodes: Set<string>,
-    onToggleCollapse: (id: string) => void,
     isNested?: boolean,
 }) {
-    const f = globalFieldsMap[fieldId];
+    const { fieldsMap } = useVisualBuilder();
+    const f = fieldsMap[fieldId];
     if (!f) return null;
     const opts = (Array.isArray(f.optionsJson) ? f.optionsJson : []) as string[];
 
@@ -225,20 +225,10 @@ function RenderFieldNodeById({
         <SortableFieldNode
             field={f}
             options={opts}
-            childrenObj={globalTree}
-            collapsedNodes={collapsedNodes}
-            onToggleCollapse={onToggleCollapse}
             isNested={isNested}
-            datasetId={globalFieldDatasetMap[fieldId]}
-            onChangeDataset={(id, dataset) => {
-                // We dispatch a custom event to bubble this up to the parent builder
-                const event = new CustomEvent('variantiq:dataset-change', { detail: { fieldId: id, datasetId: dataset } });
-                window.dispatchEvent(event);
-            }}
         />
     );
 }
-
 
 // ----------------------------------------------------
 // MAIN BUILDER
@@ -248,21 +238,8 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules }: Visu
     const [activeId, setActiveId] = useState<string | null>(null);
     const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(new Set());
 
-    // tree shape: { "root": [id], "field1::opt1": [id, id] }
     const [tree, setTree] = useState<Record<string, string[]>>({ root: [] });
     const [fieldDatasetMap, setFieldDatasetMap] = useState<Record<string, string>>({});
-
-    useEffect(() => {
-        const handler = (e: any) => {
-            setFieldDatasetMap(prev => ({ ...prev, [e.detail.fieldId]: e.detail.datasetId }));
-        };
-        window.addEventListener('variantiq:dataset-change', handler);
-        return () => window.removeEventListener('variantiq:dataset-change', handler);
-    }, []);
-
-    useMemo(() => {
-        globalDatasets = datasets || [];
-    }, [datasets]);
 
     const handleToggleCollapse = (id: string) => {
         setCollapsedNodes(prev => {
@@ -273,17 +250,23 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules }: Visu
         });
     };
 
-    useMemo(() => {
-        fields.forEach(f => { globalFieldsMap[f.id] = f; });
+    const fieldsMap = useMemo(() => {
+        const map: Record<string, Field> = {};
+        fields.forEach(f => { map[f.id] = f; });
+        return map;
     }, [fields]);
 
-    useEffect(() => {
-        globalTree = tree;
-    }, [tree]);
-
-    useEffect(() => {
-        globalFieldDatasetMap = fieldDatasetMap;
-    }, [fieldDatasetMap]);
+    const contextValue = useMemo(() => ({
+        fieldsMap,
+        tree,
+        datasets: datasets || [],
+        fieldDatasetMap,
+        collapsedNodes,
+        onToggleCollapse: handleToggleCollapse,
+        onChangeDataset: (fieldId: string, datasetId: string) => {
+            setFieldDatasetMap(prev => ({ ...prev, [fieldId]: datasetId }));
+        }
+    }), [fieldsMap, tree, datasets, fieldDatasetMap, collapsedNodes]);
 
     // Init tree on load
     useEffect(() => {
@@ -446,92 +429,90 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules }: Visu
     const activeField = fields.find(f => f.id === activeId);
 
     return (
-        <DndContext
-            sensors={sensors}
-            collisionDetection={closestCorners}
-            onDragStart={handleDragStart}
-            onDragOver={handleDragOver}
-            onDragEnd={handleDragEnd}
-        >
-            <InlineGrid columns={{ xs: "1fr", md: "300px 1fr" }} gap="400" alignItems="start">
-                {/* Unassigned Pool */}
-                <Card>
-                    <BlockStack gap="400">
-                        <Text as="h3" variant="headingMd">
-                            Unassigned Fields
-                        </Text>
-                        <Text as="p" tone="subdued">
-                            Drag fields from here into the Root Canvas or into specific Options.
-                        </Text>
-                        <Divider />
+        <VisualBuilderContext.Provider value={contextValue}>
+            <DndContext
+                sensors={sensors}
+                collisionDetection={closestCorners}
+                onDragStart={handleDragStart}
+                onDragOver={handleDragOver}
+                onDragEnd={handleDragEnd}
+            >
+                <InlineGrid columns={{ xs: "1fr", md: "300px 1fr" }} gap="400" alignItems="start">
+                    {/* Unassigned Pool */}
+                    <Card>
+                        <BlockStack gap="400">
+                            <Text as="h3" variant="headingMd">
+                                Unassigned Fields
+                            </Text>
+                            <Text as="p" tone="subdued">
+                                Drag fields from here into the Root Canvas or into specific Options.
+                            </Text>
+                            <Divider />
 
-                        <SortableContext id="unassigned" items={tree["unassigned"] || []} strategy={verticalListSortingStrategy}>
-                            <div style={{ minHeight: "200px" }}>
-                                {tree["unassigned"]?.map((id) => (
-                                    <RenderFieldNodeById
-                                        key={id}
-                                        fieldId={id}
-                                        collapsedNodes={collapsedNodes}
-                                        onToggleCollapse={handleToggleCollapse}
-                                    />
-                                ))}
-                            </div>
-                        </SortableContext>
-                    </BlockStack>
-                </Card>
-
-                {/* Main Canvas */}
-                <Card>
-                    <BlockStack gap="400">
-                        <InlineStack align="space-between" blockAlign="center">
-                            <BlockStack gap="100">
-                                <Text as="h3" variant="headingMd">
-                                    Visual Canvas
-                                </Text>
-                                <Text as="p" tone="subdued">
-                                    Fields in the root are shown unconditionally. Fields inside options are only shown when that option is selected.
-                                </Text>
-                            </BlockStack>
-                            <Button variant="primary" onClick={handleCompileRules}>
-                                Save Rules Tree
-                            </Button>
-                        </InlineStack>
-
-                        <Box background="bg-surface-secondary" padding="400" borderRadius="200" minHeight="400px">
-                            <SortableContext id="root" items={tree["root"] || []} strategy={verticalListSortingStrategy}>
-                                <div style={{ minHeight: "100%", paddingBottom: "100px" }}>
-                                    {tree["root"]?.length === 0 && (
-                                        <Text as="p" tone="subdued">Drop unconditional fields here...</Text>
-                                    )}
-                                    {tree["root"]?.map((id) => (
+                            <SortableContext id="unassigned" items={tree["unassigned"] || []} strategy={verticalListSortingStrategy}>
+                                <div style={{ minHeight: "200px" }}>
+                                    {tree["unassigned"]?.map((id) => (
                                         <RenderFieldNodeById
                                             key={id}
                                             fieldId={id}
-                                            collapsedNodes={collapsedNodes}
-                                            onToggleCollapse={handleToggleCollapse}
                                         />
                                     ))}
                                 </div>
                             </SortableContext>
-                        </Box>
-                    </BlockStack>
-                </Card>
-            </InlineGrid>
+                        </BlockStack>
+                    </Card>
 
-            <DragOverlay>
-                {activeField ? (
-                    <div style={{ opacity: 0.9, cursor: "grabbing" }}>
-                        <Card padding="300" background="bg-surface">
-                            <InlineStack align="start" blockAlign="center" gap="200">
-                                <Icon source={DragHandleIcon} tone="subdued" />
-                                <Text as="span" variant="bodyMd" fontWeight="semibold">
-                                    {activeField.name}
-                                </Text>
+                    {/* Main Canvas */}
+                    <Card>
+                        <BlockStack gap="400">
+                            <InlineStack align="space-between" blockAlign="center">
+                                <BlockStack gap="100">
+                                    <Text as="h3" variant="headingMd">
+                                        Visual Canvas
+                                    </Text>
+                                    <Text as="p" tone="subdued">
+                                        Fields in the root are shown unconditionally. Fields inside options are only shown when that option is selected.
+                                    </Text>
+                                </BlockStack>
+                                <Button variant="primary" onClick={handleCompileRules}>
+                                    Save Rules Tree
+                                </Button>
                             </InlineStack>
-                        </Card>
-                    </div>
-                ) : null}
-            </DragOverlay>
-        </DndContext>
+
+                            <Box background="bg-surface-secondary" padding="400" borderRadius="200" minHeight="400px">
+                                <SortableContext id="root" items={tree["root"] || []} strategy={verticalListSortingStrategy}>
+                                    <div style={{ minHeight: "100%", paddingBottom: "100px" }}>
+                                        {tree["root"]?.length === 0 && (
+                                            <Text as="p" tone="subdued">Drop unconditional fields here...</Text>
+                                        )}
+                                        {tree["root"]?.map((id) => (
+                                            <RenderFieldNodeById
+                                                key={id}
+                                                fieldId={id}
+                                            />
+                                        ))}
+                                    </div>
+                                </SortableContext>
+                            </Box>
+                        </BlockStack>
+                    </Card>
+                </InlineGrid>
+
+                <DragOverlay>
+                    {activeField ? (
+                        <div style={{ opacity: 0.9, cursor: "grabbing" }}>
+                            <Card padding="300" background="bg-surface">
+                                <InlineStack align="start" blockAlign="center" gap="200">
+                                    <Icon source={DragHandleIcon} tone="subdued" />
+                                    <Text as="span" variant="bodyMd" fontWeight="semibold">
+                                        {activeField.name}
+                                    </Text>
+                                </InlineStack>
+                            </Card>
+                        </div>
+                    ) : null}
+                </DragOverlay>
+            </DndContext>
+        </VisualBuilderContext.Provider>
     );
 }
