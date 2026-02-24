@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { json, redirect } from "@remix-run/node";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
 import { useLoaderData, Form, Link, useSearchParams } from "@remix-run/react";
@@ -7,6 +7,7 @@ import {
   Layout,
   Text,
   Card,
+  Banner,
   Button,
   BlockStack,
   Box,
@@ -225,6 +226,17 @@ export default function Index() {
   const [selectedTab, setSelectedTab] = useState(getInitialTab());
   const [newTemplateName, setNewTemplateName] = useState("");
   const [newDatasetName, setNewDatasetName] = useState("");
+  const [isDismissed, setIsDismissed] = useState(true);
+
+  useEffect(() => {
+    const hidden = localStorage.getItem("hideVariantIqOnboarding") === "true";
+    setIsDismissed(hidden);
+  }, []);
+
+  const handleDismiss = () => {
+    localStorage.setItem("hideVariantIqOnboarding", "true");
+    setIsDismissed(true);
+  };
 
   const handleTabChange = (selectedTabIndex: number) => setSelectedTab(selectedTabIndex);
 
@@ -249,13 +261,16 @@ export default function Index() {
         </BlockStack>
       </Card>
 
-      <Card background="bg-surface-secondary">
-        <BlockStack gap="400">
-          <Text as="h3" variant="headingMd">🚀 Step 1: Activate VariantIQ on your Storefront</Text>
+      {!isDismissed && (
+        <Banner
+          title="🚀 Step 1: Activate VariantIQ on your Storefront"
+          tone="info"
+          onDismiss={handleDismiss}
+        >
           <Text as="p" variant="bodyMd">
             Before your custom fields will appear to customers, you must add the VariantIQ App Block to your theme.
           </Text>
-          <div style={{ marginLeft: "16px" }}>
+          <div style={{ paddingLeft: "16px", marginTop: "12px", paddingBottom: "8px" }}>
             <BlockStack gap="200">
               <Text as="p">1. Go to your Shopify Admin and click <Text as="strong">Online Store {">"} Themes</Text>.</Text>
               <Text as="p">2. Click <Text as="strong">Customize</Text> on your current theme.</Text>
@@ -265,8 +280,8 @@ export default function Index() {
               <Text as="p">6. Click <Text as="strong">Save</Text> in the top right corner.</Text>
             </BlockStack>
           </div>
-        </BlockStack>
-      </Card>
+        </Banner>
+      )}
 
       <InlineGrid columns={{ xs: 1, md: 2 }} gap="400">
         <Card>

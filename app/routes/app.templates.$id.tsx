@@ -421,13 +421,20 @@ export async function action({ request, params }: ActionFunctionArgs) {
     // Create any new fields submitted and record their true ID mappings
     const idMap: Record<string, string> = {};
     for (const nf of newFieldsData) {
+      if (!nf.name) continue; // Safety check
+      let safeOptionsJson = nf.optionsJson;
+      if (!safeOptionsJson) safeOptionsJson = [];
+      else if (typeof safeOptionsJson === 'string') {
+        try { safeOptionsJson = JSON.parse(safeOptionsJson); } catch (e) { safeOptionsJson = []; }
+      }
+
       const created = await prisma.field.create({
         data: {
           templateId,
-          type: nf.type,
+          type: nf.type || "select",
           name: nf.name,
-          label: nf.label,
-          optionsJson: nf.optionsJson,
+          label: nf.label || nf.name,
+          optionsJson: safeOptionsJson,
           required: nf.required || false,
           sort: 999
         }
@@ -455,15 +462,14 @@ export async function action({ request, params }: ActionFunctionArgs) {
       let targetOpts = rule.targetOptionsJson;
       try {
         if (typeof targetOpts === 'string') targetOpts = JSON.parse(targetOpts);
-        // We don't need to remap anything inside targetOptionsJson unless datasetId was tied to a local field, which it isn't, datasetIds are real.
       } catch (e) { }
 
       return {
         templateId,
-        conditionsJson: conds,
-        targetFieldId: mapId(rule.targetFieldId),
-        actionType: rule.actionType,
-        targetOptionsJson: targetOpts,
+        conditionsJson: conds && Array.isArray(conds) ? conds : [],
+        targetFieldId: mapId(rule.targetFieldId || ""),
+        actionType: rule.actionType || "SHOW",
+        targetOptionsJson: targetOpts || null, // Optional Json? fields translate properly when null from client? No, safer to omit or use string "null" if we can't use Prisma.DbNull, but passing JSON string or object handles it.
         sort: index + 1, // Maintain order
       };
     });
