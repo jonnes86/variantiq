@@ -64,6 +64,11 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
         throw new Response("Product not linked to template", { status: 404 });
     }
 
+    const datasets = await prisma.dataset.findMany({
+        where: { shop: session.shop },
+        orderBy: { name: "asc" }
+    });
+
     // Fetch product info from Shopify Graphql to show title in UI
     const { admin } = await authenticate.admin(request);
     const response = await admin.graphql(
@@ -96,7 +101,8 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
         templateName: link.template.name,
         hasOverrides: !!((link as any).customFieldsJson || (link as any).customRulesJson),
         initialFields: activeFields,
-        initialRules: activeRules
+        initialRules: activeRules,
+        datasets
     });
 }
 
@@ -157,7 +163,8 @@ export default function ProductOverrideDetail() {
         templateName,
         hasOverrides,
         initialFields,
-        initialRules
+        initialRules,
+        datasets
     } = useLoaderData<typeof loader>();
 
     const submit = useSubmit();
@@ -338,6 +345,7 @@ export default function ProductOverrideDetail() {
     const [actionType, setActionType] = useState("SHOW");
     // Limit Options State
     const [selectedLimitOptions, setSelectedLimitOptions] = useState<string[]>([]);
+    const [tempTargetOption, setTempTargetOption] = useState<string>("");
 
 
     const addBlankCondition = () => {
@@ -368,6 +376,9 @@ export default function ProductOverrideDetail() {
         if (actionType === "LIMIT_OPTIONS") {
             targetOptionsJson = selectedLimitOptions;
             if (targetOptionsJson.length === 0) return; // Must select at least one limit option
+        } else if (actionType === "LIMIT_OPTIONS_DATASET") {
+            targetOptionsJson = { datasetId: tempTargetOption };
+            if (!tempTargetOption) return;
         }
 
         if (editingRuleId) {
@@ -400,6 +411,7 @@ export default function ProductOverrideDetail() {
         setTargetFieldId("");
         setActionType("SHOW");
         setSelectedLimitOptions([]);
+        setTempTargetOption("");
     };
 
     const handleEditRuleClick = (rule: any) => {
@@ -410,7 +422,13 @@ export default function ProductOverrideDetail() {
         setTargetFieldId(rule.targetFieldId);
         setActionType(rule.actionType);
         try {
-            setSelectedLimitOptions(rule.targetOptionsJson || []);
+            if (rule.actionType === "LIMIT_OPTIONS_DATASET") {
+                const parsed = typeof rule.targetOptionsJson === 'string' ? JSON.parse(rule.targetOptionsJson) : rule.targetOptionsJson;
+                setTempTargetOption(parsed?.datasetId || "");
+                setSelectedLimitOptions([]);
+            } else {
+                setSelectedLimitOptions(rule.targetOptionsJson || []);
+            }
         } catch (e) { setSelectedLimitOptions([]); }
 
         setShowRuleForm(true);
@@ -837,7 +855,8 @@ export default function ProductOverrideDetail() {
                                                     options={[
                                                         { label: 'Show Field', value: 'SHOW' },
                                                         { label: 'Hide Field', value: 'HIDE' },
-                                                        { label: 'Limit Options', value: 'LIMIT_OPTIONS' }
+                                                        { label: 'Limit Options', value: 'LIMIT_OPTIONS' },
+                                                        { label: 'Limit To Dataset', value: 'LIMIT_OPTIONS_DATASET' }
                                                     ]}
                                                     value={actionType}
                                                     onChange={setActionType}
@@ -875,6 +894,23 @@ export default function ProductOverrideDetail() {
                                                         ) : (
                                                             <Text as="p" tone="subdued">Target field must be a Select, Checkbox, or Radio with options defined to use Limit Options.</Text>
                                                         )}
+                                                    </BlockStack>
+                                                </Card>
+                                            )}
+
+                                            {actionType === "LIMIT_OPTIONS_DATASET" && (
+                                                <Card background="bg-surface-secondary">
+                                                    <BlockStack gap="200">
+                                                        <Text as="p" tone="subdued">Select the Global Dataset to populate the target field options:</Text>
+                                                        <Select
+                                                            label="Global Dataset"
+                                                            options={[
+                                                                { label: "Select Dataset...", value: "" },
+                                                                ...datasets.map((d: any) => ({ label: d.name, value: d.id }))
+                                                            ]}
+                                                            value={tempTargetOption}
+                                                            onChange={setTempTargetOption}
+                                                        />
                                                     </BlockStack>
                                                 </Card>
                                             )}

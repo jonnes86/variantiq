@@ -606,7 +606,11 @@ export default function TemplateDetail() {
       conditionsJson: JSON.stringify(ruleConditions),
       targetFieldId: ruleTargetFieldId,
       actionType: ruleActionType,
-      targetOptionsJson: ruleActionType === "LIMIT_OPTIONS" ? JSON.stringify(ruleTargetOptions) : "null",
+      targetOptionsJson: ruleActionType === "LIMIT_OPTIONS"
+        ? JSON.stringify(ruleTargetOptions)
+        : ruleActionType === "LIMIT_OPTIONS_DATASET"
+          ? JSON.stringify({ datasetId: tempTargetOption })
+          : "null",
       targetPriceAdjustmentsJson: ruleActionType === "SET_PRICE" ? JSON.stringify(ruleTargetPriceAdjustments) : "null",
     }, { method: "post" });
 
@@ -631,7 +635,13 @@ export default function TemplateDetail() {
     setRuleTargetFieldId(rule.targetFieldId);
     setRuleActionType(rule.actionType);
     try {
-      setRuleTargetOptions(rule.targetOptionsJson as string[] || []);
+      if (rule.actionType === "LIMIT_OPTIONS_DATASET") {
+        const parsed = typeof rule.targetOptionsJson === 'string' ? JSON.parse(rule.targetOptionsJson) : rule.targetOptionsJson;
+        setTempTargetOption(parsed?.datasetId || "");
+        setRuleTargetOptions([]);
+      } else {
+        setRuleTargetOptions(rule.targetOptionsJson as string[] || []);
+      }
     } catch (e) { setRuleTargetOptions([]); }
     try {
       setRuleTargetPriceAdjustments(rule.targetPriceAdjustmentsJson as Record<string, string> || {});
@@ -1196,6 +1206,7 @@ export default function TemplateDetail() {
                         { label: "Show", value: "SHOW" },
                         { label: "Hide", value: "HIDE" },
                         { label: "Limit Options To", value: "LIMIT_OPTIONS" },
+                        { label: "Limit To Dataset", value: "LIMIT_OPTIONS_DATASET" },
                         { label: "Override Option Prices", value: "SET_PRICE" }
                       ]}
                       value={ruleActionType}
@@ -1254,6 +1265,23 @@ export default function TemplateDetail() {
                             Add Option
                           </Button>
                         </div>
+                      </InlineGrid>
+                    </BlockStack>
+                  )}
+
+                  {ruleActionType === "LIMIT_OPTIONS_DATASET" && (
+                    <BlockStack gap="300">
+                      <Text as="p" tone="subdued">Select the Global Dataset to populate the target field options:</Text>
+                      <InlineGrid columns="1fr" gap="200">
+                        <Select
+                          label="Global Dataset"
+                          options={[
+                            { label: "Select Dataset...", value: "" },
+                            ...datasets.map((d: any) => ({ label: d.name, value: d.id }))
+                          ]}
+                          value={tempTargetOption}
+                          onChange={setTempTargetOption}
+                        />
                       </InlineGrid>
                     </BlockStack>
                   )}
