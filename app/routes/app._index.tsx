@@ -116,6 +116,83 @@ export async function action({ request }: ActionFunctionArgs) {
     return redirect(`/app/templates/${t.id}`);
   }
 
+  if (intent === "deleteTemplate") {
+    const id = String(form.get("id"));
+    await prisma.template.delete({ where: { id, shop: session.shop } });
+    return null;
+  }
+
+  if (intent === "duplicateTemplate") {
+    const id = String(form.get("id"));
+    const originalTemplate = await prisma.template.findUnique({
+      where: { id, shop: session.shop },
+      include: {
+        fields: true,
+        rules: true
+      }
+    });
+
+    if (!originalTemplate) return json({ error: "Template not found" }, { status: 404 });
+
+    const newTemplate = await prisma.template.create({
+      data: {
+        name: `${originalTemplate.name} (Copy)`,
+        shop: session.shop,
+        fields: {
+          create: originalTemplate.fields.map(f => ({
+            name: f.name,
+            label: f.label,
+            type: f.type,
+            optionsJson: f.optionsJson ?? undefined,
+            priceAdjustmentsJson: f.priceAdjustmentsJson ?? undefined,
+            variantMappingJson: f.variantMappingJson ?? undefined,
+            required: f.required,
+            sort: f.sort
+          }))
+        }
+      },
+      include: {
+        fields: true
+      }
+    });
+
+    // Remap rule field references
+    const fieldIdMap: Record<string, string> = {};
+    for (const oldField of originalTemplate.fields) {
+      const newField = newTemplate.fields.find(f => f.name === oldField.name && f.sort === oldField.sort);
+      if (newField) {
+        fieldIdMap[oldField.id] = newField.id;
+      }
+    }
+
+    if (originalTemplate.rules.length > 0) {
+      const rulesToCreate = originalTemplate.rules.map(r => {
+        let newConditions = r.conditionsJson;
+        if (Array.isArray(newConditions)) {
+          newConditions = newConditions.map((c: any) => ({
+            ...c,
+            fieldId: fieldIdMap[c.fieldId] || c.fieldId
+          }));
+        }
+        return {
+          templateId: newTemplate.id,
+          targetFieldId: fieldIdMap[r.targetFieldId] || r.targetFieldId,
+          actionType: r.actionType,
+          targetOptionsJson: r.targetOptionsJson as any,
+          targetPriceAdjustmentsJson: r.targetPriceAdjustmentsJson as any,
+          conditionsJson: newConditions as any,
+          sort: r.sort
+        };
+      });
+
+      await prisma.rule.createMany({
+        data: rulesToCreate
+      });
+    }
+
+    return redirect(`/app/templates/${newTemplate.id}`);
+  }
+
   if (intent === "createDataset") {
     const name = String(form.get("name") || "").trim();
     if (!name) return json({ error: "Name required" }, { status: 400 });
@@ -149,16 +226,42 @@ export default function Index() {
 
   // --- VIEWS ---
   const DashboardView = (
-    <BlockStack gap="400">
+    <BlockStack gap="500">
       <Card>
         <BlockStack gap="400">
           <Text as="h2" variant="headingMd">Welcome to VariantIQ</Text>
           <Text as="p">
-            VariantIQ helps you define and manage custom variant option templates.
+            VariantIQ allows you to easily manage custom product options, conditional logic rules, and dynamic pricing across your Shopify catalog.
           </Text>
-          <Button onClick={() => setSelectedTab(1)}>Go to Templates</Button>
+          <Text as="p">
+            Get started by exploring the core features below:
+          </Text>
         </BlockStack>
       </Card>
+
+      <InlineGrid columns={{ xs: 1, md: 2 }} gap="400">
+        <Card>
+          <BlockStack gap="400">
+            <Text as="h3" variant="headingMd">Templates</Text>
+            <Text as="p" tone="subdued">
+              Templates are the core of VariantIQ. A template contains your custom fields (like text boxes, dropdowns, file uploads) and dynamic rules (e.g., "Show field Y if option X is selected").
+              Once built, you can link a single template to hundreds of products at once.
+            </Text>
+            <Button onClick={() => setSelectedTab(1)}>Manage Templates</Button>
+          </BlockStack>
+        </Card>
+
+        <Card>
+          <BlockStack gap="400">
+            <Text as="h3" variant="headingMd">Global Datasets</Text>
+            <Text as="p" tone="subdued">
+              Datasets let you create massive, reusable lists of options (like all 200 of your brand colors).
+              Instead of manually typing colors into every single dropdown field in your templates, you can import them here once and reference them dynamically using Rules.
+            </Text>
+            <Button onClick={() => setSelectedTab(2)}>Manage Datasets</Button>
+          </BlockStack>
+        </Card>
+      </InlineGrid>
     </BlockStack>
   );
 
@@ -167,6 +270,10 @@ export default function Index() {
       <Card>
         <BlockStack gap="400">
           <Text as="h2" variant="headingMd">Create New Template</Text>
+          <Text as="p" tone="subdued">
+            A Template acts as a blueprint. For example, you might create a "T-Shirts" template containing fields for "Custom Name" and "Logo Upload".
+            You can then assign that exact template to all of your T-Shirt products.
+          </Text>
           <Form method="post">
             <input type="hidden" name="_intent" value="createTemplate" />
             <InlineGrid columns="3fr 1fr" gap="400" alignItems="end">
@@ -201,9 +308,21 @@ export default function Index() {
                         Updated {new Date(t.updatedAt).toLocaleDateString()}
                       </Text>
                     </BlockStack>
-                    <Link to={`/ app / templates / ${t.id} `} style={{ textDecoration: 'none' }}>
-                      <Button>Edit</Button>
-                    </Link>
+                    <InlineStack gap="200" align="end" blockAlign="center">
+                      <Form method="post" onSubmit={(e) => { if (!confirm(`Are you sure you want to duplicate ${t.name}?`)) e.preventDefault(); }}>
+                        <input type="hidden" name="_intent" value="duplicateTemplate" />
+                        <input type="hidden" name="id" value={t.id} />
+                        <Button submit variant="tertiary">Duplicate</Button>
+                      </Form>
+                      <Link to={`/app/templates/${t.id}`} style={{ textDecoration: 'none' }}>
+                        <Button>Edit</Button>
+                      </Link>
+                      <Form method="post" onSubmit={(e) => { if (!confirm(`Are you sure you would like to delete ${t.name}?`)) e.preventDefault(); }}>
+                        <input type="hidden" name="_intent" value="deleteTemplate" />
+                        <input type="hidden" name="id" value={t.id} />
+                        <Button submit tone="critical">Delete</Button>
+                      </Form>
+                    </InlineStack>
                   </InlineGrid>
                 </Card>
               ))}

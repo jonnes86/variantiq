@@ -37,6 +37,8 @@ model Template {
   name      String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  views      Int      @default(0)
+  addsToCart Int      @default(0)
 
   fontFamily           String?
   fontSize             String?
@@ -82,11 +84,14 @@ model Rule {
   // Field to act upon (e.g., 'Color')
   targetFieldId    String   
   
-  // "SHOW", "HIDE", "LIMIT_OPTIONS"
+  // "SHOW", "HIDE", "LIMIT_OPTIONS", "SET_PRICE"
   actionType       String   @default("SHOW") 
   
   // Allowed choices if LIMIT_OPTIONS (e.g., ["Red", "Blue"])
   targetOptionsJson Json?   
+
+  // Pricing overrides if SET_PRICE (e.g., {"Blue": 15, "Red": 0})
+  targetPriceAdjustmentsJson Json?
   
   sort             Int      @default(0)
   template         Template @relation(fields: [templateId], references: [id], onDelete: Cascade)

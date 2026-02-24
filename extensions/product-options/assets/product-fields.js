@@ -11,6 +11,7 @@ class VariantIQFields {
     this.apiUrl = container.dataset.apiUrl;
     this.templateData = null;
     this.fieldValues = {};
+    this.dynamicFieldPrices = {};
     this.instanceId = Math.random().toString(36).substr(2, 9);
     this.init();
   }
@@ -50,6 +51,29 @@ class VariantIQFields {
 
     const data = await response.json();
     this.templateData = data;
+
+    // Track View Analytic
+    if (this.templateData && this.templateData.template && this.templateData.template.id) {
+      this.trackAnalytics('view');
+    }
+  }
+
+  async trackAnalytics(event) {
+    if (!this.templateData || !this.templateData.template) return;
+    try {
+      await fetch(`${this.apiUrl}/api/template/${encodeURIComponent(this.productId)}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          templateId: this.templateData.template.id,
+          event: event
+        })
+      });
+    } catch (e) {
+      console.warn('VariantIQ analytics tracking failed:', e);
+    }
   }
 
   render() {
@@ -95,8 +119,9 @@ class VariantIQFields {
 
       fieldOptions.forEach((option, index) => {
         const optionPrice = field.priceAdjustmentsJson && field.priceAdjustmentsJson[option]
-          ? ` (+$${parseFloat(field.priceAdjustmentsJson[option]).toFixed(2)})`
-          : '';
+          ? ` <span class="variantiq-price-label">(+$${parseFloat(field.priceAdjustmentsJson[option]).toFixed(2)})</span>`
+          : ` <span class="variantiq-price-label"></span>`;
+
 
         html += `
           <input 
@@ -222,6 +247,7 @@ class VariantIQFields {
       const showRules = fieldRules.filter(r => r.actionType === 'SHOW');
       const hideRules = fieldRules.filter(r => r.actionType === 'HIDE');
       const limitRules = fieldRules.filter(r => r.actionType === 'LIMIT_OPTIONS');
+      const setPriceRules = fieldRules.filter(r => r.actionType === 'SET_PRICE');
 
       const evaluateRuleConditions = (rule) => {
         const conditions = rule.conditionsJson || [];
@@ -273,6 +299,18 @@ class VariantIQFields {
         });
       }
 
+      // Check for Set Price
+      let priceOverride = null;
+      const passingPriceRules = setPriceRules.filter(evaluateRuleConditions);
+      if (passingPriceRules.length > 0) {
+        priceOverride = {};
+        passingPriceRules.forEach(r => {
+          const adjustments = r.targetPriceAdjustmentsJson || {};
+          Object.assign(priceOverride, adjustments);
+        });
+      }
+      this.dynamicFieldPrices[field.id] = priceOverride !== null ? priceOverride : field.priceAdjustmentsJson;
+
       // Apply visibility outcome
       if (shouldShow) {
         fieldElement.style.display = 'block';
@@ -283,6 +321,10 @@ class VariantIQFields {
         } else {
           this.restoreAllOptions(field, fieldElement);
         }
+
+        // Apply visual price label overrides to the DOM
+        this.updateDOMPriceLabels(field, fieldElement, this.dynamicFieldPrices[field.id]);
+
       } else {
         fieldElement.style.display = 'none';
         this.clearFieldValue(field, fieldElement);
@@ -312,17 +354,19 @@ class VariantIQFields {
     const visibleFields = this.getVisibleFields();
     visibleFields.forEach(field => {
       const val = this.fieldValues[field.id];
-      if (val && field.priceAdjustmentsJson) {
+      const activePrices = this.dynamicFieldPrices[field.id] || field.priceAdjustmentsJson;
+
+      if (val && activePrices) {
         if (field.type === 'checkbox') {
           const selectedOpts = val.split(', ').map(s => s.trim());
           selectedOpts.forEach(opt => {
-            if (field.priceAdjustmentsJson[opt]) {
-              adjustmentsTotal += parseFloat(field.priceAdjustmentsJson[opt]);
+            if (activePrices[opt]) {
+              adjustmentsTotal += parseFloat(activePrices[opt]);
             }
           });
         } else {
-          if (field.priceAdjustmentsJson[val]) {
-            adjustmentsTotal += parseFloat(field.priceAdjustmentsJson[val]);
+          if (activePrices[val]) {
+            adjustmentsTotal += parseFloat(activePrices[val]);
           }
         }
       }
@@ -408,6 +452,29 @@ class VariantIQFields {
     }
   }
 
+  updateDOMPriceLabels(field, fieldElement, activePrices) {
+    if (field.type === 'text') return;
+
+    if (field.type === 'select') {
+      const options = fieldElement.querySelectorAll('option');
+      options.forEach(opt => {
+        if (!opt.value) return;
+        const val = opt.getAttribute('data-opt-value');
+        const priceStr = activePrices && activePrices[val] ? ` (+$${parseFloat(activePrices[val]).toFixed(2)})` : '';
+        opt.textContent = `${val}${priceStr}`;
+      });
+    } else if (field.type === 'radio' || field.type === 'checkbox') {
+      const labels = fieldElement.querySelectorAll('label[data-opt-value]');
+      labels.forEach(label => {
+        const val = label.dataset.optValue;
+        const priceSpan = label.querySelector('.variantiq-price-label');
+        if (priceSpan) {
+          priceSpan.textContent = activePrices && activePrices[val] ? ` (+$${parseFloat(activePrices[val]).toFixed(2)})` : '';
+        }
+      });
+    }
+  }
+
   updateValueFromDOM(field, fieldElement) {
     let value;
     if (field.type === 'checkbox') {
@@ -457,6 +524,7 @@ class VariantIQFields {
         }
 
         console.log('VariantIQ: Validation passed');
+        this.trackAnalytics('add_to_cart');
 
         if (form) {
           // Calculate active price fees and mapped variants
@@ -481,16 +549,17 @@ class VariantIQFields {
               }
 
               // 2. Tally Up Price Adjustments
-              if (field.priceAdjustmentsJson) {
+              const activePrices = this.dynamicFieldPrices[field.id] || field.priceAdjustmentsJson;
+              if (activePrices) {
                 if (field.type === 'checkbox') {
                   val.split(', ').forEach(opt => {
-                    if (field.priceAdjustmentsJson[opt.trim()]) {
-                      adjustmentsTotal += parseFloat(field.priceAdjustmentsJson[opt.trim()]);
+                    if (activePrices[opt.trim()]) {
+                      adjustmentsTotal += parseFloat(activePrices[opt.trim()]);
                     }
                   });
                 } else {
-                  if (field.priceAdjustmentsJson[val]) {
-                    adjustmentsTotal += parseFloat(field.priceAdjustmentsJson[val]);
+                  if (activePrices[val]) {
+                    adjustmentsTotal += parseFloat(activePrices[val]);
                   }
                 }
               }

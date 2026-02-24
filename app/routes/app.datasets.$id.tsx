@@ -126,7 +126,7 @@ export default function DatasetDetail() {
                                 </BlockStack>
                             </Card>
 
-                            <Card selected>
+                            <Card>
                                 <BlockStack gap="400">
                                     <InlineStack align="space-between" blockAlign="center">
                                         <Text as="h3" variant="headingMd">Options List</Text>

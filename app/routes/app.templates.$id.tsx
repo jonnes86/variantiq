@@ -29,6 +29,67 @@ import { prisma } from "../db.server";
 import { useState, useEffect } from "react";
 import { authenticate } from "../shopify.server";
 import { VisualRuleBuilder } from "../components/VisualRuleBuilder";
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
+import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { DragHandleIcon } from "@shopify/polaris-icons";
+import { Icon } from "@shopify/polaris";
+
+// Sub-component for Draggable Field Items
+function SortableFieldListItem({ field, handleEditFieldClick, handleDeleteField }: any) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging
+  } = useSortable({ id: field.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+    marginBottom: "12px",
+  };
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      <Card>
+        <InlineStack align="space-between" blockAlign="center">
+          <InlineStack gap="300" blockAlign="center">
+            <div {...attributes} {...listeners} style={{ cursor: 'grab', touchAction: 'none' }}>
+              <Icon source={DragHandleIcon} tone="subdued" />
+            </div>
+            <BlockStack gap="100">
+              <Text as="h4" variant="bodyMd" fontWeight="semibold">
+                {field.name}
+                {field.required && (
+                  <Text as="span" tone="critical"> *</Text>
+                )}
+              </Text>
+              <Text as="p" tone="subdued" variant="bodySm">
+                Type: {field.type} | Label: {field.label}
+              </Text>
+              {field.optionsJson && (
+                <Text as="p" variant="bodySm">
+                  Options: {field.optionsJson.map((opt: string) => {
+                    const price = field.priceAdjustmentsJson?.[opt];
+                    return price ? `${opt} (+$${price})` : opt;
+                  }).join(", ")}
+                </Text>
+              )}
+            </BlockStack>
+          </InlineStack>
+          <InlineStack gap="200">
+            <Button onClick={() => handleEditFieldClick(field)}>Edit</Button>
+            <Button onClick={() => handleDeleteField(field.id)} tone="critical">Delete</Button>
+          </InlineStack>
+        </InlineStack>
+      </Card>
+    </div>
+  );
+}
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   try {
@@ -250,6 +311,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
     const targetFieldId = String(form.get("targetFieldId") || "");
     const actionType = String(form.get("actionType") || "SHOW");
     const targetOptionsStr = String(form.get("targetOptionsJson") || "null");
+    const targetPriceAdjustmentsStr = String(form.get("targetPriceAdjustmentsJson") || "null");
 
     let conditionsJson = [];
     try {
@@ -260,6 +322,13 @@ export async function action({ request, params }: ActionFunctionArgs) {
     try {
       if (targetOptionsStr !== "null" && targetOptionsStr !== "") {
         targetOptionsJson = JSON.parse(targetOptionsStr);
+      }
+    } catch (e) { }
+
+    let targetPriceAdjustmentsJson = null;
+    try {
+      if (targetPriceAdjustmentsStr !== "null" && targetPriceAdjustmentsStr !== "") {
+        targetPriceAdjustmentsJson = JSON.parse(targetPriceAdjustmentsStr);
       }
     } catch (e) { }
 
@@ -278,6 +347,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
           targetFieldId,
           actionType,
           targetOptionsJson: targetOptionsJson as any,
+          targetPriceAdjustmentsJson: targetPriceAdjustmentsJson as any,
         }
       });
     } else {
@@ -294,6 +364,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
           targetFieldId,
           actionType,
           targetOptionsJson: targetOptionsJson as any,
+          targetPriceAdjustmentsJson: targetPriceAdjustmentsJson as any,
           sort: (maxSort?.sort || 0) + 1,
         },
       });
@@ -366,6 +437,22 @@ export async function action({ request, params }: ActionFunctionArgs) {
         prisma.field.update({ where: { id: currentField.id }, data: { sort: targetField.sort } }),
         prisma.field.update({ where: { id: targetField.id }, data: { sort: currentField.sort } })
       ]);
+    }
+    return json({ success: true });
+  }
+
+  // Bulk reorder fields via drag and drop
+  if (intent === "bulkReorderFields") {
+    const sortedIdsStr = String(form.get("sortedIds") || "[]");
+    let sortedIds: string[] = [];
+    try { sortedIds = JSON.parse(sortedIdsStr); } catch (e) { }
+
+    if (sortedIds.length > 0) {
+      await prisma.$transaction(
+        sortedIds.map((id, index) =>
+          prisma.field.update({ where: { id }, data: { sort: index } })
+        )
+      );
     }
     return json({ success: true });
   }
@@ -468,6 +555,7 @@ export default function TemplateDetail() {
   const [ruleActionType, setRuleActionType] = useState("SHOW");
   const [ruleTargetOptions, setRuleTargetOptions] = useState<string[]>([]);
   const [tempTargetOption, setTempTargetOption] = useState("");
+  const [ruleTargetPriceAdjustments, setRuleTargetPriceAdjustments] = useState<Record<string, string>>({});
 
   // Handlers
   const [ruleBuilderMode, setRuleBuilderMode] = useState<"TRADITIONAL" | "VISUAL">("VISUAL");
@@ -519,6 +607,7 @@ export default function TemplateDetail() {
       targetFieldId: ruleTargetFieldId,
       actionType: ruleActionType,
       targetOptionsJson: ruleActionType === "LIMIT_OPTIONS" ? JSON.stringify(ruleTargetOptions) : "null",
+      targetPriceAdjustmentsJson: ruleActionType === "SET_PRICE" ? JSON.stringify(ruleTargetPriceAdjustments) : "null",
     }, { method: "post" });
 
     resetRuleForm();
@@ -531,6 +620,7 @@ export default function TemplateDetail() {
     setRuleTargetFieldId("");
     setRuleActionType("SHOW");
     setRuleTargetOptions([]);
+    setRuleTargetPriceAdjustments({});
   };
 
   const handleEditRuleClick = (rule: any) => {
@@ -543,6 +633,9 @@ export default function TemplateDetail() {
     try {
       setRuleTargetOptions(rule.targetOptionsJson as string[] || []);
     } catch (e) { setRuleTargetOptions([]); }
+    try {
+      setRuleTargetPriceAdjustments(rule.targetPriceAdjustmentsJson as Record<string, string> || {});
+    } catch (e) { setRuleTargetPriceAdjustments({}); }
 
     setShowRuleForm(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -554,8 +647,19 @@ export default function TemplateDetail() {
     }
   };
 
-  const handleMoveField = (fieldId: string, direction: "up" | "down") => {
-    submit({ _intent: "reorderField", fieldId, direction }, { method: "post" });
+  const handleDragEndFields = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      const oldIndex = template.fields.findIndex((f: any) => f.id === active.id);
+      const newIndex = template.fields.findIndex((f: any) => f.id === over.id);
+
+      const newFields = [...template.fields];
+      const [movedItem] = newFields.splice(oldIndex, 1);
+      newFields.splice(newIndex, 0, movedItem);
+
+      const sortedIds = newFields.map((f: any) => f.id);
+      submit({ _intent: "bulkReorderFields", sortedIds: JSON.stringify(sortedIds) }, { method: "post" });
+    }
   };
 
   const handleMoveRule = (ruleId: string, direction: "up" | "down") => {
@@ -842,55 +946,27 @@ export default function TemplateDetail() {
         </Card>
       ) : (
         <Card>
-          <ResourceList
-            resourceName={{ singular: "field", plural: "fields" }}
-            items={template.fields}
-            renderItem={(field: any) => (
-              <ResourceItem id={field.id} onClick={() => { }}>
-                <InlineStack align="space-between">
-                  <BlockStack gap="100">
-                    <Text as="h4" variant="bodyMd" fontWeight="semibold">
-                      {field.name}
-                      {field.required && (
-                        <Text as="span" tone="critical">
-                          {" "}
-                          *
-                        </Text>
-                      )}
-                    </Text>
-                    <Text as="p" tone="subdued" variant="bodySm">
-                      Type: {field.type} | Label: {field.label}
-                    </Text>
-                    {field.optionsJson && (
-                      <Text as="p" variant="bodySm">
-                        Options: {field.optionsJson.map((opt: string) => {
-                          const price = field.priceAdjustmentsJson?.[opt];
-                          return price ? `${opt} (+$${price})` : opt;
-                        }).join(", ")}
-                      </Text>
-                    )}
-                  </BlockStack>
-                  <InlineStack gap="200">
-                    <Button onClick={() => handleMoveField(field.id, "up")}>
-                      ↑
-                    </Button>
-                    <Button onClick={() => handleMoveField(field.id, "down")}>
-                      ↓
-                    </Button>
-                    <Button onClick={() => handleEditFieldClick(field)}>
-                      Edit
-                    </Button>
-                    <Button
-                      onClick={() => handleDeleteField(field.id)}
-                      tone="critical"
-                    >
-                      Delete
-                    </Button>
-                  </InlineStack>
-                </InlineStack>
-              </ResourceItem>
+          <DndContext
+            sensors={useSensors(
+              useSensor(PointerSensor),
+              useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
             )}
-          />
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEndFields}
+          >
+            <SortableContext items={template.fields.map((f: any) => f.id)} strategy={verticalListSortingStrategy}>
+              <BlockStack gap="200">
+                {template.fields.map((field: any) => (
+                  <SortableFieldListItem
+                    key={field.id}
+                    field={field}
+                    handleEditFieldClick={handleEditFieldClick}
+                    handleDeleteField={handleDeleteField}
+                  />
+                ))}
+              </BlockStack>
+            </SortableContext>
+          </DndContext>
         </Card>
       )}
     </BlockStack>
@@ -900,15 +976,32 @@ export default function TemplateDetail() {
     <BlockStack gap="400">
       <Card>
         <BlockStack gap="400">
-          <Text as="h3" variant="headingMd">
-            Linked Products
-          </Text>
-          <Text as="p">
-            {template.links.length} product(s) using this template
-          </Text>
-          <Link to={`/app/templates/${template.id}/products`} style={{ textDecoration: 'none' }}>
-            <Button>Manage Product Links</Button>
-          </Link>
+          <InlineGrid columns="1fr auto" gap="400" alignItems="start">
+            <BlockStack gap="200">
+              <Text as="h3" variant="headingMd">
+                Linked Products
+              </Text>
+              <Text as="p">
+                Select which Shopify products should display this template's custom options.
+                Any updates you make to this template will instantly reflect on all linked products.
+              </Text>
+              <Card background="bg-surface-secondary">
+                <BlockStack gap="200">
+                  <Text as="h4" variant="headingSm">💡 Managing Links:</Text>
+                  <Text as="p" variant="bodyMd">
+                    Click <strong>Manage Product Links</strong> to open a product picker. You can select multiple items at once.
+                    If a product has special requirements (e.g., this specific shirt needs an extra '$5 XXL' upcharge not present in the master template), you can assign product-specific overrides directly from the linked products list!
+                  </Text>
+                </BlockStack>
+              </Card>
+              <Text as="p" fontWeight="bold">
+                {template.links.length} product(s) using this template
+              </Text>
+            </BlockStack>
+            <Link to={`/app/templates/${template.id}/products`} style={{ textDecoration: 'none' }}>
+              <Button variant="primary">Manage Product Links</Button>
+            </Link>
+          </InlineGrid>
         </BlockStack>
       </Card>
 
@@ -966,26 +1059,24 @@ export default function TemplateDetail() {
               </Text>
               <Card background="bg-surface-secondary">
                 <BlockStack gap="200">
-                  <Text as="h4" variant="headingSm">💡 How the Visual Builder Works:</Text>
-
                   <Text as="p" variant="bodyMd">
-                    <Text as="strong">Step 1 (Unassigned):</Text><br />
-                    Fields that exist in the template but aren't governed by any specific logic remain in the <Text as="strong">Unassigned Pool</Text>. These will never naturally render to a customer if they aren't on the canvas.
+                    <Text as="strong">Step 1 (The Root Canvas):</Text><br />
+                    Fields that exist directly on the <Text as="strong">Root Canvas</Text> will be unconditionally visible to every customer on this product. By default, all new fields start here.
                   </Text>
 
                   <Divider />
 
                   <Text as="p" variant="bodyMd">
-                    <Text as="strong">Step 2 (The Root Canvas):</Text><br />
-                    Dragging fields directly onto the <Text as="strong">Root Canvas</Text> will make them unconditionally visible to every customer on this product.
+                    <Text as="strong">Step 2 (Nesting Dependencies):</Text><br />
+                    If you have an "Apparel Type" field with the options "Shirt" and "Pants", two sub-branches will appear beneath the Apparel Type field.<br />
+                    By dragging a "Shirt Size" field directly into the "↳ If chosen: Shirt" nested dropzone, the system automatically builds the cascade so that the Shirt Size dropdown ONLY appears when "Shirt" is chosen!
                   </Text>
 
                   <Divider />
 
                   <Text as="p" variant="bodyMd">
-                    <Text as="strong">Step 3 (Nesting Dependencies):</Text><br />
-                    If you have an "Apparel Type" field with the options "Shirt" and "Pants", two sub-boxes (dropzones) will appear beneath the Apparel Type field.<br />
-                    By dragging a "Shirt Size" field directly into the "↳ IF is Apparel Type: Shirt" dropzone, the system automatically builds the cascade so that the Shirt Size dropdown ONLY appears when "Shirt" is chosen!
+                    <Text as="strong">Step 3 (Limiting Options to Datasets):</Text><br />
+                    When nesting drop-down fields in the visual builder, you can attach a <Text as="strong">Global Dataset</Text> constraint using the select box next to the field name. This lets you say "If Shirt is selected, show the Colors field, but LIMIT the choices to the 'Shirt Colors' dataset."
                   </Text>
                 </BlockStack>
               </Card>
@@ -1104,7 +1195,8 @@ export default function TemplateDetail() {
                       options={[
                         { label: "Show", value: "SHOW" },
                         { label: "Hide", value: "HIDE" },
-                        { label: "Limit Options To", value: "LIMIT_OPTIONS" }
+                        { label: "Limit Options To", value: "LIMIT_OPTIONS" },
+                        { label: "Override Option Prices", value: "SET_PRICE" }
                       ]}
                       value={ruleActionType}
                       onChange={setRuleActionType}
@@ -1162,6 +1254,29 @@ export default function TemplateDetail() {
                             Add Option
                           </Button>
                         </div>
+                      </InlineGrid>
+                    </BlockStack>
+                  )}
+
+                  {ruleActionType === "SET_PRICE" && (
+                    <BlockStack gap="300">
+                      <Text as="p" tone="subdued">Set condition-based price adjustments for specific options ($):</Text>
+                      <InlineGrid columns="1fr 1fr" gap="400">
+                        {(() => {
+                          const targetField = template.fields.find(f => f.id === ruleTargetFieldId);
+                          if (!targetField || !targetField.optionsJson) return <Text as="p" tone="subdued">Select a valid text/number field with predefined choices.</Text>;
+                          return (targetField.optionsJson as string[]).map(opt => (
+                            <TextField
+                              key={opt}
+                              label={`Price Adjustment for "${opt}"`}
+                              type="number"
+                              prefix="$"
+                              value={ruleTargetPriceAdjustments[opt] || ""}
+                              onChange={(val) => setRuleTargetPriceAdjustments(p => ({ ...p, [opt]: val }))}
+                              autoComplete="off"
+                            />
+                          ))
+                        })()}
                       </InlineGrid>
                     </BlockStack>
                   )}

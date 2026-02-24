@@ -21,6 +21,32 @@ export async function action({ request }: ActionFunctionArgs) {
       headers: corsHeaders,
     });
   }
+
+  if (request.method === "POST") {
+    try {
+      const data = await request.json();
+      const { templateId, event } = data;
+
+      if (templateId) {
+        if (event === 'view') {
+          await prisma.template.update({
+            where: { id: templateId },
+            data: { views: { increment: 1 } }
+          });
+        } else if (event === 'add_to_cart') {
+          await prisma.template.update({
+            where: { id: templateId },
+            data: { addsToCart: { increment: 1 } }
+          });
+        }
+      }
+      return json({ success: true }, { headers: corsHeaders });
+    } catch (e) {
+      console.error("[API] Analytics tracking error:", e);
+      return json({ error: "Failed to track analytics" }, { status: 400, headers: corsHeaders });
+    }
+  }
+
   return new Response("Method Not Allowed", { status: 405, headers: corsHeaders });
 }
 
