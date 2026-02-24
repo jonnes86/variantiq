@@ -20,6 +20,7 @@ import {
     PointerSensor,
     KeyboardSensor,
     DragOverlay,
+    useDroppable,
 } from "@dnd-kit/core";
 import {
     SortableContext,
@@ -56,6 +57,24 @@ interface VisualRuleBuilderProps {
 // ----------------------------------------------------
 // COMPONENTS
 // ----------------------------------------------------
+
+function DroppableZone({ id, children, isNested }: { id: string, children: React.ReactNode, isNested?: boolean }) {
+    const { setNodeRef, isOver } = useDroppable({ id });
+    const style = {
+        minHeight: isNested ? "40px" : "100%",
+        padding: isNested ? "8px" : "8px",
+        paddingBottom: isNested ? "8px" : "100px",
+        backgroundColor: isOver ? "var(--p-color-bg-surface-success)" : "transparent",
+        transition: "background-color 0.2s ease",
+        borderRadius: "var(--p-border-radius-100)",
+        border: isNested ? "1px dashed var(--p-color-border)" : "none",
+    };
+    return (
+        <div ref={setNodeRef} style={style}>
+            {children}
+        </div>
+    );
+}
 
 function SortableFieldNode({
     field,
@@ -117,20 +136,24 @@ function SortableFieldNode({
 
                     {/* Child Dropzones for Options */}
                     {options.length > 0 && !collapsedNodes.has(field.id) && (
-                        <div style={{ marginLeft: "28px", marginTop: "8px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                        <div style={{ marginLeft: "14px", marginTop: "8px", display: "flex", flexDirection: "column", gap: "8px" }}>
                             {options.map((opt) => {
                                 const dropId = `${field.id}::${opt}`;
                                 const nestedChildIds = childrenObj?.[dropId] || [];
 
                                 return (
-                                    <Card key={opt} background="bg-surface-secondary" padding="200">
+                                    <div key={opt} style={{
+                                        paddingLeft: "16px",
+                                        borderLeft: "2px solid var(--p-color-border)",
+                                        marginLeft: "8px"
+                                    }}>
                                         <BlockStack gap="200">
                                             <Text as="span" variant="bodySm" fontWeight="bold" tone="subdued">
-                                                ↳ IF is "{opt}"
+                                                ↳ If chosen: {opt}
                                             </Text>
 
                                             <SortableContext id={dropId} items={nestedChildIds} strategy={verticalListSortingStrategy}>
-                                                <div style={{ minHeight: "32px", padding: "4px", border: "1px dashed var(--p-color-border)", borderRadius: "var(--p-border-radius-100)" }}>
+                                                <DroppableZone id={dropId} isNested>
                                                     {nestedChildIds.length === 0 ? (
                                                         <Text as="span" variant="bodySm" tone="subdued">
                                                             Drop fields here to show...
@@ -145,10 +168,10 @@ function SortableFieldNode({
                                                             />
                                                         ))
                                                     )}
-                                                </div>
+                                                </DroppableZone>
                                             </SortableContext>
                                         </BlockStack>
-                                    </Card>
+                                    </div>
                                 );
                             })}
                         </div>
@@ -196,8 +219,8 @@ export function VisualRuleBuilder({ fields, rules, onSaveRules }: VisualRuleBuil
     const [activeId, setActiveId] = useState<string | null>(null);
     const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(new Set());
 
-    // tree shape: { "unassigned": [id, id], "root": [id], "field1::opt1": [id, id] }
-    const [tree, setTree] = useState<Record<string, string[]>>({ unassigned: [], root: [] });
+    // tree shape: { "root": [id], "field1::opt1": [id, id] }
+    const [tree, setTree] = useState<Record<string, string[]>>({ root: [] });
 
     const handleToggleCollapse = (id: string) => {
         setCollapsedNodes(prev => {
@@ -218,7 +241,7 @@ export function VisualRuleBuilder({ fields, rules, onSaveRules }: VisualRuleBuil
 
     // Init tree on load
     useEffect(() => {
-        const newTree: Record<string, string[]> = { unassigned: [], root: [] };
+        const newTree: Record<string, string[]> = { root: [] };
 
         fields.forEach(f => {
             const opts = Array.isArray(f.optionsJson) ? f.optionsJson : [];
@@ -245,8 +268,8 @@ export function VisualRuleBuilder({ fields, rules, onSaveRules }: VisualRuleBuil
             }
         });
 
-        // Anything not nested is unassigned (merchant must explicitly drag to root to keep order)
-        newTree.unassigned = fields.map(f => f.id).filter(id => !fieldsInTree.has(id));
+        // Anything not nested sits at root (unconditional)
+        newTree.root = fields.map(f => f.id).filter(id => !fieldsInTree.has(id));
         setTree(newTree);
     }, [fields, rules]);
 
@@ -337,7 +360,7 @@ export function VisualRuleBuilder({ fields, rules, onSaveRules }: VisualRuleBuil
         const compiledRules: Partial<Rule>[] = [];
 
         Object.entries(tree).forEach(([containerId, children]) => {
-            if (containerId === "unassigned" || containerId === "root") return;
+            if (containerId === "root") return;
 
             const [parentFieldId, parentValue] = containerId.split("::");
 
