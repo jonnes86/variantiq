@@ -395,21 +395,21 @@ export default function TemplateDetail() {
   }, [template.name]);
 
   // Appearance state
-  const [fontFamily, setFontFamily] = useState(template.fontFamily || "");
-  const [fontSize, setFontSize] = useState(template.fontSize || "");
-  const [fontWeight, setFontWeight] = useState(template.fontWeight || "");
-  const [textColor, setTextColor] = useState(template.textColor || "");
+  const [fontFamily, setFontFamily] = useState((template as any).fontFamily || "");
+  const [fontSize, setFontSize] = useState((template as any).fontSize || "");
+  const [fontWeight, setFontWeight] = useState((template as any).fontWeight || "");
+  const [textColor, setTextColor] = useState((template as any).textColor || "");
   const [backgroundColor, setBackgroundColor] = useState(
-    template.backgroundColor || "",
+    (template as any).backgroundColor || "",
   );
-  const [borderColor, setBorderColor] = useState(template.borderColor || "");
-  const [borderRadius, setBorderRadius] = useState(template.borderRadius || "");
-  const [padding, setPadding] = useState(template.padding || "");
+  const [borderColor, setBorderColor] = useState((template as any).borderColor || "");
+  const [borderRadius, setBorderRadius] = useState((template as any).borderRadius || "");
+  const [padding, setPadding] = useState((template as any).padding || "");
   const [hoverBackgroundColor, setHoverBackgroundColor] = useState(
-    template.hoverBackgroundColor || "",
+    (template as any).hoverBackgroundColor || "",
   );
   const [hoverTextColor, setHoverTextColor] = useState(
-    template.hoverTextColor || "",
+    (template as any).hoverTextColor || "",
   );
   const [isHover, setIsHover] = useState(false);
 
@@ -703,6 +703,32 @@ export default function TemplateDetail() {
                           }}
                           placeholder="Variant ID (Optional)"
                           autoComplete="off"
+                          connectedRight={
+                            <Button
+                              onClick={async () => {
+                                const selected = await shopify.resourcePicker({
+                                  type: "product",
+                                  multiple: false,
+                                  action: "select",
+                                });
+                                if (selected && selected.length > 0 && selected[0].variants && selected[0].variants.length > 0) {
+                                  // Pick the first variant selected or the default variant
+                                  let variantIdStr = selected[0].variants[0]?.id; // Output is like 'gid://shopify/ProductVariant/44716211765305'
+                                  if (variantIdStr) {
+                                    // Strip gid wrapper
+                                    const matches = variantIdStr.match(/\d+$/);
+                                    if (matches) {
+                                      const newList = [...fieldOptionsList];
+                                      newList[index].variantMapping = matches[0];
+                                      setFieldOptionsList(newList);
+                                    }
+                                  }
+                                }
+                              }}
+                            >
+                              Browse
+                            </Button>
+                          }
                         />
                         <Button
                           tone="critical"

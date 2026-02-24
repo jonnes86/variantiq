@@ -575,6 +575,32 @@ export default function ProductOverrideDetail() {
                                                     }}
                                                     placeholder="Variant ID (Optional)"
                                                     autoComplete="off"
+                                                    connectedRight={
+                                                        <Button
+                                                            onClick={async () => {
+                                                                const selected = await shopify.resourcePicker({
+                                                                    type: "product",
+                                                                    multiple: false,
+                                                                    action: "select",
+                                                                });
+                                                                if (selected && selected.length > 0 && selected[0].variants && selected[0].variants.length > 0) {
+                                                                    // Pick the first variant selected or the default variant
+                                                                    let variantIdStr = selected[0].variants[0]?.id; // Output is like 'gid://shopify/ProductVariant/44716211765305'
+                                                                    if (variantIdStr) {
+                                                                        // Strip gid wrapper
+                                                                        const matches = variantIdStr.match(/\d+$/);
+                                                                        if (matches) {
+                                                                            const newList = [...fieldOptionsList];
+                                                                            newList[index].variantMapping = matches[0];
+                                                                            setFieldOptionsList(newList);
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }}
+                                                        >
+                                                            Browse
+                                                        </Button>
+                                                    }
                                                 />
                                                 <Button
                                                     tone="critical"
