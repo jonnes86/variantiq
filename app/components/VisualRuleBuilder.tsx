@@ -3,34 +3,12 @@ import {
     Card,
     Text,
     BlockStack,
-    InlineGrid,
     Button,
-    Badge,
-    Divider,
     Box,
     InlineStack,
-    Icon,
     Select,
 } from "@shopify/polaris";
-import { DragHandleIcon } from "@shopify/polaris-icons";
-import {
-    DndContext,
-    closestCorners,
-    useSensor,
-    useSensors,
-    PointerSensor,
-    KeyboardSensor,
-    DragOverlay,
-    useDroppable,
-} from "@dnd-kit/core";
-import {
-    SortableContext,
-    useSortable,
-    sortableKeyboardCoordinates,
-    verticalListSortingStrategy,
-    arrayMove,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
+import { DeleteIcon } from "@shopify/polaris-icons";
 
 export interface Field {
     id: string;
@@ -67,6 +45,9 @@ const VisualBuilderContext = React.createContext<{
     collapsedNodes: Set<string>;
     onToggleCollapse: (id: string) => void;
     onChangeDataset: (fieldId: string, datasetId: string) => void;
+    onAddField: (fieldId: string, containerId: string) => void;
+    onRemoveField: (fieldId: string) => void;
+    availableFields: Field[];
 } | null>(null);
 
 function useVisualBuilder() {
@@ -79,25 +60,7 @@ function useVisualBuilder() {
 // COMPONENTS
 // ----------------------------------------------------
 
-function DroppableZone({ id, children, isNested }: { id: string, children: React.ReactNode, isNested?: boolean }) {
-    const { setNodeRef, isOver } = useDroppable({ id });
-    const style = {
-        minHeight: isNested ? "40px" : "100%",
-        padding: isNested ? "8px" : "8px",
-        paddingBottom: isNested ? "8px" : "100px",
-        backgroundColor: isOver ? "var(--p-color-bg-surface-success)" : "transparent",
-        transition: "background-color 0.2s ease",
-        borderRadius: "var(--p-border-radius-100)",
-        border: isNested ? "1px dashed var(--p-color-border)" : "none",
-    };
-    return (
-        <div ref={setNodeRef} style={style}>
-            {children}
-        </div>
-    );
-}
-
-function SortableFieldNode({
+function FieldNode({
     field,
     options,
     isNested,
@@ -106,63 +69,54 @@ function SortableFieldNode({
     options: string[],
     isNested?: boolean,
 }) {
-    const { tree, collapsedNodes, onToggleCollapse, datasets, fieldDatasetMap, onChangeDataset } = useVisualBuilder();
+    const { tree, collapsedNodes, onToggleCollapse, datasets, fieldDatasetMap, onChangeDataset, onAddField, onRemoveField, availableFields } = useVisualBuilder();
     const datasetId = fieldDatasetMap[field.id];
-    const {
-        attributes,
-        listeners,
-        setNodeRef,
-        transform,
-        transition,
-        isDragging,
-    } = useSortable({ id: field.id });
-
-    const style = {
-        transform: CSS.Transform.toString(transform),
-        transition,
-        opacity: isDragging ? 0.4 : 1,
-        marginBottom: "12px",
-    };
 
     return (
-        <div ref={setNodeRef} style={style}>
+        <div style={{ marginBottom: "12px" }}>
             <Card padding="300">
                 <BlockStack gap="200">
                     {/* Field Header */}
-                    <InlineStack align="start" blockAlign="center" gap="200" wrap={false}>
-                        <div {...attributes} {...listeners} style={{ cursor: "grab", marginTop: "2px" }}>
-                            <Icon source={DragHandleIcon} tone="subdued" />
-                        </div>
-                        <div style={{ flex: 1 }}>
-                            <Text as="span" variant="bodyMd" fontWeight="semibold">
-                                {field.label || field.name}
-                            </Text>
-                            <Text as="span" variant="bodySm" tone="subdued">
-                                {" "} {field.label ? `(Internal: ${field.name})` : `— ${field.type}`}
-                            </Text>
-                        </div>
+                    <InlineStack align="space-between" blockAlign="center">
+                        <InlineStack align="start" blockAlign="center" gap="200" wrap={false}>
+                            <div style={{ flex: 1 }}>
+                                <Text as="span" variant="bodyMd" fontWeight="semibold">
+                                    {field.label || field.name}
+                                </Text>
+                                <Text as="span" variant="bodySm" tone="subdued">
+                                    {" "} {field.label ? `(Internal: ${field.name})` : `— ${field.type}`}
+                                </Text>
+                            </div>
 
-                        {options.length > 0 && (
-                            <Button
-                                size="micro"
-                                variant="tertiary"
-                                onClick={() => onToggleCollapse(field.id)}
-                            >
-                                {collapsedNodes.has(field.id) ? `Expand ${options.length} Options` : `Collapse Options`}
-                            </Button>
-                        )}
-                        {isNested && datasets.length > 0 && (
-                            <Select
-                                label="Limit options to dataset"
-                                labelHidden
-                                options={[{ label: 'All Options Available', value: '' }, ...datasets.map(d => ({ label: `Limit to: ${d.name}`, value: d.id }))]}
-                                value={datasetId || ''}
-                                onChange={(value) => onChangeDataset(field.id, value)}
-                            />
-                        )}
+                            {options.length > 0 && (
+                                <Button
+                                    size="micro"
+                                    variant="tertiary"
+                                    onClick={() => onToggleCollapse(field.id)}
+                                >
+                                    {collapsedNodes.has(field.id) ? `Expand ${options.length} Options` : `Collapse Options`}
+                                </Button>
+                            )}
+                            {isNested && datasets.length > 0 && options.length > 0 && (
+                                <Select
+                                    label="Limit options to dataset"
+                                    labelHidden
+                                    options={[{ label: 'All Options Available', value: '' }, ...datasets.map(d => ({ label: `Limit to: ${d.name}`, value: d.id }))]}
+                                    value={datasetId || ''}
+                                    onChange={(value) => onChangeDataset(field.id, value)}
+                                />
+                            )}
+                        </InlineStack>
+                        <Button
+                            variant="plain"
+                            tone="critical"
+                            icon={DeleteIcon}
+                            onClick={() => onRemoveField(field.id)}
+                            accessibilityLabel="Remove field"
+                        />
                     </InlineStack>
 
-                    {/* Child Dropzones for Options */}
+                    {/* Child Zones for Options */}
                     {options.length > 0 && !collapsedNodes.has(field.id) && (
                         <div style={{ marginLeft: "14px", marginTop: "8px", display: "flex", flexDirection: "column", gap: "8px" }}>
                             {options.map((opt) => {
@@ -180,23 +134,33 @@ function SortableFieldNode({
                                                 ↳ If chosen: {opt}
                                             </Text>
 
-                                            <SortableContext id={dropId} items={nestedChildIds} strategy={verticalListSortingStrategy}>
-                                                <DroppableZone id={dropId} isNested>
-                                                    {nestedChildIds.length === 0 ? (
-                                                        <Text as="span" variant="bodySm" tone="subdued">
-                                                            Drop fields here to show...
-                                                        </Text>
-                                                    ) : (
-                                                        nestedChildIds.map(childId => (
-                                                            <RenderFieldNodeById
-                                                                key={childId}
-                                                                fieldId={childId}
-                                                                isNested={true}
-                                                            />
-                                                        ))
-                                                    )}
-                                                </DroppableZone>
-                                            </SortableContext>
+                                            <div style={{ minHeight: "20px", padding: "8px", backgroundColor: "var(--p-color-bg-surface)", borderRadius: "var(--p-border-radius-100)", border: "1px dashed var(--p-color-border)" }}>
+                                                {nestedChildIds.length === 0 ? (
+                                                    <Text as="span" variant="bodySm" tone="subdued">
+                                                        No fields assigned to this choice.
+                                                    </Text>
+                                                ) : (
+                                                    nestedChildIds.map(childId => (
+                                                        <RenderFieldNodeById
+                                                            key={childId}
+                                                            fieldId={childId}
+                                                            isNested={true}
+                                                        />
+                                                    ))
+                                                )}
+
+                                                {availableFields.length > 0 && (
+                                                    <div style={{ marginTop: "12px", maxWidth: "300px" }}>
+                                                        <Select
+                                                            label="Add nested field"
+                                                            labelHidden
+                                                            options={[{ label: "Add nested field...", value: "" }, ...availableFields.map(f => ({ label: f.name, value: f.id }))]}
+                                                            value=""
+                                                            onChange={(val) => { if (val) onAddField(val, dropId); }}
+                                                        />
+                                                    </div>
+                                                )}
+                                            </div>
                                         </BlockStack>
                                     </div>
                                 );
@@ -222,7 +186,7 @@ function RenderFieldNodeById({
     const opts = (Array.isArray(f.optionsJson) ? f.optionsJson : []) as string[];
 
     return (
-        <SortableFieldNode
+        <FieldNode
             field={f}
             options={opts}
             isNested={isNested}
@@ -235,9 +199,7 @@ function RenderFieldNodeById({
 // ----------------------------------------------------
 
 export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules }: VisualRuleBuilderProps) {
-    const [activeId, setActiveId] = useState<string | null>(null);
     const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(new Set());
-
     const [tree, setTree] = useState<Record<string, string[]>>({ root: [] });
     const [fieldDatasetMap, setFieldDatasetMap] = useState<Record<string, string>>({});
 
@@ -250,11 +212,66 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules }: Visu
         });
     };
 
+    const handleAddField = (fieldId: string, containerId: string) => {
+        setTree(prev => ({
+            ...prev,
+            [containerId]: [...(prev[containerId] || []), fieldId]
+        }));
+    };
+
+    const handleRemoveField = (fieldId: string) => {
+        // Recursively remove a field and all its descendants from the tree map so they go back into available pool
+        setTree(prev => {
+            const next = { ...prev };
+
+            // 1. Remove it from wherever it currently is nested
+            const containerId = Object.keys(next).find(k => next[k].includes(fieldId));
+            if (containerId) {
+                next[containerId] = next[containerId].filter(id => id !== fieldId);
+            }
+
+            // 2. We don't necessarily delete the dict keys for its options, but we could orphan them.
+            // Actually, simply removing it from its parent is enough to hide it, 
+            // but to show those child fields back in `availableFields`, we should delete them from the tree entirely.
+            const recursiveRemove = (id: string) => {
+                const f = fields.find(field => field.id === id);
+                if (!f) return;
+                const opts = Array.isArray(f.optionsJson) ? f.optionsJson : [];
+                opts.forEach(opt => {
+                    const dropId = `${id}::${opt}`;
+                    const children = next[dropId] || [];
+                    children.forEach(childId => recursiveRemove(childId));
+                    next[dropId] = []; // clear children
+                });
+            };
+            recursiveRemove(fieldId);
+
+            return next;
+        });
+
+        // Remove associated dataset mapping
+        setFieldDatasetMap(prev => {
+            const next = { ...prev };
+            delete next[fieldId];
+            return next;
+        });
+    };
+
     const fieldsMap = useMemo(() => {
         const map: Record<string, Field> = {};
         fields.forEach(f => { map[f.id] = f; });
         return map;
     }, [fields]);
+
+    const activeFieldIds = useMemo(() => {
+        const ids = new Set<string>();
+        Object.values(tree).forEach(arr => arr.forEach(id => ids.add(id)));
+        return ids;
+    }, [tree]);
+
+    const availableFields = useMemo(() => {
+        return fields.filter(f => !activeFieldIds.has(f.id));
+    }, [fields, activeFieldIds]);
 
     const contextValue = useMemo(() => ({
         fieldsMap,
@@ -265,13 +282,15 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules }: Visu
         onToggleCollapse: handleToggleCollapse,
         onChangeDataset: (fieldId: string, datasetId: string) => {
             setFieldDatasetMap(prev => ({ ...prev, [fieldId]: datasetId }));
-        }
-    }), [fieldsMap, tree, datasets, fieldDatasetMap, collapsedNodes]);
+        },
+        onAddField: handleAddField,
+        onRemoveField: handleRemoveField,
+        availableFields
+    }), [fieldsMap, tree, datasets, fieldDatasetMap, collapsedNodes, availableFields]);
 
     // Init tree on load
     useEffect(() => {
         const newTree: Record<string, string[]> = { root: [] };
-
         fields.forEach(f => {
             const opts = Array.isArray(f.optionsJson) ? f.optionsJson : [];
             opts.forEach(opt => {
@@ -283,7 +302,6 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules }: Visu
         const newFieldDatasetMap: Record<string, string> = {};
 
         rules.forEach(r => {
-            // Right now the visual builder just maps the SHOW cascade
             if (r.actionType === "SHOW") {
                 let conds = [];
                 try { conds = typeof r.conditionsJson === 'string' ? JSON.parse(r.conditionsJson) : r.conditionsJson; } catch (e) { }
@@ -305,110 +323,23 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules }: Visu
             }
         });
 
-        // Anything not nested sits at root (unconditional)
+        // Anything not nested sits at root
         newTree.root = fields.map(f => f.id).filter(id => !fieldsInTree.has(id));
         setTree(newTree);
         setFieldDatasetMap(newFieldDatasetMap);
     }, [fields, rules]);
 
-    // -------------------------
-    // DND Handlers
-    // -------------------------
-    const sensors = useSensors(
-        useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-        useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
-    );
-
-    const handleDragStart = (event: any) => {
-        setActiveId(event.active.id);
-    };
-
-    const handleDragOver = (event: any) => {
-        const { active, over } = event;
-        if (!over) return;
-
-        const activeContainer = findContainer(active.id);
-        const overContainer = over.id in tree ? over.id : findContainer(over.id);
-
-        // Don't drag a field into itself or its own children (simple prevention)
-        if (overContainer && overContainer.startsWith(`${active.id}::`)) return;
-
-        if (!activeContainer || !overContainer || activeContainer === overContainer) {
-            return;
-        }
-
-        setTree((prev) => {
-            const activeItems = [...prev[activeContainer]];
-            const overItems = [...prev[overContainer]];
-
-            const activeIndex = activeItems.indexOf(active.id);
-            const overIndex = over.id in prev ? overItems.length : overItems.indexOf(over.id);
-
-            activeItems.splice(activeIndex, 1);
-
-            const isBelowOverItem =
-                over &&
-                active.rect.current.translated &&
-                active.rect.current.translated.top > over.rect.top + over.rect.height;
-
-            const modifier = isBelowOverItem ? 1 : 0;
-            const newIndex = overIndex >= 0 ? overIndex + modifier : overItems.length;
-
-            overItems.splice(newIndex, 0, active.id);
-
-            return {
-                ...prev,
-                [activeContainer]: activeItems,
-                [overContainer]: overItems,
-            };
-        });
-    };
-
-    const handleDragEnd = (event: any) => {
-        setActiveId(null);
-        const { active, over } = event;
-        if (!over) return;
-
-        const activeContainer = findContainer(active.id);
-        const overContainer = over.id in tree ? over.id : findContainer(over.id);
-
-        if (activeContainer && overContainer && activeContainer === overContainer) {
-            const activeIndex = tree[activeContainer].indexOf(active.id);
-            const overIndex = tree[overContainer].indexOf(over.id);
-
-            if (activeIndex !== overIndex) {
-                setTree((prev) => ({
-                    ...prev,
-                    [overContainer]: arrayMove(prev[overContainer], activeIndex, overIndex),
-                }));
-            }
-        }
-    };
-
-    const findContainer = (id: string) => {
-        if (id in tree) return id;
-        return Object.keys(tree).find((key) => tree[key].includes(id));
-    };
-
-
-    // -------------------------
-    // Save Logic
-    // -------------------------
     const handleCompileRules = () => {
         const compiledRules: Partial<Rule>[] = [];
-
         Object.entries(tree).forEach(([containerId, children]) => {
             if (containerId === "root") return;
-
             const [parentFieldId, parentValue] = containerId.split("::");
-
             children.forEach((childId) => {
                 compiledRules.push({
                     targetFieldId: childId,
                     actionType: "SHOW",
                     conditionsJson: [{ fieldId: parentFieldId, operator: "EQUALS", value: parentValue }],
                 });
-
                 if (fieldDatasetMap[childId]) {
                     compiledRules.push({
                         targetFieldId: childId,
@@ -419,100 +350,54 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules }: Visu
                 }
             });
         });
-
         onSaveRules(compiledRules);
     };
 
-    // -------------------------
-    // Render
-    // -------------------------
-    const activeField = fields.find(f => f.id === activeId);
-
     return (
         <VisualBuilderContext.Provider value={contextValue}>
-            <DndContext
-                sensors={sensors}
-                collisionDetection={closestCorners}
-                onDragStart={handleDragStart}
-                onDragOver={handleDragOver}
-                onDragEnd={handleDragEnd}
-            >
-                <InlineGrid columns={{ xs: "1fr", md: "300px 1fr" }} gap="400" alignItems="start">
-                    {/* Unassigned Pool */}
-                    <Card>
-                        <BlockStack gap="400">
+            <Card>
+                <BlockStack gap="400">
+                    <InlineStack align="space-between" blockAlign="center">
+                        <BlockStack gap="100">
                             <Text as="h3" variant="headingMd">
-                                Unassigned Fields
+                                Visual Canvas
                             </Text>
                             <Text as="p" tone="subdued">
-                                Drag fields from here into the Root Canvas or into specific Options.
+                                Select fields to add to the root to show them unconditionally. Select fields inside specific Option outcomes to show them conditionally.
                             </Text>
-                            <Divider />
+                        </BlockStack>
+                        <Button variant="primary" onClick={handleCompileRules}>
+                            Save Rules Tree
+                        </Button>
+                    </InlineStack>
 
-                            <SortableContext id="unassigned" items={tree["unassigned"] || []} strategy={verticalListSortingStrategy}>
-                                <div style={{ minHeight: "200px" }}>
-                                    {tree["unassigned"]?.map((id) => (
-                                        <RenderFieldNodeById
-                                            key={id}
-                                            fieldId={id}
-                                        />
-                                    ))}
+                    <Box background="bg-surface-secondary" padding="400" borderRadius="200" minHeight="400px">
+                        <div style={{ paddingBottom: "100px" }}>
+                            {tree["root"]?.length === 0 && (
+                                <Text as="p" tone="subdued">No root fields added.</Text>
+                            )}
+                            {tree["root"]?.map((id) => (
+                                <RenderFieldNodeById
+                                    key={id}
+                                    fieldId={id}
+                                />
+                            ))}
+
+                            {availableFields.length > 0 && (
+                                <div style={{ marginTop: "16px", maxWidth: "300px" }}>
+                                    <Select
+                                        label="Add root field"
+                                        labelHidden
+                                        options={[{ label: "Add field to root...", value: "" }, ...availableFields.map(f => ({ label: f.name, value: f.id }))]}
+                                        value=""
+                                        onChange={(val) => { if (val) handleAddField(val, "root"); }}
+                                    />
                                 </div>
-                            </SortableContext>
-                        </BlockStack>
-                    </Card>
-
-                    {/* Main Canvas */}
-                    <Card>
-                        <BlockStack gap="400">
-                            <InlineStack align="space-between" blockAlign="center">
-                                <BlockStack gap="100">
-                                    <Text as="h3" variant="headingMd">
-                                        Visual Canvas
-                                    </Text>
-                                    <Text as="p" tone="subdued">
-                                        Fields in the root are shown unconditionally. Fields inside options are only shown when that option is selected.
-                                    </Text>
-                                </BlockStack>
-                                <Button variant="primary" onClick={handleCompileRules}>
-                                    Save Rules Tree
-                                </Button>
-                            </InlineStack>
-
-                            <Box background="bg-surface-secondary" padding="400" borderRadius="200" minHeight="400px">
-                                <SortableContext id="root" items={tree["root"] || []} strategy={verticalListSortingStrategy}>
-                                    <div style={{ minHeight: "100%", paddingBottom: "100px" }}>
-                                        {tree["root"]?.length === 0 && (
-                                            <Text as="p" tone="subdued">Drop unconditional fields here...</Text>
-                                        )}
-                                        {tree["root"]?.map((id) => (
-                                            <RenderFieldNodeById
-                                                key={id}
-                                                fieldId={id}
-                                            />
-                                        ))}
-                                    </div>
-                                </SortableContext>
-                            </Box>
-                        </BlockStack>
-                    </Card>
-                </InlineGrid>
-
-                <DragOverlay>
-                    {activeField ? (
-                        <div style={{ opacity: 0.9, cursor: "grabbing" }}>
-                            <Card padding="300" background="bg-surface">
-                                <InlineStack align="start" blockAlign="center" gap="200">
-                                    <Icon source={DragHandleIcon} tone="subdued" />
-                                    <Text as="span" variant="bodyMd" fontWeight="semibold">
-                                        {activeField.name}
-                                    </Text>
-                                </InlineStack>
-                            </Card>
+                            )}
                         </div>
-                    ) : null}
-                </DragOverlay>
-            </DndContext>
+                    </Box>
+                </BlockStack>
+            </Card>
         </VisualBuilderContext.Provider>
     );
 }
