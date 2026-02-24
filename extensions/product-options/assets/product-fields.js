@@ -81,14 +81,16 @@ class VariantIQFields {
     if (!fieldsContainer) return;
 
     if (!this.templateData || !this.templateData.template) {
-      fieldsContainer.innerHTML = '<p class="variantiq-no-options">No customization options available.</p>';
+      fieldsContainer.innerHTML = '';
+      fieldsContainer.style.display = 'none';
       return;
     }
 
     const { fields } = this.templateData.template;
 
     if (!fields || fields.length === 0) {
-      fieldsContainer.innerHTML = '<p class="variantiq-no-options">No customization options available.</p>';
+      fieldsContainer.innerHTML = '';
+      fieldsContainer.style.display = 'none';
       return;
     }
 
@@ -748,7 +750,7 @@ class VariantIQFields {
     const errorDiv = this.container.querySelector('#variantiq-error');
     const container = this.container.querySelector(`#variantiq-fields-${this.productId}`);
 
-    if (errorDiv) errorDiv.style.display = 'block';
+    if (errorDiv) errorDiv.style.display = 'none';
     if (container) container.style.display = 'none';
   }
 }

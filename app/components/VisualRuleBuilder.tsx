@@ -251,23 +251,30 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules, onAddN
             if (dataset && onAddNewField) {
                 // Determine a safe internal name
                 let safeName = dataset.name.replace(/\s+/g, '_').toLowerCase();
-                const baseName = safeName;
-                let counter = 1;
-                while (fields.some(f => f.name === safeName)) {
-                    safeName = `${baseName}_${counter}`;
-                    counter++;
+
+                // Check if this dataset has already been imported into this template as a field
+                const existingField = fields.find(f => f.name === safeName);
+                if (existingField && fieldDatasetMap[existingField.id] === datasetId) {
+                    actualFieldId = existingField.id;
+                } else {
+                    const baseName = safeName;
+                    let counter = 1;
+                    while (fields.some(f => f.name === safeName)) {
+                        safeName = `${baseName}_${counter}`;
+                        counter++;
+                    }
+
+                    actualFieldId = onAddNewField({
+                        type: "select",
+                        name: safeName,
+                        label: dataset.name,
+                        optionsJson: dataset.optionsJson,
+                        required: false
+                    });
+
+                    // Bind the dataset mapping
+                    setFieldDatasetMap(prev => ({ ...prev, [actualFieldId]: datasetId }));
                 }
-
-                actualFieldId = onAddNewField({
-                    type: "select",
-                    name: safeName,
-                    label: dataset.name,
-                    optionsJson: dataset.optionsJson,
-                    required: false
-                });
-
-                // Bind the dataset mapping
-                setFieldDatasetMap(prev => ({ ...prev, [actualFieldId]: datasetId }));
             } else {
                 return; // Silently fail if dataset not found or hook not provided
             }

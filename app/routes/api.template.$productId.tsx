@@ -124,12 +124,12 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
     if (link.customFieldsJson) {
       console.log("[API] Injecting product-specific custom fields override");
-      resolvedTemplate.fields = link.customFieldsJson as any[];
+      resolvedTemplate.fields = typeof link.customFieldsJson === 'string' ? JSON.parse(link.customFieldsJson) : link.customFieldsJson;
     }
 
     if (link.customRulesJson) {
       console.log("[API] Injecting product-specific custom rules override");
-      resolvedTemplate.rules = link.customRulesJson as any[];
+      resolvedTemplate.rules = typeof link.customRulesJson === 'string' ? JSON.parse(link.customRulesJson) : link.customRulesJson;
     }
 
     // Hydrate Dataset Rules
