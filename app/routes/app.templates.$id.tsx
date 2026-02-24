@@ -1349,6 +1349,15 @@ export default function TemplateDetail() {
                     try { opts = rule.targetOptionsJson as string[]; } catch (e) { }
                     actionText = `Limit ${targetLabel} to [${opts?.join(", ")}]`;
                   }
+                  else if (rule.actionType === "LIMIT_OPTIONS_DATASET") {
+                    let datasetId = "";
+                    try {
+                      const parsed = typeof rule.targetOptionsJson === 'string' ? JSON.parse(rule.targetOptionsJson) : rule.targetOptionsJson;
+                      datasetId = parsed?.datasetId || "";
+                    } catch (e) { }
+                    const dName = datasets.find((d: any) => d.id === datasetId)?.name || "Unknown Dataset";
+                    actionText = `Limit ${targetLabel} to Dataset: ${dName}`;
+                  }
 
                   return (
                     <ResourceItem id={rule.id} onClick={() => { }}>

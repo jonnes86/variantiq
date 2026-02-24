@@ -767,6 +767,12 @@ export default function ProductOverrideDetail() {
                                                                 {rule.actionType === 'LIMIT_OPTIONS' && rule.targetOptionsJson && (
                                                                     <Text as="span"> allowing only: {rule.targetOptionsJson.join(', ')}</Text>
                                                                 )}
+                                                                {rule.actionType === 'LIMIT_OPTIONS_DATASET' && (() => {
+                                                                    let dId = "";
+                                                                    try { dId = typeof rule.targetOptionsJson === 'string' ? JSON.parse(rule.targetOptionsJson)?.datasetId : rule.targetOptionsJson?.datasetId; } catch (e) { }
+                                                                    const dName = datasets.find((d: any) => d.id === dId)?.name || 'Unknown Dataset';
+                                                                    return <Text as="span"> restricting choices to Dataset: {dName}</Text>;
+                                                                })()}
                                                             </Text>
                                                         </BlockStack>
 
