@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { json, redirect } from "@remix-run/node";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
-import { useLoaderData, Form, Link } from "@remix-run/react";
+import { useLoaderData, Form, Link, useSearchParams } from "@remix-run/react";
 import {
   Page,
   Layout,
@@ -212,7 +212,17 @@ export async function action({ request }: ActionFunctionArgs) {
 
 export default function Index() {
   const { templates, datasets } = useLoaderData<typeof loader>();
-  const [selectedTab, setSelectedTab] = useState(0);
+  const [searchParams] = useSearchParams();
+
+  const getInitialTab = () => {
+    switch (searchParams.get("tab")) {
+      case "templates": return 1;
+      case "datasets": return 2;
+      default: return 0;
+    }
+  };
+
+  const [selectedTab, setSelectedTab] = useState(getInitialTab());
   const [newTemplateName, setNewTemplateName] = useState("");
   const [newDatasetName, setNewDatasetName] = useState("");
 

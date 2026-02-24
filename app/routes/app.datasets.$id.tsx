@@ -101,7 +101,7 @@ export default function DatasetDetail() {
 
     return (
         <Page
-            backAction={{ content: "Datasets", url: "/app" }}
+            backAction={{ content: "Datasets", url: "/app?tab=datasets" }}
             title={name || "Untitled Dataset"}
             compactTitle
             primaryAction={{

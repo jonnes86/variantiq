@@ -1559,7 +1559,7 @@ export default function TemplateDetail() {
 
   return (
     <Page
-      backAction={{ content: "Templates", url: "/app" }}
+      backAction={{ content: "Templates", url: "/app?tab=templates" }}
       title={template.name}
       secondaryActions={[
         {
