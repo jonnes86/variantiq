@@ -249,6 +249,25 @@ export default function Index() {
         </BlockStack>
       </Card>
 
+      <Card background="bg-surface-secondary">
+        <BlockStack gap="400">
+          <Text as="h3" variant="headingMd">🚀 Step 1: Activate VariantIQ on your Storefront</Text>
+          <Text as="p" variant="bodyMd">
+            Before your custom fields will appear to customers, you must add the VariantIQ App Block to your theme.
+          </Text>
+          <div style={{ marginLeft: "16px" }}>
+            <BlockStack gap="200">
+              <Text as="p">1. Go to your Shopify Admin and click <Text as="strong">Online Store {">"} Themes</Text>.</Text>
+              <Text as="p">2. Click <Text as="strong">Customize</Text> on your current theme.</Text>
+              <Text as="p">3. Navigate to your <Text as="strong">Default Product</Text> template using the top dropdown.</Text>
+              <Text as="p">4. On the left sidebar, under the <Text as="strong">Product Information</Text> section, click <Text as="strong">+ Add block</Text>.</Text>
+              <Text as="p">5. Select <Text as="strong">VariantIQ Custom Fields</Text> from the Apps section and drag it above your Add to Cart button.</Text>
+              <Text as="p">6. Click <Text as="strong">Save</Text> in the top right corner.</Text>
+            </BlockStack>
+          </div>
+        </BlockStack>
+      </Card>
+
       <InlineGrid columns={{ xs: 1, md: 2 }} gap="400">
         <Card>
           <BlockStack gap="400">

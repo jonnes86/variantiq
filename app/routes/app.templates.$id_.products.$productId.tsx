@@ -686,25 +686,23 @@ export default function ProductOverrideDetail() {
                         </Text>
                         <Card background="bg-surface-secondary">
                             <BlockStack gap="200">
-                                <Text as="h4" variant="headingSm">💡 How the Visual Builder Works:</Text>
+                                <Text as="h4" variant="headingSm">💡 How the Visual Rule Tree Works:</Text>
                                 <Text as="p" variant="bodyMd">
-                                    <Text as="strong">Step 1 (Unassigned):</Text><br />
-                                    Fields that exist in the template but aren't governed by any specific logic remain in the <Text as="strong">Unassigned Pool</Text>. These will never naturally render to a customer if they aren't on the canvas.
+                                    <Text as="strong">Step 1 (The Root Canvas):</Text><br />
+                                    Fields that exist directly on the <Text as="strong">Root Canvas</Text> will be unconditionally visible to every customer on this product. By default, newly created fields start here until you assign them elsewhere.
+                                </Text>
+
+                                <Text as="p" variant="bodyMd">
+                                    <Text as="strong">Step 2 (Nesting Dependencies):</Text><br />
+                                    If you have an "Apparel Type" field with the options "Shirt" and "Pants", two sub-branches will appear beneath the Apparel Type field.<br />
+                                    By using the dropdown to assign a "Shirt Size" field directly into the "↳ If chosen: Shirt" nested zone, the system automatically builds the cascade so that the Shirt Size dropdown ONLY appears when "Shirt" is chosen!
                                 </Text>
 
                                 <Divider />
 
                                 <Text as="p" variant="bodyMd">
-                                    <Text as="strong">Step 2 (The Root Canvas):</Text><br />
-                                    Dragging fields directly onto the <Text as="strong">Root Canvas</Text> will make them unconditionally visible to every customer on this product.
-                                </Text>
-
-                                <Divider />
-
-                                <Text as="p" variant="bodyMd">
-                                    <Text as="strong">Step 3 (Nesting Dependencies):</Text><br />
-                                    If you have an "Apparel Type" field with the options "Shirt" and "Pants", two sub-boxes (dropzones) will appear beneath the Apparel Type field.<br />
-                                    By dragging a "Shirt Size" field directly into the "↳ IF is Apparel Type: Shirt" dropzone, the system automatically builds the cascade so that the Shirt Size dropdown ONLY appears when "Shirt" is chosen!
+                                    <Text as="strong">Step 3 (Limiting Options to Datasets):</Text><br />
+                                    When nesting drop-down fields in the visual builder, you can attach a <Text as="strong">Global Dataset</Text> constraint using the select box next to the field name. This lets you say "If Shirt is selected, show the Colors field, but LIMIT the choices to the 'Shirt Colors' dataset." You can automatically generate dataset fields directly from the Visual Tree dropdowns!
                                 </Text>
                             </BlockStack>
                         </Card>
@@ -717,7 +715,7 @@ export default function ProductOverrideDetail() {
                                     pressed={ruleBuilderMode === "VISUAL"}
                                     onClick={() => handleRuleBuilderModeChange("VISUAL")}
                                 >
-                                    Drag & Drop Visual Builder
+                                    Visual Rule Tree
                                 </Button>
                                 <Button
                                     pressed={ruleBuilderMode === "TRADITIONAL"}
