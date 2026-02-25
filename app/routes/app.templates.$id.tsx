@@ -486,6 +486,21 @@ export async function action({ request, params }: ActionFunctionArgs) {
       data: rulesToCreate,
     });
 
+    // Apply tree-depth sort order to fields so the storefront renders them
+    // in the correct DFS traversal order (parent before child).
+    const fieldSortOrderStr = String(form.get("fieldSortOrderJson") || "[]");
+    let fieldSortOrder: Array<{ fieldId: string; sort: number }> = [];
+    try { fieldSortOrder = JSON.parse(fieldSortOrderStr); } catch (e) { }
+    if (Array.isArray(fieldSortOrder) && fieldSortOrder.length > 0) {
+      for (const item of fieldSortOrder) {
+        const realId = mapId(item.fieldId);
+        await prisma.field.updateMany({
+          where: { id: realId, templateId },
+          data: { sort: item.sort },
+        });
+      }
+    }
+
     return json({ success: true });
   }
 
@@ -1097,12 +1112,13 @@ export default function TemplateDetail() {
               setLocalFields(prev => [...prev, { ...newField, id: newId }]);
               return newId;
             }}
-            onSaveRules={(newRules) => {
+            onSaveRules={(newRules, fieldSortOrder) => {
               submit(
                 {
                   _intent: "bulkSaveRules",
                   rulesJson: JSON.stringify(newRules),
-                  newFieldsJson: JSON.stringify(localFields)
+                  newFieldsJson: JSON.stringify(localFields),
+                  fieldSortOrderJson: JSON.stringify(fieldSortOrder || [])
                 },
                 { method: "post" }
               );

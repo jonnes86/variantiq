@@ -35,7 +35,7 @@ interface VisualRuleBuilderProps {
     fields: Field[];
     rules: Rule[];
     datasets?: any[];
-    onSaveRules: (newRules: Partial<Rule>[]) => void;
+    onSaveRules: (newRules: Partial<Rule>[], fieldSortOrder?: Array<{ fieldId: string; sort: number }>) => void;
     onAddNewField?: (newField: Omit<Field, "id">) => string; // Returns the generated ID
     onDeleteOrphanedField?: (fieldId: string) => void;
 }
@@ -439,6 +439,10 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules, onAddN
 
     const handleCompileRules = () => {
         const compiledRules: Partial<Rule>[] = [];
+        // Track each field's position in a DFS traversal so the backend can
+        // re-sort fields to visually match the tree depth order.
+        const fieldSortOrder: Array<{ fieldId: string; sort: number }> = [];
+        const seenFieldIds = new Set<string>();
 
         const traverse = (containerId: string, inheritedConditions: any[]) => {
             const children = tree[containerId] || [];
@@ -450,6 +454,12 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules, onAddN
             }
 
             children.forEach((childId) => {
+                // Record DFS order for sorting (first encounter only)
+                if (!seenFieldIds.has(childId)) {
+                    seenFieldIds.add(childId);
+                    fieldSortOrder.push({ fieldId: childId, sort: fieldSortOrder.length });
+                }
+
                 if (containerId !== "root") {
                     compiledRules.push({
                         targetFieldId: childId,
@@ -491,7 +501,7 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules, onAddN
         };
 
         traverse("root", []);
-        onSaveRules(compiledRules);
+        onSaveRules(compiledRules, fieldSortOrder);
     };
 
     const rootDropdownOptions = [
