@@ -36,8 +36,10 @@ interface VisualRuleBuilderProps {
     rules: Rule[];
     datasets?: any[];
     onSaveRules: (newRules: Partial<Rule>[], fieldSortOrder?: Array<{ fieldId: string; sort: number }>) => void;
-    onAddNewField?: (newField: Omit<Field, "id">) => string; // Returns the generated ID
+    onAddNewField?: (newField: Omit<Field, "id">) => string;
     onDeleteOrphanedField?: (fieldId: string) => void;
+    onRegisterSaveRef?: (fn: () => void) => void;
+    lastSavedAt?: Date | null;
 }
 
 // ----------------------------------------------------
@@ -265,7 +267,7 @@ function RenderFieldNodeById({
 // MAIN BUILDER
 // ----------------------------------------------------
 
-export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules, onAddNewField, onDeleteOrphanedField }: VisualRuleBuilderProps) {
+export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules, onAddNewField, onDeleteOrphanedField, onRegisterSaveRef, lastSavedAt }: VisualRuleBuilderProps) {
     const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(new Set());
     const [tree, setTree] = useState<Record<string, string[]>>({ root: [] });
     const [fieldDatasetMap, setFieldDatasetMap] = useState<Record<string, string>>({});
@@ -594,6 +596,11 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules, onAddN
         onSaveRules(compiledRules, fieldSortOrder);
     };
 
+    // Register the save function with the parent for Cmd+S support
+    useEffect(() => {
+        onRegisterSaveRef?.(handleCompileRules);
+    }); // runs every render so the ref always points to fresh handleCompileRules
+
     const rootDropdownOptions = [
         { label: "Add root field...", value: "" },
         { label: "+ Create New Field", value: "CREATE_NEW" },
@@ -623,15 +630,29 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules, onAddN
                                 Select fields to add to the root to show them unconditionally. Select fields inside specific Option outcomes to show them conditionally.
                             </Text>
                         </BlockStack>
-                        <Button variant="primary" onClick={handleCompileRules}>
-                            Save Rules Tree
-                        </Button>
+                        <BlockStack gap="100" inlineAlign="end">
+                            <Button variant="primary" onClick={handleCompileRules}>
+                                Save Rules Tree
+                            </Button>
+                            {lastSavedAt && (
+                                <Text as="span" variant="bodySm" tone="subdued">
+                                    Last saved {lastSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </Text>
+                            )}
+                            <Text as="span" variant="bodySm" tone="subdued">
+                                Tip: ⌘S / Ctrl+S also saves
+                            </Text>
+                        </BlockStack>
                     </InlineStack>
 
                     <Box background="bg-surface-secondary" padding="400" borderRadius="200" minHeight="400px">
                         <div style={{ paddingBottom: "100px" }}>
                             {tree["root"]?.length === 0 && (
-                                <Text as="p" tone="subdued">No root fields added.</Text>
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 20px', gap: '12px', textAlign: 'center' }}>
+                                    <div style={{ fontSize: '40px' }}>🌳</div>
+                                    <Text as="p" variant="bodyMd" fontWeight="semibold">Your rule tree is empty</Text>
+                                    <Text as="p" variant="bodySm" tone="subdued">Use the dropdown below to add your first root field. Root fields are always visible to customers — then nest deeper fields conditionally under each option.</Text>
+                                </div>
                             )}
                             {tree["root"]?.map((id) => (
                                 <RenderFieldNodeById

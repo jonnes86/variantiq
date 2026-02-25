@@ -205,6 +205,74 @@ export async function action({ request, params }: ActionFunctionArgs) {
     return json({ success: true });
   }
 
+  // Duplicate template
+  if (intent === "duplicateTemplate") {
+    const original = await prisma.template.findUnique({
+      where: { id: templateId },
+      include: { fields: true, rules: true },
+    });
+    if (!original) return json({ error: "Not found" }, { status: 404 });
+
+    // Create new template
+    const newTemplate = await prisma.template.create({
+      data: {
+        shop: (original as any).shop ?? (original as any).shopId,
+        name: `Copy of ${original.name}`,
+        fontFamily: original.fontFamily,
+        fontSize: original.fontSize,
+        fontWeight: original.fontWeight,
+        textColor: original.textColor,
+        backgroundColor: original.backgroundColor,
+        borderColor: original.borderColor,
+        borderRadius: original.borderRadius,
+        padding: original.padding,
+        hoverBackgroundColor: original.hoverBackgroundColor,
+        hoverTextColor: original.hoverTextColor,
+      } as any,
+    });
+
+    // Copy fields and track old→new ID mapping
+    const fieldIdMap: Record<string, string> = {};
+    for (const f of original.fields) {
+      const newField = await prisma.field.create({
+        data: {
+          templateId: newTemplate.id,
+          type: f.type,
+          name: f.name,
+          label: f.label,
+          sort: f.sort,
+          required: f.required,
+          optionsJson: f.optionsJson,
+          priceAdjustmentsJson: f.priceAdjustmentsJson,
+          variantMappingJson: f.variantMappingJson,
+        } as any,
+      });
+      fieldIdMap[f.id] = newField.id;
+    }
+
+    // Copy rules, remapping field IDs
+    for (const r of original.rules) {
+      let conds: any[] = [];
+      try { conds = typeof r.conditionsJson === "string" ? JSON.parse(r.conditionsJson as string) : (r.conditionsJson as any[]); } catch (_e) { }
+      const remappedConds = Array.isArray(conds)
+        ? conds.map((c: any) => ({ ...c, fieldId: fieldIdMap[c.fieldId] ?? c.fieldId }))
+        : conds;
+      await prisma.rule.create({
+        data: {
+          templateId: newTemplate.id,
+          actionType: r.actionType,
+          targetFieldId: fieldIdMap[r.targetFieldId] ?? r.targetFieldId,
+          conditionsJson: remappedConds as any,
+          targetOptionsJson: r.targetOptionsJson as any,
+          targetPriceAdjustmentsJson: r.targetPriceAdjustmentsJson as any,
+          sort: r.sort,
+        },
+      });
+    }
+
+    return redirect(`/app/templates/${newTemplate.id}`);
+  }
+
   // Add or Edit field
   if (intent === "addField" || intent === "editField") {
     const type = String(form.get("fieldType") || "");
@@ -654,11 +722,24 @@ export default function TemplateDetail() {
   // View state
   const [isClient, setIsClient] = useState(false);
   const [localFields, setLocalFields] = useState<any[]>([]);
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  const saveRulesRef = React.useRef<(() => void) | null>(null);
 
   useEffect(() => {
     setIsClient(true);
   }, []);
 
+  // Cmd/Ctrl+S shortcut — triggers Save Rules Tree when on Rules tab
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 's' && selectedTab === 2) {
+        e.preventDefault();
+        saveRulesRef.current?.();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [selectedTab]);
 
   const handleDragEndFields = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -1115,6 +1196,8 @@ export default function TemplateDetail() {
             fields={[...template.fields, ...localFields]}
             rules={template.rules}
             datasets={datasets}
+            lastSavedAt={lastSavedAt}
+            onRegisterSaveRef={(fn) => { saveRulesRef.current = fn; }}
             onAddNewField={(newField) => {
               const newId = "local_" + Math.random().toString(36).substring(2, 9);
               setLocalFields(prev => [...prev, { ...newField, id: newId }]);
@@ -1131,6 +1214,7 @@ export default function TemplateDetail() {
                 { method: "post" }
               );
               setLocalFields([]); // Reset on save
+              setLastSavedAt(new Date());
             }}
             onDeleteOrphanedField={(fieldId) => {
               if (fieldId.startsWith("local_")) {
@@ -1332,6 +1416,14 @@ export default function TemplateDetail() {
       backAction={{ content: "Templates", url: "/app?tab=templates" }}
       title={template.name}
       secondaryActions={[
+        {
+          content: "Duplicate Template",
+          onAction: () => {
+            if (confirm(`Duplicate "${template.name}"? A copy will be created with all fields and rules.`)) {
+              submit({ _intent: "duplicateTemplate" }, { method: "post" });
+            }
+          },
+        },
         {
           content: "Delete Template",
           destructive: true,
