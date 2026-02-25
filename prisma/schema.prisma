@@ -128,3 +128,25 @@ model Dataset {
 
   @@index([shop])
 }
+
+model TemplateVersion {
+  id          String   @id @default(cuid())
+  templateId  String
+  label       String   @default("") // e.g., "Auto-save" or user-provided name
+  rulesJson   Json
+  fieldsJson  Json
+  createdAt   DateTime @default(now())
+
+  @@index([templateId])
+}
+
+model WebhookEndpoint {
+  id        String   @id @default(cuid())
+  shop      String
+  url       String
+  label     String   @default("")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@index([shop])
+}

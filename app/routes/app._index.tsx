@@ -261,6 +261,27 @@ export default function Index() {
         </BlockStack>
       </Card>
 
+      <InlineGrid columns={2} gap="400">
+        <Card>
+          <BlockStack gap="200">
+            <Text as="h3" variant="headingMd">📊 Analytics</Text>
+            <Text as="p" tone="subdued">View template views, add-to-cart events, and conversion rates.</Text>
+            <Link to="/app/analytics" style={{ textDecoration: "none" }}>
+              <Button variant="plain">View Analytics →</Button>
+            </Link>
+          </BlockStack>
+        </Card>
+        <Card>
+          <BlockStack gap="200">
+            <Text as="h3" variant="headingMd">🔗 Webhooks</Text>
+            <Text as="p" tone="subdued">Send order data with custom options to Zapier, Make, or any endpoint.</Text>
+            <Link to="/app/webhooks" style={{ textDecoration: "none" }}>
+              <Button variant="plain">Manage Webhooks →</Button>
+            </Link>
+          </BlockStack>
+        </Card>
+      </InlineGrid>
+
       {!isDismissed && (
         <Banner
           title="🚀 Step 1: Activate VariantIQ on your Storefront"

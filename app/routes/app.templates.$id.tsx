@@ -569,7 +569,46 @@ export async function action({ request, params }: ActionFunctionArgs) {
       }
     }
 
-    return json({ success: true });
+    // Auto-snapshot for version history (keep last 20)
+    const currentFields = await prisma.field.findMany({ where: { templateId }, orderBy: { sort: "asc" } });
+    const currentRulesSnap = await prisma.rule.findMany({ where: { templateId }, orderBy: { sort: "asc" } });
+    await (prisma as any).templateVersion.create({
+      data: {
+        templateId,
+        label: "Auto-save",
+        rulesJson: currentRulesSnap as any,
+        fieldsJson: currentFields as any,
+      },
+    });
+    const allVersions: any[] = await (prisma as any).templateVersion.findMany({
+      where: { templateId }, orderBy: { createdAt: "desc" }, select: { id: true }
+    });
+    if (allVersions.length > 20) {
+      const toDelete = allVersions.slice(20).map((v: any) => v.id);
+      await (prisma as any).templateVersion.deleteMany({ where: { id: { in: toDelete } } });
+    }
+    return json({ success: true, _action: "bulkSaveRules" });
+  }
+
+  // Restore a version snapshot
+  if (intent === "restoreVersion") {
+    const versionId = String(form.get("versionId") || "");
+    const version: any = await (prisma as any).templateVersion.findUnique({ where: { id: versionId } });
+    if (!version) return json({ error: "Version not found" }, { status: 404 });
+    await prisma.rule.deleteMany({ where: { templateId } });
+    const snapRules = version.rulesJson as any[];
+    for (const r of snapRules) {
+      await prisma.rule.create({
+        data: {
+          templateId, actionType: r.actionType, targetFieldId: r.targetFieldId,
+          conditionsJson: r.conditionsJson,
+          targetOptionsJson: r.targetOptionsJson ?? undefined,
+          targetPriceAdjustmentsJson: r.targetPriceAdjustmentsJson ?? undefined,
+          sort: r.sort || 0,
+        },
+      });
+    }
+    return json({ success: true, restored: true });
   }
 
   // Delete rule
