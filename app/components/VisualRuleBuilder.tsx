@@ -49,9 +49,9 @@ const VisualBuilderContext = React.createContext<{
     fieldDatasetMap: Record<string, string>;
     collapsedNodes: Set<string>;
     onToggleCollapse: (id: string) => void;
-    onChangeDataset: (fieldId: string, datasetId: string) => void;
+    onChangeDataset: (nodeId: string, datasetId: string) => void;
     onAddField: (fieldId: string, containerId: string) => void;
-    onRemoveField: (fieldId: string) => void;
+    onRemoveField: (fieldId: string, containerId: string) => void;
     availableFields: Field[];
     handleOpenNewFieldModal: (containerId: string) => void;
 } | null>(null);
@@ -70,13 +70,16 @@ function FieldNode({
     field,
     options,
     isNested,
+    containerId,
 }: {
     field: Field,
     options: string[],
     isNested?: boolean,
+    containerId: string,
 }) {
     const { tree, collapsedNodes, onToggleCollapse, datasets, fieldDatasetMap, onChangeDataset, onAddField, onRemoveField, availableFields, handleOpenNewFieldModal } = useVisualBuilder();
-    const datasetId = fieldDatasetMap[field.id];
+    const nodeId = `${containerId}::${field.id}`;
+    const datasetId = fieldDatasetMap[nodeId];
 
     // Build the dropdown options to include Fields AND Datasets
     const dropdownOptions = [
@@ -126,7 +129,7 @@ function FieldNode({
                                     labelHidden
                                     options={[{ label: 'All Options Available', value: '' }, ...datasets.map(d => ({ label: `Limit to: ${d.name}`, value: d.id }))]}
                                     value={datasetId || ''}
-                                    onChange={(value) => onChangeDataset(field.id, value)}
+                                    onChange={(value) => onChangeDataset(nodeId, value)}
                                 />
                             )}
                         </InlineStack>
@@ -134,7 +137,7 @@ function FieldNode({
                             variant="plain"
                             tone="critical"
                             icon={DeleteIcon}
-                            onClick={() => onRemoveField(field.id)}
+                            onClick={() => onRemoveField(field.id, containerId)}
                             accessibilityLabel="Remove field"
                         />
                     </InlineStack>
@@ -168,6 +171,7 @@ function FieldNode({
                                                             key={childId}
                                                             fieldId={childId}
                                                             isNested={true}
+                                                            containerId={dropId}
                                                         />
                                                     ))
                                                 )}
@@ -196,10 +200,12 @@ function FieldNode({
 
 function RenderFieldNodeById({
     fieldId,
-    isNested
+    isNested,
+    containerId
 }: {
     fieldId: string,
     isNested?: boolean,
+    containerId: string
 }) {
     const { fieldsMap } = useVisualBuilder();
     const f = fieldsMap[fieldId];
@@ -211,6 +217,7 @@ function RenderFieldNodeById({
             field={f}
             options={opts}
             isNested={isNested}
+            containerId={containerId}
         />
     );
 }
@@ -254,7 +261,7 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules, onAddN
 
                 // Check if this dataset has already been imported into this template as a field
                 const existingField = fields.find(f => f.name === safeName);
-                if (existingField && fieldDatasetMap[existingField.id] === datasetId) {
+                if (existingField) {
                     actualFieldId = existingField.id;
                 } else {
                     const baseName = safeName;
@@ -271,10 +278,11 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules, onAddN
                         optionsJson: dataset.optionsJson,
                         required: false
                     });
-
-                    // Bind the dataset mapping
-                    setFieldDatasetMap(prev => ({ ...prev, [actualFieldId]: datasetId }));
                 }
+
+                // Bind the dataset mapping
+                const nodeId = `${containerId}::${actualFieldId}`;
+                setFieldDatasetMap(prev => ({ ...prev, [nodeId]: datasetId }));
             } else {
                 return; // Silently fail if dataset not found or hook not provided
             }
@@ -286,31 +294,35 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules, onAddN
         }));
     };
 
-    const handleRemoveField = (fieldId: string) => {
+    const handleRemoveField = (fieldId: string, containerId: string) => {
         setTree(prev => {
             const next = { ...prev };
-            const containerId = Object.keys(next).find(k => next[k].includes(fieldId));
-            if (containerId) {
+            if (next[containerId]) {
                 next[containerId] = next[containerId].filter(id => id !== fieldId);
             }
-            const recursiveRemove = (id: string) => {
-                const f = fields.find(field => field.id === id);
-                if (!f) return;
-                const opts = Array.isArray(f.optionsJson) ? f.optionsJson : [];
-                opts.forEach(opt => {
-                    const dropId = `${id}::${opt}`;
-                    const children = next[dropId] || [];
-                    children.forEach(childId => recursiveRemove(childId));
-                    next[dropId] = [];
-                });
-            };
-            recursiveRemove(fieldId);
+
+            const isUsedElsewhere = Object.keys(next).some(k => next[k].includes(fieldId));
+            if (!isUsedElsewhere) {
+                const recursiveRemove = (id: string) => {
+                    const f = fields.find(field => field.id === id);
+                    if (!f) return;
+                    const opts = Array.isArray(f.optionsJson) ? f.optionsJson : [];
+                    opts.forEach(opt => {
+                        const dropId = `${id}::${opt}`;
+                        const children = next[dropId] || [];
+                        children.forEach(childId => recursiveRemove(childId));
+                        next[dropId] = [];
+                    });
+                };
+                recursiveRemove(fieldId);
+            }
             return next;
         });
 
         setFieldDatasetMap(prev => {
             const next = { ...prev };
-            delete next[fieldId];
+            const nodeId = `${containerId}::${fieldId}`;
+            delete next[nodeId];
             return next;
         });
     };
@@ -364,8 +376,8 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules, onAddN
         fieldDatasetMap,
         collapsedNodes,
         onToggleCollapse: handleToggleCollapse,
-        onChangeDataset: (fieldId: string, datasetId: string) => {
-            setFieldDatasetMap(prev => ({ ...prev, [fieldId]: datasetId }));
+        onChangeDataset: (nodeId: string, datasetId: string) => {
+            setFieldDatasetMap(prev => ({ ...prev, [nodeId]: datasetId }));
         },
         onAddField: handleAddField,
         onRemoveField: handleRemoveField,
@@ -401,7 +413,13 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules, onAddN
                 try {
                     const parsed = typeof r.targetOptionsJson === 'string' ? JSON.parse(r.targetOptionsJson) : r.targetOptionsJson;
                     if (parsed && parsed.datasetId) {
-                        newFieldDatasetMap[r.targetFieldId] = parsed.datasetId;
+                        let conds = [];
+                        try { conds = typeof r.conditionsJson === 'string' ? JSON.parse(r.conditionsJson) : r.conditionsJson; } catch (e) { }
+                        if (Array.isArray(conds) && conds.length === 1 && conds[0].operator === 'EQUALS') {
+                            const pId = `${conds[0].fieldId}::${conds[0].value}`;
+                            const nodeId = `${pId}::${r.targetFieldId}`;
+                            newFieldDatasetMap[nodeId] = parsed.datasetId;
+                        }
                     }
                 } catch (e) { }
             }
@@ -423,11 +441,12 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules, onAddN
                     actionType: "SHOW",
                     conditionsJson: [{ fieldId: parentFieldId, operator: "EQUALS", value: parentValue }],
                 });
-                if (fieldDatasetMap[childId]) {
+                const nodeId = `${containerId}::${childId}`;
+                if (fieldDatasetMap[nodeId]) {
                     compiledRules.push({
                         targetFieldId: childId,
                         actionType: "LIMIT_OPTIONS_DATASET",
-                        targetOptionsJson: { datasetId: fieldDatasetMap[childId] },
+                        targetOptionsJson: { datasetId: fieldDatasetMap[nodeId] },
                         conditionsJson: [{ fieldId: parentFieldId, operator: "EQUALS", value: parentValue }],
                     });
                 }
@@ -479,6 +498,7 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules, onAddN
                                 <RenderFieldNodeById
                                     key={id}
                                     fieldId={id}
+                                    containerId="root"
                                 />
                             ))}
 
