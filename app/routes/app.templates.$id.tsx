@@ -4,7 +4,7 @@ import {
   type ActionFunctionArgs,
   type LoaderFunctionArgs,
 } from "@remix-run/node";
-import { useLoaderData, useSubmit, Form, Link, useSearchParams } from "@remix-run/react";
+import { useLoaderData, useSubmit, Form, Link, useSearchParams, useActionData } from "@remix-run/react";
 import {
   Page,
   Card,
@@ -371,15 +371,17 @@ export async function action({ request, params }: ActionFunctionArgs) {
       const ruleId = String(form.get("ruleId") || "");
       if (!ruleId) return json({ error: "Rule ID required for edit" }, { status: 400 });
 
+      const updateData: any = {
+        conditionsJson: conditionsJson as any,
+        targetFieldId,
+        actionType,
+      };
+      if (targetOptionsJson !== null && targetOptionsJson !== undefined) updateData.targetOptionsJson = targetOptionsJson;
+      if (targetPriceAdjustmentsJson !== null && targetPriceAdjustmentsJson !== undefined) updateData.targetPriceAdjustmentsJson = targetPriceAdjustmentsJson;
+
       await prisma.rule.update({
         where: { id: ruleId },
-        data: {
-          conditionsJson: conditionsJson as any,
-          targetFieldId,
-          actionType,
-          targetOptionsJson: targetOptionsJson as any,
-          targetPriceAdjustmentsJson: targetPriceAdjustmentsJson as any,
-        }
+        data: updateData
       });
     } else {
       const maxSort = await prisma.rule.findFirst({
@@ -388,16 +390,18 @@ export async function action({ request, params }: ActionFunctionArgs) {
         select: { sort: true },
       });
 
+      const createData: any = {
+        templateId,
+        conditionsJson: conditionsJson as any,
+        targetFieldId,
+        actionType,
+        sort: (maxSort?.sort || 0) + 1,
+      };
+      if (targetOptionsJson !== null && targetOptionsJson !== undefined) createData.targetOptionsJson = targetOptionsJson;
+      if (targetPriceAdjustmentsJson !== null && targetPriceAdjustmentsJson !== undefined) createData.targetPriceAdjustmentsJson = targetPriceAdjustmentsJson;
+
       await prisma.rule.create({
-        data: {
-          templateId,
-          conditionsJson: conditionsJson as any,
-          targetFieldId,
-          actionType,
-          targetOptionsJson: targetOptionsJson as any,
-          targetPriceAdjustmentsJson: targetPriceAdjustmentsJson as any,
-          sort: (maxSort?.sort || 0) + 1,
-        },
+        data: createData,
       });
     }
 
@@ -464,14 +468,18 @@ export async function action({ request, params }: ActionFunctionArgs) {
         if (typeof targetOpts === 'string') targetOpts = JSON.parse(targetOpts);
       } catch (e) { }
 
-      return {
+      const mappedRule: any = {
         templateId,
         conditionsJson: conds && Array.isArray(conds) ? conds : [],
         targetFieldId: mapId(rule.targetFieldId || ""),
         actionType: rule.actionType || "SHOW",
-        targetOptionsJson: targetOpts || null, // Optional Json? fields translate properly when null from client? No, safer to omit or use string "null" if we can't use Prisma.DbNull, but passing JSON string or object handles it.
-        sort: index + 1, // Maintain order
+        sort: index + 1,
       };
+
+      if (targetOpts !== undefined && targetOpts !== null) {
+        mappedRule.targetOptionsJson = targetOpts;
+      }
+      return mappedRule;
     });
 
     await prisma.rule.createMany({
@@ -580,9 +588,18 @@ export async function action({ request, params }: ActionFunctionArgs) {
 export default function TemplateDetail() {
   const { template, linkedProductsData, datasets } = useLoaderData<typeof loader>();
   const submit = useSubmit();
+  const actionData = useActionData<typeof action>();
   const [searchParams] = useSearchParams();
   const initialTab = searchParams.get("tab") === "products" ? 1 : 0;
   const [selectedTab, setSelectedTab] = useState(initialTab);
+
+  useEffect(() => {
+    if (actionData && 'success' in actionData && actionData.success) {
+      if (typeof shopify !== 'undefined' && shopify.toast) {
+        shopify.toast.show('Settings saved successfully');
+      }
+    }
+  }, [actionData]);
 
   // Name state
   const [templateName, setTemplateName] = useState(template.name);

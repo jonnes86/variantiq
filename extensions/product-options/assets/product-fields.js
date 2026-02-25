@@ -386,6 +386,39 @@ class VariantIQFields {
     }
   }
 
+  updateDOMPriceLabels(field, fieldElement, activePrices) {
+    if (field.type === 'text') return;
+
+    // Selects
+    if (field.type === 'select') {
+      const options = fieldElement.querySelectorAll('option');
+      options.forEach(opt => {
+        if (!opt.value) return; // ignore placeholder
+        const baseText = opt.dataset.optValue || opt.value;
+        if (activePrices && activePrices[baseText] && parseFloat(activePrices[baseText]) > 0) {
+          opt.textContent = `${baseText} (+$${parseFloat(activePrices[baseText]).toFixed(2)})`;
+        } else {
+          opt.textContent = baseText;
+        }
+      });
+    }
+    // Radios/Checkboxes
+    else if (field.type === 'radio' || field.type === 'checkbox') {
+      const labels = fieldElement.querySelectorAll('label[data-opt-value]');
+      labels.forEach(label => {
+        const baseText = label.dataset.optValue;
+        const priceSpan = label.querySelector('.variantiq-price-label');
+        if (priceSpan) {
+          if (activePrices && activePrices[baseText] && parseFloat(activePrices[baseText]) > 0) {
+            priceSpan.textContent = ` (+$${parseFloat(activePrices[baseText]).toFixed(2)})`;
+          } else {
+            priceSpan.textContent = '';
+          }
+        }
+      });
+    }
+  }
+
   applyLimitToOptions(field, fieldElement, limitSet) {
     if (field.type === 'text') return; // Cannot limit a text field.
 
