@@ -53,6 +53,7 @@ const VisualBuilderContext = React.createContext<{
     savedTree: Record<string, string[]>;
     savedDatasetMap: Record<string, string>;
     collapsedNodes: Set<string>;
+    conflictedFieldIds: Set<string>;
     onToggleCollapse: (id: string) => void;
     onChangeDataset: (nodeId: string, datasetId: string) => void;
     onAddField: (fieldId: string, containerId: string) => void;
@@ -93,7 +94,7 @@ function FieldNode({
     containerId: string,
     depth?: number,
 }) {
-    const { tree, collapsedNodes, onToggleCollapse, datasets, fieldDatasetMap, savedTree, savedDatasetMap, onChangeDataset, onAddField, onRemoveField, availableFields, handleOpenNewFieldModal } = useVisualBuilder();
+    const { tree, collapsedNodes, onToggleCollapse, datasets, fieldDatasetMap, savedTree, savedDatasetMap, onChangeDataset, onAddField, onRemoveField, availableFields, handleOpenNewFieldModal, conflictedFieldIds } = useVisualBuilder();
     const nodeId = `${containerId}::${field.id}`;
     const datasetId = fieldDatasetMap[nodeId];
 
@@ -134,6 +135,9 @@ function FieldNode({
                             <InlineStack align="start" blockAlign="center" gap="200" wrap={false}>
                                 {isDirty && (
                                     <span title="Unsaved changes" style={{ fontSize: "10px", background: "#f59e0b", color: "white", fontWeight: 700, padding: "1px 6px", borderRadius: "9999px", whiteSpace: "nowrap" }}>UNSAVED</span>
+                                )}
+                                {conflictedFieldIds.has(field.id) && (
+                                    <span title="This field is assigned to more than one branch — only one will take effect" style={{ fontSize: "10px", background: "#ef4444", color: "white", fontWeight: 700, padding: "1px 6px", borderRadius: "9999px", whiteSpace: "nowrap" }}>⚠ CONFLICT</span>
                                 )}
                                 <div style={{ flex: 1 }}>
                                     <Text as="span" variant="bodyMd" fontWeight="semibold">
@@ -286,6 +290,47 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules, onAddN
     const [newFieldName, setNewFieldName] = useState("");
     const [newFieldOptions, setNewFieldOptions] = useState<string[]>([""]);
 
+    // Undo/Redo history
+    type Snapshot = { tree: Record<string, string[]>; map: Record<string, string> };
+    const [history, setHistory] = useState<Snapshot[]>([]);
+    const [historyIndex, setHistoryIndex] = useState(-1);
+
+    const pushHistory = (currentTree: Record<string, string[]>, currentMap: Record<string, string>) => {
+        setHistory(prev => {
+            const trimmed = prev.slice(0, historyIndex + 1);
+            return [...trimmed, { tree: JSON.parse(JSON.stringify(currentTree)), map: { ...currentMap } }].slice(-50);
+        });
+        setHistoryIndex(prev => Math.min(prev + 1, 49));
+    };
+
+    const handleUndo = () => {
+        if (historyIndex <= 0) return;
+        const snap = history[historyIndex - 1];
+        setTree(JSON.parse(JSON.stringify(snap.tree)));
+        setFieldDatasetMap({ ...snap.map });
+        setHistoryIndex(prev => prev - 1);
+    };
+
+    const handleRedo = () => {
+        if (historyIndex >= history.length - 1) return;
+        const snap = history[historyIndex + 1];
+        setTree(JSON.parse(JSON.stringify(snap.tree)));
+        setFieldDatasetMap({ ...snap.map });
+        setHistoryIndex(prev => prev + 1);
+    };
+
+    // Cmd+Z / Cmd+Y keyboard shortcuts for undo/redo
+    useEffect(() => {
+        const handler = (e: KeyboardEvent) => {
+            if (e.metaKey || e.ctrlKey) {
+                if (e.key === 'z' && !e.shiftKey) { e.preventDefault(); handleUndo(); }
+                if ((e.key === 'y') || (e.key === 'z' && e.shiftKey)) { e.preventDefault(); handleRedo(); }
+            }
+        };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+    }, [historyIndex, history]);
+
     const handleToggleCollapse = (id: string) => {
         setCollapsedNodes(prev => {
             const next = new Set(prev);
@@ -343,6 +388,7 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules, onAddN
 
     const handleRemoveField = (fieldId: string, containerId: string) => {
         setTree(prev => {
+            pushHistory(prev, fieldDatasetMap);
             const next = { ...prev };
             if (next[containerId]) {
                 next[containerId] = next[containerId].filter(id => id !== fieldId);
@@ -386,6 +432,13 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules, onAddN
         return ids;
     }, [tree]);
 
+    // Detect fields assigned to more than one branch (conflict)
+    const conflictedFieldIds = useMemo(() => {
+        const count: Record<string, number> = {};
+        Object.values(tree).forEach(arr => arr.forEach(id => { count[id] = (count[id] || 0) + 1; }));
+        return new Set(Object.keys(count).filter(id => count[id] > 1));
+    }, [tree]);
+
     const availableFields = useMemo(() => {
         return fields.filter(f => !activeFieldIds.has(f.id));
     }, [fields, activeFieldIds]);
@@ -424,8 +477,10 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules, onAddN
         savedTree,
         savedDatasetMap,
         collapsedNodes,
+        conflictedFieldIds,
         onToggleCollapse: handleToggleCollapse,
         onChangeDataset: (nodeId: string, datasetId: string) => {
+            pushHistory(tree, fieldDatasetMap);
             setFieldDatasetMap(prev => ({ ...prev, [nodeId]: datasetId }));
         },
         onAddField: handleAddField,
@@ -631,9 +686,27 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules, onAddN
                             </Text>
                         </BlockStack>
                         <BlockStack gap="100" inlineAlign="end">
-                            <Button variant="primary" onClick={handleCompileRules}>
-                                Save Rules Tree
-                            </Button>
+                            <InlineStack gap="200" blockAlign="center">
+                                <Button
+                                    variant="tertiary"
+                                    disabled={historyIndex <= 0}
+                                    onClick={handleUndo}
+                                    accessibilityLabel="Undo"
+                                >
+                                    ↩ Undo
+                                </Button>
+                                <Button
+                                    variant="tertiary"
+                                    disabled={historyIndex >= history.length - 1}
+                                    onClick={handleRedo}
+                                    accessibilityLabel="Redo"
+                                >
+                                    ↪ Redo
+                                </Button>
+                                <Button variant="primary" onClick={handleCompileRules}>
+                                    Save Rules Tree
+                                </Button>
+                            </InlineStack>
                             {lastSavedAt && (
                                 <Text as="span" variant="bodySm" tone="subdued">
                                     Last saved {lastSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}

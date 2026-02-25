@@ -105,6 +105,20 @@ export default function DatasetDetail() {
 
     // Convert parsed options array to multiline string for simple mass text-editing
     const [optionsStr, setOptionsStr] = useState(parsedOptions.join("\n"));
+    const [importText, setImportText] = useState("");
+    const [showImport, setShowImport] = useState(false);
+
+    const handleMergeImport = () => {
+        const imported = importText
+            .split(/[\n,]+/)
+            .map(v => v.trim())
+            .filter(v => v.length > 0);
+        const existing = optionsStr.split(/\r?\n/).map(v => v.trim()).filter(v => v);
+        const merged = Array.from(new Set([...existing, ...imported]));
+        setOptionsStr(merged.join("\n"));
+        setImportText("");
+        setShowImport(false);
+    };
 
     const handleSave = useCallback(() => {
         const formData = new FormData();
@@ -185,6 +199,40 @@ export default function DatasetDetail() {
                                         autoComplete="off"
                                         placeholder="Red&#10;Blue&#10;Green"
                                     />
+
+                                    <InlineStack align="start">
+                                        <Button
+                                            variant="plain"
+                                            onClick={() => setShowImport(v => !v)}
+                                        >
+                                            {showImport ? "▲ Hide import" : "▼ Paste / import values to merge"}
+                                        </Button>
+                                    </InlineStack>
+
+                                    {showImport && (
+                                        <BlockStack gap="200">
+                                            <Banner tone="info">
+                                                Paste comma-separated or line-separated values. Click <strong>Merge</strong> to add them to your existing options list without replacing anything.
+                                            </Banner>
+                                            <TextField
+                                                label="Values to import"
+                                                labelHidden
+                                                value={importText}
+                                                onChange={setImportText}
+                                                multiline={6}
+                                                autoComplete="off"
+                                                placeholder="White, Black, Navy, Red&#10;or one per line"
+                                            />
+                                            <InlineStack gap="200">
+                                                <Button variant="primary" onClick={handleMergeImport} disabled={!importText.trim()}>
+                                                    Merge into options
+                                                </Button>
+                                                <Button variant="plain" onClick={() => { setImportText(""); setShowImport(false); }}>
+                                                    Cancel
+                                                </Button>
+                                            </InlineStack>
+                                        </BlockStack>
+                                    )}
                                 </BlockStack>
                             </Card>
                         </BlockStack>
