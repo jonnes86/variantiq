@@ -103,11 +103,118 @@ class VariantIQFields {
     html += '</div>';
 
     fieldsContainer.innerHTML = html;
-
     this.evaluateRules();
+    this.updateProgressBar();
+  }
+
+  isColorField(field) {
+    const name = (field.label || field.name || '').toLowerCase();
+    return name.includes('color') || name.includes('colour');
+  }
+
+  // Known CSS color names we can render as swatches
+  getSwatchBg(colorName) {
+    const map = {
+      white: '#ffffff', black: '#000000', red: '#ef4444', blue: '#3b82f6',
+      navy: '#1e3a5f', green: '#22c55e', yellow: '#eab308', orange: '#f97316',
+      purple: '#a855f7', pink: '#ec4899', grey: '#9ca3af', gray: '#9ca3af',
+      brown: '#92400e', tan: '#d4a27a', beige: '#f5f0e1', cream: '#fffdd0',
+      coral: '#ff6b6b', teal: '#14b8a6', maroon: '#800000', silver: '#c0c0c0',
+      gold: '#fbbf24', khaki: '#c3b091', lavender: '#e6e6fa', mint: '#98ff98',
+      peach: '#ffcba4', lilac: '#c8a2c8', charcoal: '#36454f', ivory: '#fffff0',
+    };
+    const key = colorName.toLowerCase().trim();
+    return map[key] || null;
+  }
+
+  renderColorSwatches(field) {
+    const fieldOptions = field.optionsJson || [];
+    const isRequired = field.required ? 'required' : '';
+    const requiredMark = field.required ? '<span class="required">*</span>' : '';
+    let html = `
+      <fieldset class="variantiq-field variantiq-swatches js product-form__input" data-field-id="${field.id}" style="display: none; border: none; padding: 0; margin: 0 0 1rem 0;">
+        <legend class="form__label" style="width: 100%; margin-bottom: 0.8rem; text-align: left; display: block;">${field.label}${requiredMark}
+          <span class="variantiq-swatch-selected" data-swatch-for="${field.id}" style="font-weight:normal; margin-left:8px; color: var(--color-base-text, #666);"></span>
+        </legend>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px;">
+    `;
+    fieldOptions.forEach(option => {
+      const bg = this.getSwatchBg(option);
+      const isDark = bg ? this.isDarkColor(bg) : false;
+      const swatchStyle = bg
+        ? `background:${bg}; border: 2px solid #d1d5db;`
+        : `background: #f3f4f6; border: 2px solid #d1d5db;`;
+      html += `
+        <button type="button"
+          class="variantiq-swatch-btn"
+          data-field-id="${field.id}"
+          data-value="${option}"
+          title="${option}"
+          style="width:32px;height:32px;border-radius:50%;cursor:pointer;${swatchStyle} outline:none; transition: transform 0.1s, box-shadow 0.1s;"
+          aria-label="${option}"
+        >${bg ? '' : `<span style="font-size:9px;line-height:1;color:${isDark ? '#fff' : '#333'}">${option.substring(0, 3)}</span>`}</button>
+      `;
+    });
+    html += `
+        </div>
+        <input type="hidden" name="vq_${this.instanceId}_${field.id}" value="" id="vq-${this.instanceId}-${field.id}" ${isRequired} class="variantiq-swatch-input" />
+      </fieldset>
+    `;
+    return html;
+  }
+
+  isDarkColor(hex) {
+    const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+    return (r * 299 + g * 587 + b * 114) / 1000 < 128;
+  }
+
+  renderProgressBar() {
+    const { fields } = this.templateData.template;
+    const required = fields.filter(f => f.required);
+    if (required.length === 0) return;
+    const existing = this.container.querySelector('.variantiq-progress');
+    if (existing) existing.remove();
+    const bar = document.createElement('div');
+    bar.className = 'variantiq-progress';
+    bar.style.cssText = 'margin-bottom:12px;';
+    bar.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+        <span class="variantiq-progress-label" style="font-size:13px;color:var(--color-base-text,#444);">
+          <span class="variantiq-progress-done">0</span> of ${required.length} required options selected
+        </span>
+      </div>
+      <div style="background:#e5e7eb;border-radius:9999px;height:6px;overflow:hidden;">
+        <div class="variantiq-progress-fill" style="height:100%;background:#10b981;border-radius:9999px;width:0%;transition:width 0.3s;"></div>
+      </div>
+    `;
+    const container = this.container.querySelector('.variantiq-fields-container');
+    if (container) container.prepend(bar);
+  }
+
+  updateProgressBar() {
+    const bar = this.container.querySelector('.variantiq-progress');
+    if (!bar) return;
+    const { fields } = this.templateData.template;
+    const visibleRequired = this.getVisibleFields().filter(f => f.required);
+    const done = visibleRequired.filter(f => {
+      const v = this.fieldValues[f.id];
+      return v && v.trim() !== '';
+    }).length;
+    const total = visibleRequired.length;
+    bar.querySelector('.variantiq-progress-done').textContent = done;
+    bar.querySelector('.variantiq-progress-label').innerHTML = `<span class="variantiq-progress-done">${done}</span> of ${total} required options selected`;
+    const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+    const fill = bar.querySelector('.variantiq-progress-fill');
+    fill.style.width = pct + '%';
+    fill.style.background = done === total && total > 0 ? '#10b981' : '#6366f1';
   }
 
   renderField(field) {
+    // Color swatch renderer: use for fields with "color" or "colour" in the label
+    if (this.isColorField(field) && (field.optionsJson || []).length > 0) {
+      return this.renderColorSwatches(field);
+    }
+
     const fieldOptions = field.optionsJson || [];
     const isRequired = field.required ? 'required' : '';
     const requiredMark = field.required ? '<span class="required">*</span>' : '';
@@ -188,6 +295,35 @@ class VariantIQFields {
     this.container.addEventListener('input', (e) => this.handleFieldChange(e));
     this.container.addEventListener('change', (e) => this.handleFieldChange(e));
 
+    // Color swatch click handler
+    this.container.addEventListener('click', (e) => {
+      const btn = e.target.closest('.variantiq-swatch-btn');
+      if (!btn) return;
+      const fieldId = btn.dataset.fieldId;
+      const value = btn.dataset.value;
+      const fieldEl = this.container.querySelector(`.variantiq-field[data-field-id="${fieldId}"]`);
+      if (!fieldEl) return;
+
+      // Update hidden input
+      const hidden = fieldEl.querySelector('.variantiq-swatch-input');
+      if (hidden) hidden.value = value;
+
+      // Update displayed selected label
+      const label = fieldEl.querySelector(`[data-swatch-for="${fieldId}"]`);
+      if (label) label.textContent = value;
+
+      // Toggle active ring on swatches
+      fieldEl.querySelectorAll('.variantiq-swatch-btn').forEach(b => {
+        b.style.boxShadow = b === btn ? '0 0 0 3px #6366f1' : 'none';
+        b.style.transform = b === btn ? 'scale(1.18)' : 'scale(1)';
+      });
+
+      // Store value and re-evaluate
+      this.fieldValues[fieldId] = value;
+      this.evaluateRules();
+      this.updateProgressBar();
+    });
+
     // Intercept Add to Cart form submission
     this.interceptAddToCart();
   }
@@ -215,6 +351,7 @@ class VariantIQFields {
 
     // Re-evaluate rules globally every time a generic field changes
     this.evaluateRules();
+    this.updateProgressBar();
   }
 
   evaluateRules() {
@@ -836,27 +973,40 @@ class VariantIQFields {
   showValidationError(message) {
     // Remove any existing error in this container
     const existingError = this.container.querySelector('.variantiq-validation-error');
-    if (existingError) {
-      existingError.remove();
+    if (existingError) existingError.remove();
+
+    // Find the first visible, unfilled required field and scroll to + flash it
+    const visibleFields = this.getVisibleFields();
+    let firstInvalidEl = null;
+    for (const field of visibleFields) {
+      if (field.required) {
+        const val = this.fieldValues[field.id];
+        if (!val || val.trim() === '') {
+          firstInvalidEl = this.container.querySelector(`.variantiq-field[data-field-id="${field.id}"]`);
+          break;
+        }
+      }
     }
 
-    // Create error message
+    if (firstInvalidEl) {
+      firstInvalidEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const origBorder = firstInvalidEl.style.border;
+      firstInvalidEl.style.border = '2px solid #ef4444';
+      firstInvalidEl.style.borderRadius = '6px';
+      setTimeout(() => {
+        firstInvalidEl.style.border = origBorder;
+        firstInvalidEl.style.borderRadius = '';
+      }, 2500);
+    }
+
+    // Also show banner error message
     const errorDiv = document.createElement('div');
     errorDiv.className = 'variantiq-validation-error';
-    errorDiv.style.cssText = 'background: #fee; border: 2px solid #c33; padding: 12px; margin: 16px 0; border-radius: 4px; color: #c33; font-weight: 500;';
+    errorDiv.style.cssText = 'background: #fef2f2; border: 2px solid #ef4444; padding: 12px; margin: 16px 0; border-radius: 4px; color: #b91c1c; font-weight: 500;';
     errorDiv.textContent = message;
-
-    // Insert at the top of the form wrapper
     const wrapper = this.container.querySelector('.variantiq-fields-container');
     if (wrapper) wrapper.prepend(errorDiv);
-
-    // Scroll to error
-    errorDiv.scrollIntoView({ behavior: 'smooth', block: 'center' });
-
-    // Remove after 5 seconds
-    setTimeout(() => {
-      errorDiv.remove();
-    }, 5000);
+    setTimeout(() => errorDiv.remove(), 5000);
   }
 
   showError() {
