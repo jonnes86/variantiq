@@ -299,8 +299,14 @@ class VariantIQFields {
         limitOptionsSet = new Set();
         // Union of all passing limit rules options
         passingLimitRules.forEach(r => {
-          const opts = r.targetOptionsJson || [];
-          opts.forEach(o => limitOptionsSet.add(o));
+          let opts = r.targetOptionsJson || [];
+          // targetOptionsJson may arrive as a JSON string — parse it if so
+          if (typeof opts === 'string') {
+            try { opts = JSON.parse(opts); } catch (e) { opts = []; }
+          }
+          if (Array.isArray(opts)) {
+            opts.forEach(o => limitOptionsSet.add(o));
+          }
         });
       }
 
