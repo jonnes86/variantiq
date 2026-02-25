@@ -285,8 +285,11 @@ class VariantIQFields {
       }
 
       // --- WATERFALL LOGIC ---
-      // If a previous required field was not filled out, we enforce the waterfall cascade and hide this field
-      if (missingRequiredEncountered) {
+      // If a previous required field was not filled out, enforce the waterfall cascade.
+      // EXCEPTION: fields governed by SHOW rules already encode their ancestor conditions,
+      // so we must not additionally override them with the waterfall — doing so would hide
+      // deeply nested (3rd-level) dataset fields even when all their conditions pass.
+      if (missingRequiredEncountered && showRules.length === 0) {
         shouldShow = false;
       }
 
