@@ -120,6 +120,8 @@ model Dataset {
   id          String   @id @default(cuid())
   shop        String
   name        String
+  label       String   @default("")
+  type        String   @default("select")
   optionsJson Json?    // e.g., ["Red", "Blue", "Green"]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

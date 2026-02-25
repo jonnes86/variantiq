@@ -423,10 +423,10 @@ export default function Index() {
                   <InlineStack align="space-between" blockAlign="center">
                     <BlockStack gap="200">
                       <Text variant="bodyMd" fontWeight="bold" as="h3">
-                        {dataset.name}
+                        {dataset.label || dataset.name}
                       </Text>
                       <Text variant="bodySm" tone="subdued" as="span">
-                        {count} options loaded
+                        Internal ID: {dataset.name} • {count} options loaded
                       </Text>
                     </BlockStack>
                     <Form method="post" onSubmit={(e) => { if (!confirm("Are you sure?")) e.preventDefault() }}>

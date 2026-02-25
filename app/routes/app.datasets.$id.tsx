@@ -12,7 +12,8 @@ import {
     Text,
     PageActions,
     InlineStack,
-    Banner
+    Banner,
+    Select
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 import { prisma } from "../db.server";
@@ -53,6 +54,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
     const formData = await request.formData();
     const name = String(formData.get("name") || "").trim();
+    const label = String(formData.get("label") || "").trim();
+    const type = String(formData.get("type") || "select").trim();
     const rawOptions = String(formData.get("options") || "");
 
     if (!name) {
@@ -72,6 +75,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
         where: { id },
         data: {
             name,
+            label,
+            type,
             optionsJson: JSON.stringify(uniqueOptions),
         },
     });
@@ -88,6 +93,8 @@ export default function DatasetDetail() {
     const isSaving = navigation.state === "submitting" || navigation.state === "loading";
 
     const [name, setName] = useState(dataset.name);
+    const [label, setLabel] = useState(dataset.label || "");
+    const [type, setType] = useState(dataset.type || "select");
 
     // Convert parsed options array to multiline string for simple mass text-editing
     const [optionsStr, setOptionsStr] = useState(parsedOptions.join("\n"));
@@ -95,9 +102,11 @@ export default function DatasetDetail() {
     const handleSave = useCallback(() => {
         const formData = new FormData();
         formData.append("name", name);
+        formData.append("label", label);
+        formData.append("type", type);
         formData.append("options", optionsStr);
         submit(formData, { method: "post" });
-    }, [name, optionsStr, submit]);
+    }, [name, label, type, optionsStr, submit]);
 
     return (
         <Page
@@ -117,11 +126,29 @@ export default function DatasetDetail() {
                             <Card>
                                 <BlockStack gap="400">
                                     <TextField
-                                        label="Dataset Name"
+                                        label="Dataset Name (Internal)"
                                         value={name}
                                         onChange={setName}
                                         autoComplete="off"
                                         helpText="Identify this dataset in the rule builder (e.g., 'Nike Fall Colors')"
+                                    />
+                                    <TextField
+                                        label="Public Display Name"
+                                        value={label}
+                                        onChange={setLabel}
+                                        autoComplete="off"
+                                        helpText="The label shown to customers on the storefront"
+                                    />
+                                    <Select
+                                        label="Display Type"
+                                        options={[
+                                            { label: "Dropdown Select", value: "select" },
+                                            { label: "Radio Buttons", value: "radio" },
+                                            { label: "Checkboxes", value: "checkbox" }
+                                        ]}
+                                        value={type}
+                                        onChange={setType}
+                                        helpText="How these options should be presented to customers"
                                     />
                                 </BlockStack>
                             </Card>
@@ -168,6 +195,8 @@ export default function DatasetDetail() {
                             content: "Discard Unsaved Changes",
                             onAction: () => {
                                 setName(dataset.name);
+                                setLabel(dataset.label || "");
+                                setType(dataset.type || "select");
                                 setOptionsStr(parsedOptions.join("\n"));
                             },
                         },
