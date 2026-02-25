@@ -156,33 +156,26 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
           try {
             const parsed = typeof rule.targetOptionsJson === 'string' ? JSON.parse(rule.targetOptionsJson) : rule.targetOptionsJson;
             if (parsed.datasetId && dsMap[parsed.datasetId]) {
+              const ds = dsMap[parsed.datasetId];
+
+              // Mutate the Native Field stub that the Visual Rule Builder generated for this dataset,
+              // overwriting it with the live global Dataset properties so it stays perfectly synced.
+              const targetField = resolvedTemplate.fields.find((f: any) => f.id === rule.targetFieldId);
+              if (targetField) {
+                targetField.optionsJson = ds.optionsJson;
+                targetField.label = ds.label || ds.name;
+                targetField.type = ds.type || "select";
+              }
+
               return {
                 ...rule,
                 actionType: "LIMIT_OPTIONS",
-                targetOptionsJson: JSON.stringify(dsMap[parsed.datasetId])
+                targetOptionsJson: JSON.stringify(ds.optionsJson)
               };
             }
           } catch (e) { }
         }
         return rule;
-      });
-
-      // Synthesize missing fields for the datasets so the storefront can render them
-      datasets.forEach((ds: any) => {
-        if (!resolvedTemplate.fields.some((f: any) => f.id === ds.id)) {
-          resolvedTemplate.fields.push({
-            id: ds.id,
-            templateId: resolvedTemplate.id,
-            name: ds.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase(),
-            label: ds.label || ds.name,
-            type: ds.type || "select",
-            optionsJson: dsMap[ds.id],
-            priceAdjustmentsJson: null,
-            variantMappingJson: null,
-            required: true, // Assuming datasets are required selections if shown
-            sort: 9999 // Push to the end of the waterfall
-          });
-        }
       });
     }
 
