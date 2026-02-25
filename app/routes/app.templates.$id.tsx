@@ -948,37 +948,45 @@ export default function TemplateDetail() {
         </BlockStack>
       </Card>
 
-      {template.fields.length === 0 ? (
-        <Card>
-          <Text as="p" tone="subdued">
-            No fields yet. Add your first field to get started.
-          </Text>
-        </Card>
-      ) : (
-        <Card>
-          <DndContext
-            sensors={useSensors(
-              useSensor(PointerSensor),
-              useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
-            )}
-            collisionDetection={closestCenter}
-            onDragEnd={handleDragEndFields}
-          >
-            <SortableContext items={template.fields.map((f: any) => f.id)} strategy={verticalListSortingStrategy}>
-              <BlockStack gap="200">
-                {template.fields.map((field: any) => (
-                  <SortableFieldListItem
-                    key={field.id}
-                    field={field}
-                    handleEditFieldClick={handleEditFieldClick}
-                    handleDeleteField={handleDeleteField}
-                  />
-                ))}
-              </BlockStack>
-            </SortableContext>
-          </DndContext>
-        </Card>
-      )}
+      {/* Compute the set of field IDs that are auto-managed by datasets (hidden from this tab) */}
+      {(() => {
+        const datasetManagedFieldIds = new Set(
+          (template.rules || []).filter((r: any) => r.actionType === 'LIMIT_OPTIONS_DATASET').map((r: any) => r.targetFieldId)
+        );
+        const editableFields = template.fields.filter((f: any) => !datasetManagedFieldIds.has(f.id));
+
+        return editableFields.length === 0 ? (
+          <Card>
+            <Text as="p" tone="subdued">
+              No fields yet. Add your first field to get started.
+            </Text>
+          </Card>
+        ) : (
+          <Card>
+            <DndContext
+              sensors={useSensors(
+                useSensor(PointerSensor),
+                useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+              )}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEndFields}
+            >
+              <SortableContext items={editableFields.map((f: any) => f.id)} strategy={verticalListSortingStrategy}>
+                <BlockStack gap="200">
+                  {editableFields.map((field: any) => (
+                    <SortableFieldListItem
+                      key={field.id}
+                      field={field}
+                      handleEditFieldClick={handleEditFieldClick}
+                      handleDeleteField={handleDeleteField}
+                    />
+                  ))}
+                </BlockStack>
+              </SortableContext>
+            </DndContext>
+          </Card>
+        );
+      })()}
     </BlockStack>
   );
 
