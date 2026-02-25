@@ -402,12 +402,15 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules, onAddN
             if (r.actionType === "SHOW") {
                 let conds = [];
                 try { conds = typeof r.conditionsJson === 'string' ? JSON.parse(r.conditionsJson) : r.conditionsJson; } catch (e) { }
-                if (Array.isArray(conds) && conds.length === 1 && conds[0].operator === 'EQUALS') {
-                    const pId = `${conds[0].fieldId}::${conds[0].value}`;
-                    if (!newTree[pId]) newTree[pId] = [];
-                    if (!newTree[pId].includes(r.targetFieldId)) {
-                        newTree[pId].push(r.targetFieldId);
-                        fieldsInTree.add(r.targetFieldId);
+                if (Array.isArray(conds) && conds.length > 0) {
+                    const lastCond = conds[conds.length - 1];
+                    if (lastCond && lastCond.operator === 'EQUALS') {
+                        const pId = `${lastCond.fieldId}::${lastCond.value}`;
+                        if (!newTree[pId]) newTree[pId] = [];
+                        if (!newTree[pId].includes(r.targetFieldId)) {
+                            newTree[pId].push(r.targetFieldId);
+                            fieldsInTree.add(r.targetFieldId);
+                        }
                     }
                 }
             } else if (r.actionType === "LIMIT_OPTIONS_DATASET") {
@@ -416,10 +419,13 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules, onAddN
                     if (parsed && parsed.datasetId) {
                         let conds = [];
                         try { conds = typeof r.conditionsJson === 'string' ? JSON.parse(r.conditionsJson) : r.conditionsJson; } catch (e) { }
-                        if (Array.isArray(conds) && conds.length === 1 && conds[0].operator === 'EQUALS') {
-                            const pId = `${conds[0].fieldId}::${conds[0].value}`;
-                            const nodeId = `${pId}::${r.targetFieldId}`;
-                            newFieldDatasetMap[nodeId] = parsed.datasetId;
+                        if (Array.isArray(conds) && conds.length > 0) {
+                            const lastCond = conds[conds.length - 1];
+                            if (lastCond && lastCond.operator === 'EQUALS') {
+                                const pId = `${lastCond.fieldId}::${lastCond.value}`;
+                                const nodeId = `${pId}::${r.targetFieldId}`;
+                                newFieldDatasetMap[nodeId] = parsed.datasetId;
+                            }
                         }
                     }
                 } catch (e) { }
