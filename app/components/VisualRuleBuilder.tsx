@@ -481,6 +481,8 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules, onAddN
         newTree.root = fields.map(f => f.id).filter(id => !fieldsInTree.has(id));
         setTree(newTree);
         setFieldDatasetMap(newFieldDatasetMap);
+        // Collapse all nodes by default on load
+        setCollapsedNodes(new Set(fields.filter(f => Array.isArray(f.optionsJson) && f.optionsJson.length > 0).map(f => f.id)));
         // Snapshot the DB-loaded state so FieldNode can detect unsaved local changes
         setSavedTree(JSON.parse(JSON.stringify(newTree)));
         setSavedDatasetMap({ ...newFieldDatasetMap });
