@@ -1108,6 +1108,15 @@ export default function TemplateDetail() {
               );
               setLocalFields([]); // Reset on save
             }}
+            onDeleteOrphanedField={(fieldId) => {
+              if (fieldId.startsWith("local_")) {
+                setLocalFields(prev => prev.filter(f => f.id !== fieldId));
+              } else {
+                if (confirm("Permanently delete this unassigned field? This cannot be undone.")) {
+                  submit({ _intent: "deleteField", fieldId }, { method: "post" });
+                }
+              }
+            }}
           />
         </Card>
       )}

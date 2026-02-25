@@ -37,6 +37,7 @@ interface VisualRuleBuilderProps {
     datasets?: any[];
     onSaveRules: (newRules: Partial<Rule>[]) => void;
     onAddNewField?: (newField: Omit<Field, "id">) => string; // Returns the generated ID
+    onDeleteOrphanedField?: (fieldId: string) => void;
 }
 
 // ----------------------------------------------------
@@ -226,7 +227,7 @@ function RenderFieldNodeById({
 // MAIN BUILDER
 // ----------------------------------------------------
 
-export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules, onAddNewField }: VisualRuleBuilderProps) {
+export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules, onAddNewField, onDeleteOrphanedField }: VisualRuleBuilderProps) {
     const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(new Set());
     const [tree, setTree] = useState<Record<string, string[]>>({ root: [] });
     const [fieldDatasetMap, setFieldDatasetMap] = useState<Record<string, string>>({});
@@ -432,26 +433,58 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules, onAddN
 
     const handleCompileRules = () => {
         const compiledRules: Partial<Rule>[] = [];
-        Object.entries(tree).forEach(([containerId, children]) => {
-            if (containerId === "root") return;
-            const [parentFieldId, parentValue] = containerId.split("::");
+
+        const traverse = (containerId: string, inheritedConditions: any[]) => {
+            const children = tree[containerId] || [];
+
+            let currentConditions = [...inheritedConditions];
+            if (containerId !== "root") {
+                const [parentFieldId, parentValue] = containerId.split("::");
+                currentConditions.push({ fieldId: parentFieldId, operator: "EQUALS", value: parentValue });
+            }
+
             children.forEach((childId) => {
-                compiledRules.push({
-                    targetFieldId: childId,
-                    actionType: "SHOW",
-                    conditionsJson: [{ fieldId: parentFieldId, operator: "EQUALS", value: parentValue }],
-                });
+                if (containerId !== "root") {
+                    compiledRules.push({
+                        targetFieldId: childId,
+                        actionType: "SHOW",
+                        conditionsJson: currentConditions,
+                    });
+                }
+
+                // Regardless of root or logic, apply dataset constraints if any
                 const nodeId = `${containerId}::${childId}`;
                 if (fieldDatasetMap[nodeId]) {
                     compiledRules.push({
                         targetFieldId: childId,
                         actionType: "LIMIT_OPTIONS_DATASET",
                         targetOptionsJson: { datasetId: fieldDatasetMap[nodeId] },
-                        conditionsJson: [{ fieldId: parentFieldId, operator: "EQUALS", value: parentValue }],
+                        conditionsJson: currentConditions,
                     });
                 }
+
+                // Recursively traverse this child's options
+                const field = fieldsMap[childId];
+                if (field && Array.isArray(field.optionsJson)) {
+                    field.optionsJson.forEach((opt: string) => {
+                        traverse(`${childId}::${opt}`, currentConditions);
+                    });
+                } else if (fieldDatasetMap[nodeId]) {
+                    // Fallback to reading from the dataset directly if it's a completely new uncommitted field
+                    const datasetId = fieldDatasetMap[nodeId];
+                    const dataset = datasets?.find(d => d.id === datasetId);
+                    let opts = [];
+                    try { opts = typeof dataset?.optionsJson === 'string' ? JSON.parse(dataset.optionsJson) : (dataset?.optionsJson || []); } catch (e) { }
+                    if (Array.isArray(opts)) {
+                        opts.forEach((opt: string) => {
+                            traverse(`${childId}::${opt}`, currentConditions);
+                        });
+                    }
+                }
             });
-        });
+        };
+
+        traverse("root", []);
         onSaveRules(compiledRules);
     };
 
@@ -513,6 +546,44 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules, onAddN
                             </div>
                         </div>
                     </Box>
+
+                    {availableFields.length > 0 && (
+                        <Box background="bg-surface-warning" padding="400" borderRadius="200">
+                            <BlockStack gap="200">
+                                <Text as="h4" variant="headingSm">
+                                    ⚠️ Unassigned Fields ({availableFields.length})
+                                </Text>
+                                <Text as="p" tone="subdued">
+                                    The following fields are not in your Visual Tree and have no SHOW rules. They will be unconditionally visible to everyone. If these are orphaned Datasets, you can safely delete them absolutely.
+                                </Text>
+                                <div style={{ marginTop: "12px", display: "flex", flexDirection: "column", gap: "8px" }}>
+                                    {availableFields.map(f => (
+                                        <Card key={f.id} padding="300">
+                                            <InlineStack align="space-between" blockAlign="center">
+                                                <div>
+                                                    <Text as="span" variant="bodyMd" fontWeight="semibold">
+                                                        {f.label || f.name}
+                                                    </Text>
+                                                    <Text as="span" variant="bodySm" tone="subdued">
+                                                        {" "} (Internal: {f.name})
+                                                    </Text>
+                                                </div>
+                                                <Button
+                                                    variant="plain"
+                                                    tone="critical"
+                                                    icon={DeleteIcon}
+                                                    onClick={() => {
+                                                        if (onDeleteOrphanedField) onDeleteOrphanedField(f.id);
+                                                    }}
+                                                    accessibilityLabel="Remove field entirely"
+                                                />
+                                            </InlineStack>
+                                        </Card>
+                                    ))}
+                                </div>
+                            </BlockStack>
+                        </Box>
+                    )}
                 </BlockStack>
             </Card>
 

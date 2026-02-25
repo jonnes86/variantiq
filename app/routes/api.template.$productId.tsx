@@ -147,7 +147,8 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       console.log(`[API] Hydrating ${datasetRefs.size} datasets for template`);
       const datasets = await prisma.dataset.findMany({ where: { id: { in: Array.from(datasetRefs) } } });
       const dsMap = datasets.reduce((acc: any, d: any) => {
-        acc[d.id] = typeof d.optionsJson === 'string' ? JSON.parse(d.optionsJson) : (d.optionsJson || []);
+        const parsedOptions = typeof d.optionsJson === 'string' ? JSON.parse(d.optionsJson) : (d.optionsJson || []);
+        acc[d.id] = { ...d, optionsJson: parsedOptions };
         return acc;
       }, {});
 
