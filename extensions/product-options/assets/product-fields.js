@@ -547,6 +547,11 @@ class VariantIQFields {
         return false;
       }
 
+      // GUARD: only attach one listener — prevents duplicate cart adds when
+      // multiple tryIntercept() retries all find the same button.
+      if (addToCartButton.dataset.variantiqIntercepted) return true;
+      addToCartButton.dataset.variantiqIntercepted = 'true';
+
       console.log('VariantIQ: Found Add to Cart button:', addToCartButton);
 
       const form = addToCartButton.closest('form') || document.querySelector('form[action*="/cart/add"]');

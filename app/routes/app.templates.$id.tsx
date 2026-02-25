@@ -1368,7 +1368,7 @@ export default function TemplateDetail() {
 
         <Tabs
           tabs={[
-            { id: "fields", content: "Fields", badge: String(template.fields.filter((f: any) => !template.rules.some((r: any) => r.actionType === 'LIMIT_OPTIONS_DATASET' && r.targetFieldId === f.id)).length) },
+            { id: "fields", content: "Options", badge: String(template.fields.filter((f: any) => !template.rules.some((r: any) => r.actionType === 'LIMIT_OPTIONS_DATASET' && r.targetFieldId === f.id)).length) },
             { id: "products", content: "Products", badge: String(template.links.length) },
             { id: "rules", content: "Rules", badge: String(template.rules.length) },
             { id: "appearance", content: "Appearance" },
