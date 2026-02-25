@@ -640,9 +640,75 @@ class VariantIQFields {
             window.location.href = '/cart';
             return false;
           } else {
-            // Standard property injection
-            this.addPropertiesToCart(form);
-            // Allow native form submission / AJAX drawer to continue
+            // For AJAX-cart themes that may serialize the form before our hidden inputs
+            // are available, take control of the submission ourselves and post directly
+            // to /cart/add.js with all properties included.
+            e.preventDefault();
+            e.stopPropagation();
+
+            const originalHTML = addToCartButton.innerHTML;
+            addToCartButton.disabled = true;
+
+            try {
+              // Build the properties object from visible field selections
+              const properties = {};
+              this.getVisibleFields().forEach(field => {
+                const val = this.fieldValues[field.id];
+                if (val && val.trim() !== '') {
+                  const key = field.label || field.name;
+                  properties[key] = val;
+                }
+              });
+
+              // Build the cart/add.js payload from the form, merging in our properties
+              const formData = new FormData(form);
+              // Remove any pre-existing properties[...] keys the form may have added
+              for (const key of [...formData.keys()]) {
+                if (key.startsWith('properties[')) formData.delete(key);
+              }
+              // Inject VariantIQ properties
+              Object.entries(properties).forEach(([k, v]) => {
+                formData.append(`properties[${k}]`, v);
+              });
+
+              const response = await fetch('/cart/add.js', {
+                method: 'POST',
+                body: formData,
+              });
+
+              if (!response.ok) throw new Error('cart/add.js failed');
+
+              // Dispatch events that AJAX cart themes listen to for drawer refresh
+              document.dispatchEvent(new CustomEvent('cart:refresh'));
+              document.dispatchEvent(new CustomEvent('theme:cart:open'));
+              // Dawn / Debut style
+              const cartDrawer = document.querySelector('cart-drawer');
+              if (cartDrawer && typeof cartDrawer.renderContents === 'function') {
+                const refreshRes = await fetch(`${window.Shopify.routes.root}cart.js`);
+                const cartData = await refreshRes.json();
+                cartDrawer.renderContents({ sections: {}, cartData });
+              }
+              // Generic fallback: trigger a page reload if no drawer found
+              const hasDrawer = document.querySelector('cart-drawer, [id*="cart-drawer"], [class*="cart-drawer"]');
+              if (!hasDrawer) {
+                window.location.href = '/cart';
+              } else {
+                // Let the theme update its cart count badge
+                fetch('/cart.js').then(r => r.json()).then(cart => {
+                  document.querySelectorAll('[data-cart-count]').forEach(el => {
+                    el.textContent = cart.item_count;
+                  });
+                });
+              }
+            } catch (err) {
+              console.error('VariantIQ: cart/add.js failed, falling back to form submit', err);
+              // Fallback: inject hidden inputs and let native form submit proceed
+              this.addPropertiesToCart(form);
+              HTMLFormElement.prototype.submit.call(form);
+            } finally {
+              addToCartButton.innerHTML = originalHTML;
+              addToCartButton.disabled = false;
+            }
           }
         } else {
           console.error('VariantIQ: Could not find form to add properties');
@@ -703,7 +769,7 @@ class VariantIQFields {
       if (value && value.trim() !== '') {
         const input = document.createElement('input');
         input.type = 'hidden';
-        input.name = `properties[${field.label}]`;
+        input.name = `properties[${field.label || field.name}]`;
         input.value = value;
         input.className = 'variantiq-cart-prop';
         form.appendChild(input);
