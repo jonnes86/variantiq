@@ -166,6 +166,24 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
         }
         return rule;
       });
+
+      // Synthesize missing fields for the datasets so the storefront can render them
+      datasets.forEach((ds: any) => {
+        if (!resolvedTemplate.fields.some((f: any) => f.id === ds.id)) {
+          resolvedTemplate.fields.push({
+            id: ds.id,
+            templateId: resolvedTemplate.id,
+            name: ds.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase(),
+            label: ds.name,
+            type: "select",
+            optionsJson: dsMap[ds.id],
+            priceAdjustmentsJson: null,
+            variantMappingJson: null,
+            required: true, // Assuming datasets are required selections if shown
+            sort: 9999 // Push to the end of the waterfall
+          });
+        }
+      });
     }
 
     // Return template data
