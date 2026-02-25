@@ -48,6 +48,8 @@ const VisualBuilderContext = React.createContext<{
     tree: Record<string, string[]>;
     datasets: any[];
     fieldDatasetMap: Record<string, string>;
+    savedTree: Record<string, string[]>;
+    savedDatasetMap: Record<string, string>;
     collapsedNodes: Set<string>;
     onToggleCollapse: (id: string) => void;
     onChangeDataset: (nodeId: string, datasetId: string) => void;
@@ -67,20 +69,41 @@ function useVisualBuilder() {
 // COMPONENTS
 // ----------------------------------------------------
 
+// Alternating depth colours (soft, accessible tints)
+const DEPTH_COLORS = [
+    "#ffffff",  // depth 0 — root: white
+    "#f3f4ff",  // depth 1 — soft lavender
+    "#f0faf4",  // depth 2 — soft mint
+    "#fffbf0",  // depth 3 — soft amber
+    "#f9f0ff",  // depth 4 — soft violet
+];
+
 function FieldNode({
     field,
     options,
     isNested,
     containerId,
+    depth = 0,
 }: {
     field: Field,
     options: string[],
     isNested?: boolean,
     containerId: string,
+    depth?: number,
 }) {
-    const { tree, collapsedNodes, onToggleCollapse, datasets, fieldDatasetMap, onChangeDataset, onAddField, onRemoveField, availableFields, handleOpenNewFieldModal } = useVisualBuilder();
+    const { tree, collapsedNodes, onToggleCollapse, datasets, fieldDatasetMap, savedTree, savedDatasetMap, onChangeDataset, onAddField, onRemoveField, availableFields, handleOpenNewFieldModal } = useVisualBuilder();
     const nodeId = `${containerId}::${field.id}`;
     const datasetId = fieldDatasetMap[nodeId];
+
+    // Dirty detection: field was moved OR dataset assignment changed
+    const savedParentContents = savedTree[containerId] || [];
+    const isPositionDirty = !savedParentContents.includes(field.id);
+    const savedDataset = savedDatasetMap[nodeId];
+    const isDatasetDirty = datasetId !== savedDataset;
+    const isDirty = isPositionDirty || isDatasetDirty;
+
+    const bgColor = DEPTH_COLORS[depth % DEPTH_COLORS.length];
+    const dirtyStyle = isDirty ? { borderLeft: "3px solid #f59e0b", background: "#fffbeb" } : { background: bgColor };
 
     // Build the dropdown options to include Fields AND Datasets
     const dropdownOptions = [
@@ -101,100 +124,106 @@ function FieldNode({
 
     return (
         <div style={{ marginBottom: "12px" }}>
-            <Card padding="300">
-                <BlockStack gap="200">
-                    {/* Field Header */}
-                    <InlineStack align="space-between" blockAlign="center">
-                        <InlineStack align="start" blockAlign="center" gap="200" wrap={false}>
-                            <div style={{ flex: 1 }}>
-                                <Text as="span" variant="bodyMd" fontWeight="semibold">
-                                    {field.label || field.name}
-                                </Text>
-                                <Text as="span" variant="bodySm" tone="subdued">
-                                    {" "} {field.label ? `(Internal: ${field.name})` : `— ${field.type}`}
-                                </Text>
-                            </div>
+            <div style={{ borderRadius: "var(--p-border-radius-200)", overflow: "hidden", border: "1px solid var(--p-color-border)", ...dirtyStyle }}>
+                <div style={{ padding: "12px" }}>
+                    <BlockStack gap="200">
+                        {/* Field Header */}
+                        <InlineStack align="space-between" blockAlign="center">
+                            <InlineStack align="start" blockAlign="center" gap="200" wrap={false}>
+                                {isDirty && (
+                                    <span title="Unsaved changes" style={{ fontSize: "10px", background: "#f59e0b", color: "white", fontWeight: 700, padding: "1px 6px", borderRadius: "9999px", whiteSpace: "nowrap" }}>UNSAVED</span>
+                                )}
+                                <div style={{ flex: 1 }}>
+                                    <Text as="span" variant="bodyMd" fontWeight="semibold">
+                                        {field.label || field.name}
+                                    </Text>
+                                    <Text as="span" variant="bodySm" tone="subdued">
+                                        {" "} {field.label ? `(Internal: ${field.name})` : `— ${field.type}`}
+                                    </Text>
+                                </div>
 
-                            {options.length > 0 && (
-                                <Button
-                                    size="micro"
-                                    variant="tertiary"
-                                    onClick={() => onToggleCollapse(field.id)}
-                                >
-                                    {collapsedNodes.has(field.id) ? `Expand ${options.length} Options` : `Collapse Options`}
-                                </Button>
-                            )}
-                            {isNested && datasets.length > 0 && options.length > 0 && (
-                                <Select
-                                    label="Limit options to dataset"
-                                    labelHidden
-                                    options={[{ label: 'All Options Available', value: '' }, ...datasets.map(d => ({ label: `Limit to: ${d.name}`, value: d.id }))]}
-                                    value={datasetId || ''}
-                                    onChange={(value) => onChangeDataset(nodeId, value)}
-                                />
-                            )}
+                                {options.length > 0 && (
+                                    <Button
+                                        size="micro"
+                                        variant="tertiary"
+                                        onClick={() => onToggleCollapse(field.id)}
+                                    >
+                                        {collapsedNodes.has(field.id) ? `Expand ${options.length} Options` : `Collapse Options`}
+                                    </Button>
+                                )}
+                                {isNested && datasets.length > 0 && options.length > 0 && (
+                                    <Select
+                                        label="Limit options to dataset"
+                                        labelHidden
+                                        options={[{ label: 'All Options Available', value: '' }, ...datasets.map(d => ({ label: `Limit to: ${d.name}`, value: d.id }))]}
+                                        value={datasetId || ''}
+                                        onChange={(value) => onChangeDataset(nodeId, value)}
+                                    />
+                                )}
+                            </InlineStack>
+                            <Button
+                                variant="plain"
+                                tone="critical"
+                                icon={DeleteIcon}
+                                onClick={() => onRemoveField(field.id, containerId)}
+                                accessibilityLabel="Remove field"
+                            />
                         </InlineStack>
-                        <Button
-                            variant="plain"
-                            tone="critical"
-                            icon={DeleteIcon}
-                            onClick={() => onRemoveField(field.id, containerId)}
-                            accessibilityLabel="Remove field"
-                        />
-                    </InlineStack>
 
-                    {/* Child Zones for Options */}
-                    {options.length > 0 && !collapsedNodes.has(field.id) && (
-                        <div style={{ marginLeft: "14px", marginTop: "8px", display: "flex", flexDirection: "column", gap: "8px" }}>
-                            {options.map((opt) => {
-                                const dropId = `${field.id}::${opt}`;
-                                const nestedChildIds = tree[dropId] || [];
+                        {/* Child Zones for Options */}
+                        {options.length > 0 && !collapsedNodes.has(field.id) && (
+                            <div style={{ marginLeft: "14px", marginTop: "8px", display: "flex", flexDirection: "column", gap: "8px" }}>
+                                {options.map((opt) => {
+                                    const dropId = `${field.id}::${opt}`;
+                                    const nestedChildIds = tree[dropId] || [];
 
-                                return (
-                                    <div key={opt} style={{
-                                        paddingLeft: "16px",
-                                        borderLeft: "2px solid var(--p-color-border)",
-                                        marginLeft: "8px"
-                                    }}>
-                                        <BlockStack gap="200">
-                                            <Text as="span" variant="bodySm" fontWeight="bold" tone="subdued">
-                                                ↳ If chosen: {opt}
-                                            </Text>
+                                    return (
+                                        <div key={opt} style={{
+                                            paddingLeft: "16px",
+                                            borderLeft: `2px solid ${DEPTH_COLORS[(depth + 1) % DEPTH_COLORS.length] === "#ffffff" ? "var(--p-color-border)" : DEPTH_COLORS[(depth + 1) % DEPTH_COLORS.length]}`,
+                                            marginLeft: "8px"
+                                        }}>
+                                            <BlockStack gap="200">
+                                                <Text as="span" variant="bodySm" fontWeight="bold" tone="subdued">
+                                                    ↳ If chosen: {opt}
+                                                </Text>
 
-                                            <div style={{ minHeight: "20px", padding: "8px", backgroundColor: "var(--p-color-bg-surface)", borderRadius: "var(--p-border-radius-100)", border: "1px dashed var(--p-color-border)" }}>
-                                                {nestedChildIds.length === 0 ? (
-                                                    <Text as="span" variant="bodySm" tone="subdued">
-                                                        No fields assigned to this choice.
-                                                    </Text>
-                                                ) : (
-                                                    nestedChildIds.map(childId => (
-                                                        <RenderFieldNodeById
-                                                            key={childId}
-                                                            fieldId={childId}
-                                                            isNested={true}
-                                                            containerId={dropId}
+                                                <div style={{ minHeight: "20px", padding: "8px", backgroundColor: DEPTH_COLORS[(depth + 1) % DEPTH_COLORS.length], borderRadius: "var(--p-border-radius-100)", border: "1px dashed var(--p-color-border)" }}>
+                                                    {nestedChildIds.length === 0 ? (
+                                                        <Text as="span" variant="bodySm" tone="subdued">
+                                                            No fields assigned to this choice.
+                                                        </Text>
+                                                    ) : (
+                                                        nestedChildIds.map(childId => (
+                                                            <RenderFieldNodeById
+                                                                key={childId}
+                                                                fieldId={childId}
+                                                                isNested={true}
+                                                                containerId={dropId}
+                                                                depth={depth + 1}
+                                                            />
+                                                        ))
+                                                    )}
+
+                                                    <div style={{ marginTop: "12px", maxWidth: "300px" }}>
+                                                        <Select
+                                                            label="Assign rule: Show field"
+                                                            labelHidden
+                                                            options={dropdownOptions}
+                                                            value=""
+                                                            onChange={(val) => handleSelectChange(val, dropId)}
                                                         />
-                                                    ))
-                                                )}
-
-                                                <div style={{ marginTop: "12px", maxWidth: "300px" }}>
-                                                    <Select
-                                                        label="Assign rule: Show field"
-                                                        labelHidden
-                                                        options={dropdownOptions}
-                                                        value=""
-                                                        onChange={(val) => handleSelectChange(val, dropId)}
-                                                    />
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        </BlockStack>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    )}
-                </BlockStack>
-            </Card>
+                                            </BlockStack>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </BlockStack>
+                </div>
+            </div>
         </div>
     );
 }
@@ -202,11 +231,13 @@ function FieldNode({
 function RenderFieldNodeById({
     fieldId,
     isNested,
-    containerId
+    containerId,
+    depth = 0,
 }: {
     fieldId: string,
     isNested?: boolean,
-    containerId: string
+    containerId: string,
+    depth?: number,
 }) {
     const { fieldsMap } = useVisualBuilder();
     const f = fieldsMap[fieldId];
@@ -219,6 +250,7 @@ function RenderFieldNodeById({
             options={opts}
             isNested={isNested}
             containerId={containerId}
+            depth={depth}
         />
     );
 }
@@ -231,6 +263,12 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules, onAddN
     const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(new Set());
     const [tree, setTree] = useState<Record<string, string[]>>({ root: [] });
     const [fieldDatasetMap, setFieldDatasetMap] = useState<Record<string, string>>({});
+
+    // Snapshot of the last-saved state — used to detect unsaved changes in FieldNode
+    const savedTreeRef = React.useRef<Record<string, string[]>>({ root: [] });
+    const savedDatasetMapRef = React.useRef<Record<string, string>>({});
+    const [savedTree, setSavedTree] = useState<Record<string, string[]>>({ root: [] });
+    const [savedDatasetMap, setSavedDatasetMap] = useState<Record<string, string>>({});
 
     // Modal state
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -375,6 +413,8 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules, onAddN
         tree,
         datasets: datasets || [],
         fieldDatasetMap,
+        savedTree,
+        savedDatasetMap,
         collapsedNodes,
         onToggleCollapse: handleToggleCollapse,
         onChangeDataset: (nodeId: string, datasetId: string) => {
@@ -384,7 +424,7 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules, onAddN
         onRemoveField: handleRemoveField,
         availableFields,
         handleOpenNewFieldModal: openNewFieldModal
-    }), [fieldsMap, tree, datasets, fieldDatasetMap, collapsedNodes, availableFields]);
+    }), [fieldsMap, tree, datasets, fieldDatasetMap, savedTree, savedDatasetMap, collapsedNodes, availableFields]);
 
     useEffect(() => {
         const newTree: Record<string, string[]> = { root: [] };
@@ -435,6 +475,9 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules, onAddN
         newTree.root = fields.map(f => f.id).filter(id => !fieldsInTree.has(id));
         setTree(newTree);
         setFieldDatasetMap(newFieldDatasetMap);
+        // Snapshot the DB-loaded state so FieldNode can detect unsaved local changes
+        setSavedTree(JSON.parse(JSON.stringify(newTree)));
+        setSavedDatasetMap({ ...newFieldDatasetMap });
     }, [fields, rules]);
 
     const handleCompileRules = () => {
