@@ -34,6 +34,7 @@ import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrate
 import { CSS } from '@dnd-kit/utilities';
 import { DragHandleIcon } from "@shopify/polaris-icons";
 import { Icon } from "@shopify/polaris";
+import { Prisma } from "@prisma/client";
 
 // Sub-component for Draggable Field Items
 function SortableFieldListItem({ field, handleEditFieldClick, handleDeleteField }: any) {
@@ -474,11 +475,10 @@ export async function action({ request, params }: ActionFunctionArgs) {
         targetFieldId: mapId(rule.targetFieldId || ""),
         actionType: rule.actionType || "SHOW",
         sort: index + 1,
+        targetOptionsJson: targetOpts !== undefined && targetOpts !== null ? targetOpts : Prisma.DbNull,
+        targetPriceAdjustmentsJson: Prisma.DbNull,
       };
 
-      if (targetOpts !== undefined && targetOpts !== null) {
-        mappedRule.targetOptionsJson = targetOpts;
-      }
       return mappedRule;
     });
 
@@ -636,121 +636,14 @@ export default function TemplateDetail() {
   );
   const [isHover, setIsHover] = useState(false);
 
-  // Rules form state
-  const [showRuleForm, setShowRuleForm] = useState(false);
-  const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
-  const [ruleConditions, setRuleConditions] = useState<Array<{ fieldId: string, operator: string, value: string }>>([]);
-  const [tempCondFieldId, setTempCondFieldId] = useState("");
-  const [tempCondOperator, setTempCondOperator] = useState("EQUALS");
-  const [tempCondValue, setTempCondValue] = useState("");
-  const [ruleTargetFieldId, setRuleTargetFieldId] = useState("");
-  const [ruleActionType, setRuleActionType] = useState("SHOW");
-  const [ruleTargetOptions, setRuleTargetOptions] = useState<string[]>([]);
-  const [tempTargetOption, setTempTargetOption] = useState("");
-  const [ruleTargetPriceAdjustments, setRuleTargetPriceAdjustments] = useState<Record<string, string>>({});
-
-  // Handlers
-  const [ruleBuilderMode, setRuleBuilderMode] = useState<"TRADITIONAL" | "VISUAL">("VISUAL");
+  // View state
   const [isClient, setIsClient] = useState(false);
   const [localFields, setLocalFields] = useState<any[]>([]);
 
   useEffect(() => {
     setIsClient(true);
-    const storedMode = localStorage.getItem("variantIqRuleBuilderMode");
-    if (storedMode === "VISUAL" || storedMode === "TRADITIONAL") {
-      setRuleBuilderMode(storedMode);
-    } else {
-      localStorage.setItem("variantIqRuleBuilderMode", "VISUAL");
-    }
   }, []);
 
-  const handleRuleBuilderModeChange = (mode: "TRADITIONAL" | "VISUAL") => {
-    setRuleBuilderMode(mode);
-    localStorage.setItem("variantIqRuleBuilderMode", mode);
-  };
-
-  const handleAddCondition = () => {
-    if (tempCondFieldId && tempCondValue) {
-      setRuleConditions([...ruleConditions, { fieldId: tempCondFieldId, operator: tempCondOperator, value: tempCondValue }]);
-      setTempCondFieldId("");
-      setTempCondValue("");
-    }
-  };
-
-  const handleRemoveCondition = (index: number) => {
-    setRuleConditions(ruleConditions.filter((_, i) => i !== index));
-  };
-
-  const handleAddTargetOption = () => {
-    if (tempTargetOption && !ruleTargetOptions.includes(tempTargetOption)) {
-      setRuleTargetOptions([...ruleTargetOptions, tempTargetOption]);
-      setTempTargetOption("");
-    }
-  };
-
-  const handleRemoveTargetOption = (option: string) => {
-    setRuleTargetOptions(ruleTargetOptions.filter((o) => o !== option));
-  };
-
-  const handleSaveRule = () => {
-    submit({
-      _intent: editingRuleId ? "editRule" : "addRule",
-      ...(editingRuleId ? { ruleId: editingRuleId } : {}),
-      conditionsJson: JSON.stringify(ruleConditions),
-      targetFieldId: ruleTargetFieldId,
-      actionType: ruleActionType,
-      targetOptionsJson: ruleActionType === "LIMIT_OPTIONS"
-        ? JSON.stringify(ruleTargetOptions)
-        : ruleActionType === "LIMIT_OPTIONS_DATASET"
-          ? JSON.stringify({ datasetId: tempTargetOption })
-          : "null",
-      targetPriceAdjustmentsJson: ruleActionType === "SET_PRICE" ? JSON.stringify(ruleTargetPriceAdjustments) : "null",
-      newFieldsJson: JSON.stringify(localFields)
-    }, { method: "post" });
-
-    setLocalFields([]); // flush custom fields after pushing
-    resetRuleForm();
-  };
-
-  const resetRuleForm = () => {
-    setShowRuleForm(false);
-    setEditingRuleId(null);
-    setRuleConditions([]);
-    setRuleTargetFieldId("");
-    setRuleActionType("SHOW");
-    setRuleTargetOptions([]);
-    setRuleTargetPriceAdjustments({});
-  };
-
-  const handleEditRuleClick = (rule: any) => {
-    setEditingRuleId(rule.id);
-    try {
-      setRuleConditions(rule.conditionsJson as any || []);
-    } catch (e) { setRuleConditions([]); }
-    setRuleTargetFieldId(rule.targetFieldId);
-    setRuleActionType(rule.actionType);
-    try {
-      if (rule.actionType === "LIMIT_OPTIONS_DATASET") {
-        const parsed = typeof rule.targetOptionsJson === 'string' ? JSON.parse(rule.targetOptionsJson) : rule.targetOptionsJson;
-        setTempTargetOption(parsed?.datasetId || "");
-        setRuleTargetOptions([]);
-      } else {
-        setRuleTargetOptions(rule.targetOptionsJson as string[] || []);
-      }
-    } catch (e) { setRuleTargetOptions([]); }
-    try {
-      setRuleTargetPriceAdjustments(rule.targetPriceAdjustmentsJson as Record<string, string> || {});
-    } catch (e) { setRuleTargetPriceAdjustments({}); }
-
-    setShowRuleForm(true);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
-  const handleDeleteRule = (ruleId: string) => {
-    if (confirm("Delete this rule?")) {
-      submit({ _intent: "deleteRule", ruleId }, { method: "post" });
-    }
-  };
 
   const handleDragEndFields = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -767,9 +660,6 @@ export default function TemplateDetail() {
     }
   };
 
-  const handleMoveRule = (ruleId: string, direction: "up" | "down") => {
-    submit({ _intent: "reorderRule", ruleId, direction }, { method: "post" });
-  };
 
   const handleSaveAppearance = () => {
     submit(
@@ -1186,31 +1076,7 @@ export default function TemplateDetail() {
                 </BlockStack>
               </Card>
             </BlockStack>
-            {!showRuleForm && ruleBuilderMode === "TRADITIONAL" && (
-              <Button onClick={() => { resetRuleForm(); setShowRuleForm(true); }} disabled={template.fields.length < 2}>
-                Add Rule
-              </Button>
-            )}
           </InlineGrid>
-
-          {isClient && (
-            <InlineStack gap="200" align="start">
-              <ButtonGroup>
-                <Button
-                  pressed={ruleBuilderMode === "VISUAL"}
-                  onClick={() => handleRuleBuilderModeChange("VISUAL")}
-                >
-                  Visual Rule Tree
-                </Button>
-                <Button
-                  pressed={ruleBuilderMode === "TRADITIONAL"}
-                  onClick={() => handleRuleBuilderModeChange("TRADITIONAL")}
-                >
-                  Traditional Logic Builder
-                </Button>
-              </ButtonGroup>
-            </InlineStack>
-          )}
 
           {template.fields.length < 2 && (
             <Banner tone="info">
@@ -1220,313 +1086,7 @@ export default function TemplateDetail() {
         </BlockStack>
       </Card>
 
-      {ruleBuilderMode === "TRADITIONAL" ? (
-        <BlockStack gap="400">
-          {showRuleForm && (
-            <Card background="bg-surface-secondary">
-              <BlockStack gap="500">
-                <Text as="h4" variant="headingSm">{editingRuleId ? "Edit Logic Rule" : "New Logic Rule"}</Text>
-
-                {/* Conditions Builder */}
-                <BlockStack gap="300">
-                  <Text as="strong" variant="bodyMd">IF (Conditions)</Text>
-
-                  {ruleConditions.length > 0 && (
-                    <InlineStack gap="200" wrap>
-                      {ruleConditions.map((cond, index) => (
-                        <Tag key={index} onRemove={() => handleRemoveCondition(index)}>
-                          {getFieldName(cond.fieldId)} {cond.operator === "EQUALS" ? "=" : cond.operator} {cond.value}
-                        </Tag>
-                      ))}
-                    </InlineStack>
-                  )}
-
-                  <InlineGrid columns="1fr 1fr 1fr auto" gap="200">
-                    <Select
-                      label="Field"
-                      options={[{ label: "Select field...", value: "" }, ...template.fields.map(f => ({ label: f.name, value: f.id }))]}
-                      value={tempCondFieldId}
-                      onChange={setTempCondFieldId}
-                    />
-                    <Select
-                      label="Operator"
-                      options={[
-                        { label: "is", value: "EQUALS" },
-                        { label: "is not", value: "NOT_EQUALS" }
-                      ]}
-                      value={tempCondOperator}
-                      onChange={setTempCondOperator}
-                    />
-                    {(() => {
-                      const selectedField = template.fields.find(f => f.id === tempCondFieldId);
-                      const hasOptions = selectedField?.optionsJson && Array.isArray(selectedField.optionsJson) && selectedField.optionsJson.length > 0;
-
-                      return hasOptions ? (
-                        <Select
-                          label="Value"
-                          options={[
-                            { label: "Select option...", value: "" },
-                            ...(selectedField.optionsJson as string[]).map(opt => ({ label: opt, value: opt }))
-                          ]}
-                          value={tempCondValue}
-                          onChange={setTempCondValue}
-                        />
-                      ) : (
-                        <TextField
-                          label="Value"
-                          value={tempCondValue}
-                          onChange={setTempCondValue}
-                          autoComplete="off"
-                        />
-                      );
-                    })()}
-                    <div style={{ marginTop: "24px" }}>
-                      <Button onClick={handleAddCondition} disabled={!tempCondFieldId || !tempCondValue}>
-                        Add Condition
-                      </Button>
-                    </div>
-                  </InlineGrid>
-                </BlockStack>
-
-                <Divider />
-
-                {/* Actions Builder */}
-                <BlockStack gap="300">
-                  <Text as="strong" variant="bodyMd">THEN (Action)</Text>
-
-                  <InlineGrid columns="auto 1fr" gap="200">
-                    <Select
-                      label="Action"
-                      options={[
-                        { label: "Show", value: "SHOW" },
-                        { label: "Hide", value: "HIDE" },
-                        { label: "Limit Options To", value: "LIMIT_OPTIONS" },
-                        { label: "Limit To Dataset", value: "LIMIT_OPTIONS_DATASET" },
-                        { label: "Override Option Prices", value: "SET_PRICE" }
-                      ]}
-                      value={ruleActionType}
-                      onChange={setRuleActionType}
-                    />
-                    <Select
-                      label="Target Field"
-                      options={[
-                        { label: "Select field...", value: "" },
-                        ...[...template.fields, ...localFields].map(f => ({ label: `[Field] ${f.name}`, value: f.id })),
-                        ...datasets.map((d: any) => ({ label: `[Dataset] ${d.name}`, value: `dataset_${d.id}` }))
-                      ]}
-                      value={ruleTargetFieldId}
-                      onChange={(val) => {
-                        if (val.startsWith("dataset_")) {
-                          const datasetId = val.replace("dataset_", "");
-                          const dataset = datasets.find((d: any) => d.id === datasetId);
-                          if (dataset) {
-                            let baseName = dataset.name.replace(/\s+/g, '_').toLowerCase();
-                            let finalName = baseName;
-                            let counter = 1;
-                            const combined = [...template.fields, ...localFields];
-                            while (combined.some(f => f.name === finalName)) {
-                              finalName = `${baseName}_${counter}`;
-                              counter++;
-                            }
-
-                            const newId = "local_" + Math.random().toString(36).substring(2, 9);
-                            const newField = {
-                              id: newId,
-                              type: "select",
-                              name: finalName,
-                              label: dataset.name,
-                              optionsJson: dataset.optionsJson,
-                              required: false
-                            };
-                            setLocalFields(prev => [...prev, newField]);
-
-                            setRuleTargetFieldId(newId);
-                            setRuleActionType("LIMIT_OPTIONS_DATASET");
-                            setTempTargetOption(dataset.id);
-                          }
-                        } else {
-                          setRuleTargetFieldId(val);
-                        }
-                      }}
-                    />
-                  </InlineGrid>
-
-                  {ruleActionType === "LIMIT_OPTIONS" && (
-                    <BlockStack gap="300">
-                      <Text as="p" tone="subdued">Add allowed options for the target field:</Text>
-
-                      {ruleTargetOptions.length > 0 && (
-                        <InlineStack gap="200" wrap>
-                          {ruleTargetOptions.map((opt, index) => (
-                            <Tag key={index} onRemove={() => handleRemoveTargetOption(opt)}>
-                              {opt}
-                            </Tag>
-                          ))}
-                        </InlineStack>
-                      )}
-
-                      <InlineGrid columns="1fr auto" gap="200">
-                        {(() => {
-                          const limitTargetField = template.fields.find(f => f.id === ruleTargetFieldId);
-                          const targetHasOptions = limitTargetField?.optionsJson && Array.isArray(limitTargetField.optionsJson) && limitTargetField.optionsJson.length > 0;
-
-                          return targetHasOptions ? (
-                            <Select
-                              label="Allowed Option"
-                              options={[
-                                { label: "Select option...", value: "" },
-                                ...(limitTargetField.optionsJson as string[])
-                                  .filter(opt => !ruleTargetOptions.includes(opt)) // Don't show already selected ones
-                                  .map(opt => ({ label: opt, value: opt }))
-                              ]}
-                              value={tempTargetOption}
-                              onChange={setTempTargetOption}
-                            />
-                          ) : (
-                            <TextField
-                              label="Allowed Option"
-                              value={tempTargetOption}
-                              onChange={setTempTargetOption}
-                              autoComplete="off"
-                            />
-                          );
-                        })()}
-                        <div style={{ marginTop: "24px" }}>
-                          <Button onClick={handleAddTargetOption} disabled={!tempTargetOption}>
-                            Add Option
-                          </Button>
-                        </div>
-                      </InlineGrid>
-                    </BlockStack>
-                  )}
-
-                  {ruleActionType === "LIMIT_OPTIONS_DATASET" && (
-                    <BlockStack gap="300">
-                      <Text as="p" tone="subdued">Select the Global Dataset to populate the target field options:</Text>
-                      <InlineGrid columns="1fr" gap="200">
-                        <Select
-                          label="Global Dataset"
-                          options={[
-                            { label: "Select Dataset...", value: "" },
-                            ...datasets.map((d: any) => ({ label: d.name, value: d.id }))
-                          ]}
-                          value={tempTargetOption}
-                          onChange={setTempTargetOption}
-                        />
-                      </InlineGrid>
-                    </BlockStack>
-                  )}
-
-                  {ruleActionType === "SET_PRICE" && (
-                    <BlockStack gap="300">
-                      <Text as="p" tone="subdued">Set condition-based price adjustments for specific options ($):</Text>
-                      <InlineGrid columns="1fr 1fr" gap="400">
-                        {(() => {
-                          const targetField = template.fields.find(f => f.id === ruleTargetFieldId);
-                          if (!targetField || !targetField.optionsJson) return <Text as="p" tone="subdued">Select a valid text/number field with predefined choices.</Text>;
-                          return (targetField.optionsJson as string[]).map(opt => (
-                            <TextField
-                              key={opt}
-                              label={`Price Adjustment for "${opt}"`}
-                              type="number"
-                              prefix="$"
-                              value={ruleTargetPriceAdjustments[opt] || ""}
-                              onChange={(val) => setRuleTargetPriceAdjustments(p => ({ ...p, [opt]: val }))}
-                              autoComplete="off"
-                            />
-                          ))
-                        })()}
-                      </InlineGrid>
-                    </BlockStack>
-                  )}
-                </BlockStack>
-
-                <InlineGrid columns={2} gap="200">
-                  <Button onClick={resetRuleForm}>
-                    Cancel
-                  </Button>
-                  <Button
-                    variant="primary"
-                    onClick={handleSaveRule}
-                    disabled={ruleConditions.length === 0 || !ruleTargetFieldId}
-                  >
-                    Save Rule
-                  </Button>
-                </InlineGrid>
-              </BlockStack>
-            </Card>
-          )}
-
-          {template.rules.length === 0 ? (
-            <Card>
-              <Text as="p" tone="subdued">
-                No rules yet. Click "Add Rule" to get started.
-              </Text>
-            </Card>
-          ) : (
-            <Card>
-              <ResourceList
-                resourceName={{ singular: "rule", plural: "rules" }}
-                items={template.rules}
-                renderItem={(rule: any) => {
-                  const condText = (rule.conditionsJson as Array<any>)?.map(c => `${getFieldName(c.fieldId)} ${c.operator === 'EQUALS' ? '=' : '!='} ${c.value}`).join(" AND ") || "No condition";
-                  const targetLabel = getFieldName(rule.targetFieldId);
-
-                  let actionText = "";
-                  if (rule.actionType === "SHOW") actionText = `Show ${targetLabel}`;
-                  else if (rule.actionType === "HIDE") actionText = `Hide ${targetLabel}`;
-                  else if (rule.actionType === "LIMIT_OPTIONS") {
-                    let opts: string[] = [];
-                    try { opts = rule.targetOptionsJson as string[]; } catch (e) { }
-                    actionText = `Limit ${targetLabel} to [${opts?.join(", ")}]`;
-                  }
-                  else if (rule.actionType === "LIMIT_OPTIONS_DATASET") {
-                    let datasetId = "";
-                    try {
-                      const parsed = typeof rule.targetOptionsJson === 'string' ? JSON.parse(rule.targetOptionsJson) : rule.targetOptionsJson;
-                      datasetId = parsed?.datasetId || "";
-                    } catch (e) { }
-                    const dName = datasets.find((d: any) => d.id === datasetId)?.name || "Unknown Dataset";
-                    actionText = `Limit ${targetLabel} to Dataset: ${dName}`;
-                  }
-
-                  return (
-                    <ResourceItem id={rule.id} onClick={() => { }}>
-                      <InlineStack align="space-between" blockAlign="center">
-                        <BlockStack gap="100">
-                          <Text as="p" variant="bodyMd" fontWeight="semibold">
-                            IF {condText}
-                          </Text>
-                          <Text as="p" tone="subdued">
-                            THEN {actionText}
-                          </Text>
-                        </BlockStack>
-                        <InlineStack gap="200">
-                          <Button onClick={() => handleMoveRule(rule.id, "up")}>
-                            ↑
-                          </Button>
-                          <Button onClick={() => handleMoveRule(rule.id, "down")}>
-                            ↓
-                          </Button>
-                          <Button onClick={() => handleEditRuleClick(rule)}>
-                            Edit
-                          </Button>
-                          <Button
-                            onClick={() => handleDeleteRule(rule.id)}
-                            tone="critical"
-                          >
-                            Delete
-                          </Button>
-                        </InlineStack>
-                      </InlineStack>
-                    </ResourceItem>
-                  );
-                }}
-              />
-            </Card>
-          )}
-        </BlockStack>
-      ) : (
+      {template.fields.length >= 2 && (
         <Card background="bg-surface-secondary">
           <VisualRuleBuilder
             fields={[...template.fields, ...localFields]}
