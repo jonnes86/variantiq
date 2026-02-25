@@ -152,13 +152,19 @@ function FieldNode({
                                     </Button>
                                 )}
                                 {isNested && datasets.length > 0 && options.length > 0 && (
-                                    <Select
-                                        label="Limit options to dataset"
-                                        labelHidden
-                                        options={[{ label: 'All Options Available', value: '' }, ...datasets.map(d => ({ label: `Limit to: ${d.name}`, value: d.id }))]}
-                                        value={datasetId || ''}
-                                        onChange={(value) => onChangeDataset(nodeId, value)}
-                                    />
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <span
+                                            title="Swap this field's options with a Global Dataset on the storefront. Useful for colors or sizes managed centrally."
+                                            style={{ cursor: 'help', fontSize: '12px', background: 'var(--p-color-bg-surface-secondary)', borderRadius: '50%', width: '16px', height: '16px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: 'var(--p-color-text-secondary)', border: '1px solid var(--p-color-border)', flexShrink: 0 }}
+                                        >?</span>
+                                        <Select
+                                            label="Swap options with Dataset"
+                                            labelHidden
+                                            options={[{ label: 'Use own options', value: '' }, ...datasets.map(d => ({ label: `↔ Dataset: ${d.name}`, value: d.id }))]}
+                                            value={datasetId || ''}
+                                            onChange={(value) => onChangeDataset(nodeId, value)}
+                                        />
+                                    </div>
                                 )}
                             </InlineStack>
                             <Button
