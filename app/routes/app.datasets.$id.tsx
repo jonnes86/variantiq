@@ -37,7 +37,14 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
             : (Array.isArray(dataset.optionsJson) ? dataset.optionsJson : []);
     } catch (e) { }
 
-    return json({ dataset, parsedOptions });
+    // Explicitly carry label + type through Remix's json serializer,
+    // because Remix's JsonifyObject sometimes strips non-standard Prisma fields.
+    const safeDataset = {
+        ...dataset,
+        label: (dataset as any).label ?? "",
+        type: (dataset as any).type ?? "select",
+    };
+    return json({ dataset: safeDataset, parsedOptions });
 }
 
 export async function action({ request, params }: ActionFunctionArgs) {
@@ -78,7 +85,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
             label,
             type,
             optionsJson: JSON.stringify(uniqueOptions),
-        },
+        } as any,
     });
 
     return json({ success: true });
