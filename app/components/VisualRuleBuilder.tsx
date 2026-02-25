@@ -69,13 +69,13 @@ function useVisualBuilder() {
 // COMPONENTS
 // ----------------------------------------------------
 
-// Alternating depth colours (soft, accessible tints)
+// Alternating depth colours — higher contrast for easy visual scanning
 const DEPTH_COLORS = [
     "#ffffff",  // depth 0 — root: white
-    "#f3f4ff",  // depth 1 — soft lavender
-    "#f0faf4",  // depth 2 — soft mint
-    "#fffbf0",  // depth 3 — soft amber
-    "#f9f0ff",  // depth 4 — soft violet
+    "#eef0ff",  // depth 1 — medium lavender
+    "#e6f7ed",  // depth 2 — medium mint
+    "#fef9e7",  // depth 3 — medium amber
+    "#f3e8ff",  // depth 4 — medium violet
 ];
 
 function FieldNode({
@@ -432,7 +432,16 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules, onAddN
         handleOpenNewFieldModal: openNewFieldModal
     }), [fieldsMap, tree, datasets, fieldDatasetMap, savedTree, savedDatasetMap, collapsedNodes, availableFields]);
 
+    // --- Effect 1: full tree rebuild (only when SAVED rules change) ---
+    // Fingerprint based on rule IDs + actions. This only changes after a server save,
+    // NOT when only localFields changes (which would wipe local edits).
+    const rulesFingerprintRef = React.useRef<string>("");
+
     useEffect(() => {
+        const fingerprint = rules.map(r => `${r.id}:${r.actionType}:${r.targetFieldId}`).join("|");
+        if (fingerprint === rulesFingerprintRef.current) return; // rules unchanged — skip rebuild
+        rulesFingerprintRef.current = fingerprint;
+
         const newTree: Record<string, string[]> = { root: [] };
         fields.forEach(f => {
             const opts = Array.isArray(f.optionsJson) ? f.optionsJson : [];
@@ -481,23 +490,42 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules, onAddN
         newTree.root = fields.map(f => f.id).filter(id => !fieldsInTree.has(id));
         setTree(newTree);
         setFieldDatasetMap(newFieldDatasetMap);
-        // Collapse only the deepest "leaf" fields by default — those whose option-slots
-        // all have no children yet. Root and intermediate branches stay expanded.
+        // Collapse only leaf fields by default
         const leafIds = new Set(
             fields
                 .filter(f => {
                     const opts = Array.isArray(f.optionsJson) ? f.optionsJson : [];
                     if (opts.length === 0) return false;
-                    // A leaf = every one of its option-slots has no children in the tree
                     return opts.every(opt => (newTree[`${f.id}::${opt}`] || []).length === 0);
                 })
                 .map(f => f.id)
         );
         setCollapsedNodes(leafIds);
-        // Snapshot the DB-loaded state so FieldNode can detect unsaved local changes
         setSavedTree(JSON.parse(JSON.stringify(newTree)));
         setSavedDatasetMap({ ...newFieldDatasetMap });
-    }, [fields, rules]);
+    }, [fields, rules]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // --- Effect 2: patch option-slot keys for newly added local fields ---
+    // When a new local field is added (via dataset dropdown or modal), `fields` changes
+    // but `rules` don't. We just ensure the field's option-slot keys exist in the tree
+    // so it can be rendered — without resetting any existing placements.
+    useEffect(() => {
+        setTree(prev => {
+            let changed = false;
+            const next = { ...prev };
+            fields.forEach(f => {
+                const opts = Array.isArray(f.optionsJson) ? f.optionsJson : [];
+                opts.forEach(opt => {
+                    const key = `${f.id}::${opt}`;
+                    if (!(key in next)) {
+                        next[key] = [];
+                        changed = true;
+                    }
+                });
+            });
+            return changed ? next : prev;
+        });
+    }, [fields]);
 
     const handleCompileRules = () => {
         const compiledRules: Partial<Rule>[] = [];
