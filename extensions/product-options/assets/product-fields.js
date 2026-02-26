@@ -133,31 +133,28 @@ class VariantIQFields {
     const requiredMark = field.required ? '<span class="required">*</span>' : '';
     let html = `
       <fieldset class="variantiq-field variantiq-swatches js product-form__input" data-field-id="${field.id}" style="display: none; border: none; padding: 0; margin: 0 0 1rem 0;">
-        <legend class="form__label" style="width: 100%; margin-bottom: 0.8rem; text-align: left; display: block;">${field.label}${requiredMark}
-          <span class="variantiq-swatch-selected" data-swatch-for="${field.id}" style="font-weight:normal; margin-left:8px; color: var(--color-base-text, #666);"></span>
-        </legend>
+        <legend class="form__label" style="width: 100%; margin-bottom: 0.8rem; text-align: left; display: block;">${field.label}${requiredMark}</legend>
         <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px;">
     `;
     fieldOptions.forEach(option => {
       const bg = this.getSwatchBg(option);
-      const isDark = bg ? this.isDarkColor(bg) : false;
-      const swatchStyle = bg
-        ? `background:${bg}; border: 2px solid #d1d5db;`
-        : `background: #f3f4f6; border: 2px solid #d1d5db;`;
+      const dotHtml = bg
+        ? `<span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:${bg};border:1px solid rgba(0,0,0,0.15);flex-shrink:0;"></span>`
+        : '';
       html += `
         <button type="button"
           class="variantiq-swatch-btn"
           data-field-id="${field.id}"
           data-value="${option}"
           title="${option}"
-          style="width:32px;height:32px;border-radius:50%;cursor:pointer;${swatchStyle} outline:none; transition: transform 0.1s, box-shadow 0.1s;"
+          style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:9999px;cursor:pointer;border:2px solid #d1d5db;background:#fff;font-size:13px;line-height:1.3;color:#1a1a1a;outline:none;transition:transform 0.1s,box-shadow 0.1s,border-color 0.15s;white-space:nowrap;"
           aria-label="${option}"
-        >${bg ? '' : `<span style="font-size:9px;line-height:1;color:${isDark ? '#fff' : '#333'}">${option.substring(0, 3)}</span>`}</button>
+        >${dotHtml}<span>${option}</span></button>
       `;
     });
     html += `
         </div>
-        <input type="hidden" name="vq_${this.instanceId}_${field.id}" value="" id="vq-${this.instanceId}-${field.id}" ${isRequired} class="variantiq-swatch-input" />
+        <input type="hidden" name="_vq_${this.instanceId}_${field.id}" value="" id="vq-${this.instanceId}-${field.id}" ${isRequired} class="variantiq-swatch-input" />
       </fieldset>
     `;
     return html;
@@ -236,7 +233,7 @@ class VariantIQFields {
           <input 
             type="${field.type}" 
             id="vq-${this.instanceId}-${field.id}-${index}" 
-            name="vq_${this.instanceId}_${field.id}${field.type === 'checkbox' ? '[]' : ''}"
+            name="_vq_${this.instanceId}_${field.id}${field.type === 'checkbox' ? '[]' : ''}"
             value="${option}"
             ${isRequired}
             class="variantiq-${field.type}"
@@ -260,7 +257,7 @@ class VariantIQFields {
         html += `<input 
           type="text" 
           id="vq-${this.instanceId}-${field.id}" 
-          name="vq_${this.instanceId}_${field.id}"
+          name="_vq_${this.instanceId}_${field.id}"
           ${isRequired}
           class="variantiq-input"
           style="width: 100%; box-sizing: border-box;"
@@ -268,7 +265,7 @@ class VariantIQFields {
       } else if (field.type === 'select') {
         html += `<select 
           id="vq-${this.instanceId}-${field.id}" 
-          name="vq_${this.instanceId}_${field.id}"
+          name="_vq_${this.instanceId}_${field.id}"
           ${isRequired}
           class="variantiq-select"
           style="width: 100%; display: block;"
@@ -309,13 +306,16 @@ class VariantIQFields {
       if (hidden) hidden.value = value;
 
       // Update displayed selected label
-      const label = fieldEl.querySelector(`[data-swatch-for="${fieldId}"]`);
-      if (label) label.textContent = value;
+      const label = fieldEl.querySelector('legend');
+      const nameSpan = btn.querySelector('span:last-child') || btn;
+      // No separate label span needed - just highlight the active button
 
       // Toggle active ring on swatches
       fieldEl.querySelectorAll('.variantiq-swatch-btn').forEach(b => {
         b.style.boxShadow = b === btn ? '0 0 0 3px #6366f1' : 'none';
-        b.style.transform = b === btn ? 'scale(1.18)' : 'scale(1)';
+        b.style.transform = b === btn ? 'scale(1.05)' : 'scale(1)';
+        b.style.borderColor = b === btn ? '#6366f1' : '#d1d5db';
+        b.style.fontWeight = b === btn ? '600' : 'normal';
       });
 
       // Store value and re-evaluate
@@ -807,7 +807,7 @@ class VariantIQFields {
               // Remove any pre-existing properties[...] keys the form may have added
               // AND remove raw vq_ inputs so only our clean properties[Label] keys are sent
               for (const key of [...formData.keys()]) {
-                if (key.startsWith('properties[') || key.startsWith('vq_')) formData.delete(key);
+                if (key.startsWith('properties[') || key.startsWith('vq_') || key.startsWith('_vq_')) formData.delete(key);
               }
               // Inject VariantIQ properties
               Object.entries(properties).forEach(([k, v]) => {
@@ -936,7 +936,7 @@ class VariantIQFields {
     // Strip raw vq_ inputs so only clean properties[Label] keys are sent
     const formData = new FormData(form);
     for (const key of [...formData.keys()]) {
-      if (key.startsWith('vq_')) formData.delete(key);
+      if (key.startsWith('vq_') || key.startsWith('_vq_')) formData.delete(key);
     }
 
     try {
