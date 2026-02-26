@@ -805,8 +805,9 @@ class VariantIQFields {
               // Build the cart/add.js payload from the form, merging in our properties
               const formData = new FormData(form);
               // Remove any pre-existing properties[...] keys the form may have added
+              // AND remove raw vq_ inputs so only our clean properties[Label] keys are sent
               for (const key of [...formData.keys()]) {
-                if (key.startsWith('properties[')) formData.delete(key);
+                if (key.startsWith('properties[') || key.startsWith('vq_')) formData.delete(key);
               }
               // Inject VariantIQ properties
               Object.entries(properties).forEach(([k, v]) => {
@@ -932,7 +933,11 @@ class VariantIQFields {
     input.className = 'variantiq-cart-prop';
     form.appendChild(input);
 
+    // Strip raw vq_ inputs so only clean properties[Label] keys are sent
     const formData = new FormData(form);
+    for (const key of [...formData.keys()]) {
+      if (key.startsWith('vq_')) formData.delete(key);
+    }
 
     try {
       // Fetch dummy product variant ID directly from Shopify's open Storefront JSON wrapper
