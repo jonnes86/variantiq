@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { json } from "@remix-run/node";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
-import { useLoaderData, useSubmit, useNavigation } from "@remix-run/react";
+import { useLoaderData, useSubmit, useNavigation, useRouteError } from "@remix-run/react";
 import {
     Page, Card, BlockStack, InlineStack, TextField, Button, Text,
     Badge, DataTable, Banner, Divider
@@ -11,12 +11,20 @@ import { authenticate } from "../shopify.server";
 import { prisma } from "../db.server";
 
 export async function loader({ request }: LoaderFunctionArgs) {
-    const { session } = await authenticate.admin(request);
-    const webhooks: any[] = await (prisma as any).webhookEndpoint.findMany({
-        where: { shop: session.shop },
-        orderBy: { createdAt: "desc" },
-    });
-    return json({ webhooks });
+    try {
+        const { session } = await authenticate.admin(request);
+        const webhooks = await prisma.webhookEndpoint.findMany({
+            where: { shop: session.shop },
+            orderBy: { createdAt: "desc" },
+        });
+        return json({ webhooks });
+    } catch (error) {
+        console.error("[Webhooks Loader Error]", error);
+        throw new Response(
+            `Webhooks loader failed: ${error instanceof Error ? error.message : String(error)}`,
+            { status: 500 }
+        );
+    }
 }
 
 export async function action({ request }: ActionFunctionArgs) {
@@ -28,18 +36,18 @@ export async function action({ request }: ActionFunctionArgs) {
         const url = String(form.get("url") || "").trim();
         const label = String(form.get("label") || "").trim();
         if (!url.startsWith("http")) return json({ error: "Invalid URL" }, { status: 400 });
-        await (prisma as any).webhookEndpoint.create({ data: { shop: session.shop, url, label } });
+        await prisma.webhookEndpoint.create({ data: { shop: session.shop, url, label } });
     }
 
     if (intent === "delete") {
         const id = String(form.get("id") || "");
-        await (prisma as any).webhookEndpoint.deleteMany({ where: { id, shop: session.shop } });
+        await prisma.webhookEndpoint.deleteMany({ where: { id, shop: session.shop } });
     }
 
     if (intent === "toggle") {
         const id = String(form.get("id") || "");
         const active = form.get("active") === "true";
-        await (prisma as any).webhookEndpoint.updateMany({ where: { id, shop: session.shop }, data: { active: !active } });
+        await prisma.webhookEndpoint.updateMany({ where: { id, shop: session.shop }, data: { active: !active } });
     }
 
     return json({ success: true });
@@ -116,6 +124,18 @@ export default function WebhooksPage() {
                     </Card>
                 )}
             </BlockStack>
+        </Page>
+    );
+}
+
+export function ErrorBoundary() {
+    const error = useRouteError();
+    const message = error instanceof Error ? error.message : (error instanceof Response ? `${error.status}: ${error.statusText}` : String(error));
+    return (
+        <Page title="Webhooks — Error" backAction={{ content: "Home", url: "/app" }}>
+            <Banner tone="critical" title="Something went wrong loading the Webhooks page">
+                <pre style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{message}</pre>
+            </Banner>
         </Page>
     );
 }

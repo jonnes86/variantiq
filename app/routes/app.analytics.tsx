@@ -1,20 +1,28 @@
 import { json } from "@remix-run/node";
 import type { LoaderFunctionArgs } from "@remix-run/node";
-import { useLoaderData } from "@remix-run/react";
+import { useLoaderData, useRouteError } from "@remix-run/react";
 import {
-    Page, Layout, Card, BlockStack, InlineStack, Text, Badge, DataTable, Divider
+    Page, Layout, Card, BlockStack, InlineStack, Text, Badge, DataTable, Divider, Banner
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 import { prisma } from "../db.server";
 
 export async function loader({ request }: LoaderFunctionArgs) {
-    const { session } = await authenticate.admin(request);
-    const templates = await prisma.template.findMany({
-        where: { shop: session.shop },
-        orderBy: { views: "desc" },
-        include: { links: true },
-    });
-    return json({ templates });
+    try {
+        const { session } = await authenticate.admin(request);
+        const templates = await prisma.template.findMany({
+            where: { shop: session.shop },
+            orderBy: { views: "desc" },
+            include: { links: true },
+        });
+        return json({ templates });
+    } catch (error) {
+        console.error("[Analytics Loader Error]", error);
+        throw new Response(
+            `Analytics loader failed: ${error instanceof Error ? error.message : String(error)}`,
+            { status: 500 }
+        );
+    }
 }
 
 export default function AnalyticsDashboard() {
@@ -113,6 +121,18 @@ export default function AnalyticsDashboard() {
                     </BlockStack>
                 </Card>
             </BlockStack>
+        </Page>
+    );
+}
+
+export function ErrorBoundary() {
+    const error = useRouteError();
+    const message = error instanceof Error ? error.message : (error instanceof Response ? `${error.status}: ${error.statusText}` : String(error));
+    return (
+        <Page title="Analytics — Error" backAction={{ content: "Home", url: "/app" }}>
+            <Banner tone="critical" title="Something went wrong loading the Analytics page">
+                <pre style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{message}</pre>
+            </Banner>
         </Page>
     );
 }

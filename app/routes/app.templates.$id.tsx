@@ -4,7 +4,7 @@ import {
   type ActionFunctionArgs,
   type LoaderFunctionArgs,
 } from "@remix-run/node";
-import { useLoaderData, useSubmit, Form, Link, useSearchParams, useActionData } from "@remix-run/react";
+import { useLoaderData, useSubmit, Form, Link, useSearchParams, useActionData, useRouteError } from "@remix-run/react";
 import {
   Page,
   Card,
@@ -26,7 +26,7 @@ import {
   ButtonGroup
 } from "@shopify/polaris";
 import { prisma } from "../db.server";
-import { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { authenticate } from "../shopify.server";
 import { VisualRuleBuilder } from "../components/VisualRuleBuilder";
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
@@ -147,8 +147,9 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
       datasets,
     });
   } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
     console.error("Loader Error:", error);
-    throw new Response("Unexpected Server Error", { status: 500 });
+    throw new Response(`Server Error: ${msg}`, { status: 500 });
   }
 };
 
@@ -570,22 +571,27 @@ export async function action({ request, params }: ActionFunctionArgs) {
     }
 
     // Auto-snapshot for version history (keep last 20)
-    const currentFields = await prisma.field.findMany({ where: { templateId }, orderBy: { sort: "asc" } });
-    const currentRulesSnap = await prisma.rule.findMany({ where: { templateId }, orderBy: { sort: "asc" } });
-    await (prisma as any).templateVersion.create({
-      data: {
-        templateId,
-        label: "Auto-save",
-        rulesJson: currentRulesSnap as any,
-        fieldsJson: currentFields as any,
-      },
-    });
-    const allVersions: any[] = await (prisma as any).templateVersion.findMany({
-      where: { templateId }, orderBy: { createdAt: "desc" }, select: { id: true }
-    });
-    if (allVersions.length > 20) {
-      const toDelete = allVersions.slice(20).map((v: any) => v.id);
-      await (prisma as any).templateVersion.deleteMany({ where: { id: { in: toDelete } } });
+    try {
+      const currentFields = await prisma.field.findMany({ where: { templateId }, orderBy: { sort: "asc" } });
+      const currentRulesSnap = await prisma.rule.findMany({ where: { templateId }, orderBy: { sort: "asc" } });
+      await prisma.templateVersion.create({
+        data: {
+          templateId,
+          label: "Auto-save",
+          rulesJson: currentRulesSnap as any,
+          fieldsJson: currentFields as any,
+        },
+      });
+      const allVersions = await prisma.templateVersion.findMany({
+        where: { templateId }, orderBy: { createdAt: "desc" }, select: { id: true }
+      });
+      if (allVersions.length > 20) {
+        const toDelete = allVersions.slice(20).map((v) => v.id);
+        await prisma.templateVersion.deleteMany({ where: { id: { in: toDelete } } });
+      }
+    } catch (versionError) {
+      console.error("[TemplateVersion snapshot failed]", versionError);
+      // Don't fail the save — versioning is optional
     }
     return json({ success: true, _action: "bulkSaveRules" });
   }
@@ -593,7 +599,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
   // Restore a version snapshot
   if (intent === "restoreVersion") {
     const versionId = String(form.get("versionId") || "");
-    const version: any = await (prisma as any).templateVersion.findUnique({ where: { id: versionId } });
+    const version = await prisma.templateVersion.findUnique({ where: { id: versionId } });
     if (!version) return json({ error: "Version not found" }, { status: 404 });
     await prisma.rule.deleteMany({ where: { templateId } });
     const snapRules = version.rulesJson as any[];
@@ -1515,6 +1521,27 @@ export default function TemplateDetail() {
           </div>
         </Tabs>
       </BlockStack>
+    </Page>
+  );
+}
+
+export function ErrorBoundary() {
+  const error = useRouteError();
+  let message = "Unknown error";
+  if (error instanceof Response) {
+    message = `${error.status}: ${error.statusText}`;
+    // Try to get body text
+    try { message = (error as any).data || message; } catch (_e) { }
+  } else if (error instanceof Error) {
+    message = error.message;
+  } else {
+    message = String(error);
+  }
+  return (
+    <Page title="Template — Error" backAction={{ content: "Home", url: "/app" }}>
+      <Banner tone="critical" title="Something went wrong loading the template">
+        <pre style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{message}</pre>
+      </Banner>
     </Page>
   );
 }
