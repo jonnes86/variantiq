@@ -432,11 +432,26 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules, onAddN
         return ids;
     }, [tree]);
 
-    // Detect fields assigned to more than one branch (conflict)
+    // Detect fields assigned to genuinely conflicting branches.
+    // A field under multiple options of the SAME parent (e.g. Size::Small + Size::Large)
+    // is fine — those are mutually exclusive. Only flag when a field appears under
+    // DIFFERENT parent fields, which could both be active simultaneously.
     const conflictedFieldIds = useMemo(() => {
-        const count: Record<string, number> = {};
-        Object.values(tree).forEach(arr => arr.forEach(id => { count[id] = (count[id] || 0) + 1; }));
-        return new Set(Object.keys(count).filter(id => count[id] > 1));
+        const fieldParents: Record<string, Set<string>> = {};
+        Object.entries(tree).forEach(([containerId, childIds]) => {
+            // Extract the parent field ID from the container key (format: "parentFieldId::optionValue")
+            const parentFieldId = containerId === 'root' ? '__root__' : containerId.split('::')[0];
+            childIds.forEach(id => {
+                if (!fieldParents[id]) fieldParents[id] = new Set();
+                fieldParents[id].add(parentFieldId);
+            });
+        });
+        // Conflict only if the field lives under 2+ distinct parent fields
+        return new Set(
+            Object.entries(fieldParents)
+                .filter(([, parents]) => parents.size > 1)
+                .map(([id]) => id)
+        );
     }, [tree]);
 
     const availableFields = useMemo(() => {
