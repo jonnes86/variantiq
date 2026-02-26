@@ -207,10 +207,6 @@ class VariantIQFields {
   }
 
   renderField(field) {
-    // Color swatch renderer: use for fields with "color" or "colour" in the label
-    if (this.isColorField(field) && (field.optionsJson || []).length > 0) {
-      return this.renderColorSwatches(field);
-    }
 
     const fieldOptions = field.optionsJson || [];
     const isRequired = field.required ? 'required' : '';
