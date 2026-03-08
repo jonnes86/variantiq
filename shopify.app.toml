@@ -1,15 +1,15 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
-client_id = "e5c349a3bb6593cf3d485ca1e29148f4"
+client_id = "edd33e9e794915f55328da5035072d0d"
 name = "VariantIQ"
-application_url = "https://variantiq-production.up.railway.app"
+application_url = "https://variantiq.saasyllama.com"
 embedded = true
 
 [build]
 automatically_update_urls_on_dev = true
 
 [webhooks]
-api_version = "2026-01"
+api_version = "2025-10"
 
   [[webhooks.subscriptions]]
   topics = [ "app/scopes_update" ]
@@ -19,12 +19,17 @@ api_version = "2026-01"
   topics = [ "app/uninstalled" ]
   uri = "/webhooks/app/uninstalled"
 
+  [[webhooks.subscriptions]]
+  compliance_topics = [ "customers/data_request", "customers/redact", "shop/redact" ]
+  uri = "https://variantiq.saasyllama.com/webhooks"
+
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
 scopes = "read_products,write_products"
 
 [auth]
 redirect_urls = [
-  "https://variantiq-production.up.railway.app/auth",
-  "https://variantiq-production.up.railway.app/auth/callback"
+  "https://variantiq.saasyllama.com/auth",
+  "https://variantiq.saasyllama.com/auth/callback"
 ]
+
