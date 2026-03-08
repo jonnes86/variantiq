@@ -2,14 +2,14 @@
 
 client_id = "e5c349a3bb6593cf3d485ca1e29148f4"
 name = "VariantIQ"
-application_url = "https://variantiq-production.up.railway.app"
+application_url = "https://variantiq-dev.saasyllama.com"
 embedded = true
 
 [build]
 automatically_update_urls_on_dev = true
 
 [webhooks]
-api_version = "2026-01"
+api_version = "2025-10"
 
   [[webhooks.subscriptions]]
   topics = [ "app/scopes_update" ]
@@ -25,6 +25,6 @@ scopes = "read_products,write_products"
 
 [auth]
 redirect_urls = [
-  "https://variantiq-production.up.railway.app/auth",
-  "https://variantiq-production.up.railway.app/auth/callback"
+  "https://variantiq-dev.saasyllama.com/auth",
+  "https://variantiq-dev.saasyllama.com/auth/callback"
 ]
