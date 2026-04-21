@@ -35,7 +35,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { DragHandleIcon } from "@shopify/polaris-icons";
 import { Icon } from "@shopify/polaris";
 import { Prisma } from "@prisma/client";
-import { detectPlan, getLimits, isPro } from "../billing.server";
+import { detectPlan, getLimits } from "../billing.server";
 
 // Sub-component for Draggable Field Items
 function SortableFieldListItem({ field, handleEditFieldClick, handleDeleteField }: any) {
@@ -149,6 +149,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
       datasets,
       planInfo,
       limits,
+      atFieldLimit: !limits.hasRules && template.fields.length >= limits.maxFieldsPerTemplate,
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
@@ -718,8 +719,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
 }
 
 export default function TemplateDetail() {
-  const { template, linkedProductsData, datasets, planInfo, limits } = useLoaderData<typeof loader>();
-  const atFieldLimit = !isPro(planInfo.tier) && template.fields.length >= limits.maxFieldsPerTemplate;
+  const { template, linkedProductsData, datasets, planInfo, limits, atFieldLimit } = useLoaderData<typeof loader>();
   const submit = useSubmit();
   const actionData = useActionData<typeof action>();
   const [searchParams] = useSearchParams();
