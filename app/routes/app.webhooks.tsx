@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { json } from "@remix-run/node";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
-import { useLoaderData, useSubmit, useNavigation, useRouteError } from "@remix-run/react";
+import { useLoaderData, useSubmit, useNavigation, useRouteError, Link } from "@remix-run/react";
 import {
     Page, Card, BlockStack, InlineStack, TextField, Button, Text,
     Badge, DataTable, Banner, Divider
@@ -9,15 +9,22 @@ import {
 import { DeleteIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
 import { prisma } from "../db.server";
+import { detectPlan, isPro } from "../billing.server";
 
 export async function loader({ request }: LoaderFunctionArgs) {
     try {
-        const { session } = await authenticate.admin(request);
+        const { session, admin } = await authenticate.admin(request);
+        const planInfo = await detectPlan(session.shop, admin);
+
+        if (!isPro(planInfo.tier)) {
+            return json({ locked: true, webhooks: [] });
+        }
+
         const webhooks = await prisma.webhookEndpoint.findMany({
             where: { shop: session.shop },
             orderBy: { createdAt: "desc" },
         });
-        return json({ webhooks });
+        return json({ locked: false, webhooks });
     } catch (error) {
         console.error("[Webhooks Loader Error]", error);
         throw new Response(
@@ -54,13 +61,34 @@ export async function action({ request }: ActionFunctionArgs) {
 }
 
 export default function WebhooksPage() {
-    const { webhooks } = useLoaderData<typeof loader>();
+    const { locked, webhooks } = useLoaderData<typeof loader>();
     const submit = useSubmit();
     const navigation = useNavigation();
     const isSaving = navigation.state !== "idle";
 
     const [url, setUrl] = useState("");
     const [label, setLabel] = useState("");
+
+    if (locked) {
+        return (
+            <Page title="Webhooks / Integrations" backAction={{ content: "Home", url: "/app" }}>
+                <Card>
+                    <BlockStack gap="400">
+                        <Text as="h2" variant="headingMd">🔒 Pro Feature: Webhook Integrations</Text>
+                        <Text as="p" tone="subdued">
+                            Automatically send order data containing your custom VariantIQ options to Zapier, Make,
+                            or any custom endpoint when orders are placed. Available on the Pro plan.
+                        </Text>
+                        <InlineStack align="start">
+                            <Link to="/app/billing" style={{ textDecoration: "none" }}>
+                                <Button variant="primary">Upgrade to Pro — $9.99/mo</Button>
+                            </Link>
+                        </InlineStack>
+                    </BlockStack>
+                </Card>
+            </Page>
+        );
+    }
 
     const rows = webhooks.map((w: any) => [
         w.label || "—",

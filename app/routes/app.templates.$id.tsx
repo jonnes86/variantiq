@@ -35,6 +35,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { DragHandleIcon } from "@shopify/polaris-icons";
 import { Icon } from "@shopify/polaris";
 import { Prisma } from "@prisma/client";
+import { detectPlan, getLimits, isPro } from "../billing.server";
 
 // Sub-component for Draggable Field Items
 function SortableFieldListItem({ field, handleEditFieldClick, handleDeleteField }: any) {
@@ -100,14 +101,21 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     const templateId = params.id as string;
     if (!templateId) return redirect("/app");
 
-    const template = await prisma.template.findFirst({
-      where: { id: templateId, shop: session.shop },
-      include: {
-        fields: { orderBy: { sort: "asc" } },
-        rules: { orderBy: { sort: "asc" } },
-        links: { select: { productGid: true } }, // Changed to select productGid only
-      },
-    });
+    const [template, datasets, planInfo] = await Promise.all([
+      prisma.template.findFirst({
+        where: { id: templateId, shop: session.shop },
+        include: {
+          fields: { orderBy: { sort: "asc" } },
+          rules: { orderBy: { sort: "asc" } },
+          links: { select: { productGid: true } },
+        },
+      }),
+      prisma.dataset.findMany({
+        where: { shop: session.shop },
+        orderBy: { name: "asc" },
+      }),
+      detectPlan(session.shop, admin),
+    ]);
 
     if (!template) throw new Response("Template not found", { status: 404 });
 
@@ -116,7 +124,6 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     let linkedProductsData: any[] = [];
 
     if (linkedProductGids.length > 0) {
-      // Create a query aliases string for each product to fetch them in a single batch
       const queryAliases = linkedProductGids.map((gid, index) => `
         product${index}: product(id: "${gid}") {
           id
@@ -126,25 +133,22 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
       `).join('\n');
 
       const PRODUCTS_QUERY = `query { ${queryAliases} }`;
-
       const response = await admin.graphql(PRODUCTS_QUERY);
       const responseJson = await response.json();
 
       if (!(responseJson as any).errors && responseJson.data) {
-        // Extract the products from the aliased query response
         linkedProductsData = Object.values(responseJson.data).filter(Boolean);
       }
     }
 
-    const datasets = await prisma.dataset.findMany({
-      where: { shop: session.shop },
-      orderBy: { name: "asc" },
-    });
+    const limits = getLimits(planInfo.tier);
 
     return json({
       template,
-      linkedProductsData, // Keep this from original loader
+      linkedProductsData,
       datasets,
+      planInfo,
+      limits,
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
@@ -714,7 +718,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
 }
 
 export default function TemplateDetail() {
-  const { template, linkedProductsData, datasets } = useLoaderData<typeof loader>();
+  const { template, linkedProductsData, datasets, planInfo, limits } = useLoaderData<typeof loader>();
+  const atFieldLimit = !isPro(planInfo.tier) && template.fields.length >= limits.maxFieldsPerTemplate;
   const submit = useSubmit();
   const actionData = useActionData<typeof action>();
   const [searchParams] = useSearchParams();
@@ -928,7 +933,17 @@ export default function TemplateDetail() {
               </Card>
             </BlockStack>
             {!showFieldForm && (
-              <Button onClick={handleAddFieldClick}>Add Field</Button>
+              atFieldLimit ? (
+                <Banner
+                  tone="warning"
+                  title={`Free plan limit: ${limits.maxFieldsPerTemplate} fields per template`}
+                  action={{ content: "Upgrade to Pro", url: "/app/billing" }}
+                >
+                  <Text as="p">Upgrade to Pro for unlimited fields, conditional rules, datasets, and more.</Text>
+                </Banner>
+              ) : (
+                <Button onClick={handleAddFieldClick}>Add Field</Button>
+              )
             )}
           </InlineGrid>
 
@@ -1189,7 +1204,23 @@ export default function TemplateDetail() {
     </BlockStack>
   );
 
-  const RulesView = (
+  const RulesView = !limits.hasRules ? (
+    <Card>
+      <BlockStack gap="400">
+        <Text as="h2" variant="headingMd">🔒 Pro Feature: Conditional Rules</Text>
+        <Text as="p" tone="subdued">
+          Conditional rules let you show, hide, or limit options based on what customers select —
+          for example, "Show Gift Message field only if Gift Wrap is checked".
+          Available on the Pro plan.
+        </Text>
+        <InlineStack align="start">
+          <Link to="/app/billing" style={{ textDecoration: "none" }}>
+            <Button variant="primary">Upgrade to Pro — $9.99/mo</Button>
+          </Link>
+        </InlineStack>
+      </BlockStack>
+    </Card>
+  ) : (
     <BlockStack gap="400">
       <Card>
         <BlockStack gap="400">
@@ -1274,7 +1305,7 @@ export default function TemplateDetail() {
         </Card>
       )}
     </BlockStack>
-  );
+  ); // end Pro RulesView branch
 
   const AppearanceView = (
     <BlockStack gap="400">

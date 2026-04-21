@@ -14,10 +14,6 @@ database.sqlite
 .env
 .env.*
 
-
-
-
-
 /extensions/*/dist
 
 # Ignore shopify files created during app dev
@@ -26,3 +22,10 @@ database.sqlite
 /.shopify/
 *.zip
 build/
+
+# Debug and test files
+*.log
+debug.mjs
+test-*.mjs
+test-*.ts
+patch-sort.mjs

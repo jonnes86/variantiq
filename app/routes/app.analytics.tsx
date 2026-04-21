@@ -1,21 +1,28 @@
 import { json } from "@remix-run/node";
 import type { LoaderFunctionArgs } from "@remix-run/node";
-import { useLoaderData, useRouteError } from "@remix-run/react";
+import { useLoaderData, useRouteError, Link } from "@remix-run/react";
 import {
-    Page, Layout, Card, BlockStack, InlineStack, Text, Badge, DataTable, Divider, Banner
+    Page, Layout, Card, BlockStack, InlineStack, Text, Badge, DataTable, Divider, Banner, Button
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 import { prisma } from "../db.server";
+import { detectPlan, isPro } from "../billing.server";
 
 export async function loader({ request }: LoaderFunctionArgs) {
     try {
-        const { session } = await authenticate.admin(request);
+        const { session, admin } = await authenticate.admin(request);
+        const planInfo = await detectPlan(session.shop, admin);
+
+        if (!isPro(planInfo.tier)) {
+            return json({ locked: true, templates: [] });
+        }
+
         const templates = await prisma.template.findMany({
             where: { shop: session.shop },
             orderBy: { views: "desc" },
             include: { links: true },
         });
-        return json({ templates });
+        return json({ locked: false, templates });
     } catch (error) {
         console.error("[Analytics Loader Error]", error);
         throw new Response(
@@ -26,7 +33,28 @@ export async function loader({ request }: LoaderFunctionArgs) {
 }
 
 export default function AnalyticsDashboard() {
-    const { templates } = useLoaderData<typeof loader>();
+    const { locked, templates } = useLoaderData<typeof loader>();
+
+    if (locked) {
+        return (
+            <Page title="Analytics" backAction={{ content: "Home", url: "/app" }}>
+                <Card>
+                    <BlockStack gap="400">
+                        <Text as="h2" variant="headingMd">🔒 Pro Feature: Analytics</Text>
+                        <Text as="p" tone="subdued">
+                            Track template views, add-to-cart events, and conversion rates across all your products.
+                            Available on the Pro plan.
+                        </Text>
+                        <InlineStack align="start">
+                            <Link to="/app/billing" style={{ textDecoration: "none" }}>
+                                <Button variant="primary">Upgrade to Pro — $9.99/mo</Button>
+                            </Link>
+                        </InlineStack>
+                    </BlockStack>
+                </Card>
+            </Page>
+        );
+    }
 
     const totalViews = templates.reduce((s, t) => s + (t.views || 0), 0);
     const totalAdds = templates.reduce((s, t) => s + (t.addsToCart || 0), 0);
