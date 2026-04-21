@@ -8,6 +8,7 @@ import {
   Text,
   Card,
   Banner,
+  Badge,
   Button,
   BlockStack,
   Box,
@@ -22,6 +23,7 @@ import {
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 import { prisma } from "../db.server";
+import { detectPlan, getLimits, isPro } from "../billing.server";
 
 // --- LOADER ---
 export async function loader({ request }: LoaderFunctionArgs) {
@@ -30,17 +32,23 @@ export async function loader({ request }: LoaderFunctionArgs) {
   // Auto-generate the Dummy Product required for Cart-syncing Dynamic Prices
   await ensureDummyProductExists(admin);
 
-  const templates = await prisma.template.findMany({
-    where: { shop: session.shop },
-    orderBy: { updatedAt: "desc" },
-  });
+  const [templates, datasets, planInfo] = await Promise.all([
+    prisma.template.findMany({
+      where: { shop: session.shop },
+      orderBy: { updatedAt: "desc" },
+    }),
+    prisma.dataset.findMany({
+      where: { shop: session.shop },
+      orderBy: { updatedAt: "desc" },
+    }),
+    detectPlan(session.shop, admin),
+  ]);
 
-  const datasets = await prisma.dataset.findMany({
-    where: { shop: session.shop },
-    orderBy: { updatedAt: "desc" },
-  });
+  const limits = getLimits(planInfo.tier);
+  const url = new URL(request.url);
+  const upgraded = url.searchParams.get("upgraded") === "1";
 
-  return json({ templates, datasets });
+  return json({ templates, datasets, planInfo, limits, upgraded });
 }
 
 async function ensureDummyProductExists(admin: any) {
@@ -212,8 +220,9 @@ export async function action({ request }: ActionFunctionArgs) {
 }
 
 export default function Index() {
-  const { templates, datasets } = useLoaderData<typeof loader>();
+  const { templates, datasets, planInfo, limits, upgraded } = useLoaderData<typeof loader>();
   const [searchParams] = useSearchParams();
+  const atTemplateLimit = !isPro(planInfo.tier) && templates.length >= limits.maxTemplates;
 
   const getInitialTab = () => {
     switch (searchParams.get("tab")) {
@@ -249,6 +258,26 @@ export default function Index() {
   // --- VIEWS ---
   const DashboardView = (
     <BlockStack gap="500">
+      {/* Upgrade success flash */}
+      {upgraded && (
+        <Banner tone="success" title="Welcome to Pro! 🎉">
+          <Text as="p">Your subscription is active. All features are now unlocked.</Text>
+        </Banner>
+      )}
+
+      {/* Upgrade prompt for Free tier */}
+      {planInfo.tier === "Free" && (
+        <Banner
+          tone="warning"
+          title="You're on the Free plan"
+          action={{ content: "Upgrade to Pro", url: "/app/billing" }}
+        >
+          <Text as="p">
+            Unlock unlimited templates, conditional rules, datasets, analytics, and webhook integrations — starting at $9.99/month with a 14-day free trial.
+          </Text>
+        </Banner>
+      )}
+
       <Card>
         <BlockStack gap="400">
           <Text as="h2" variant="headingMd">Welcome to VariantIQ</Text>
@@ -262,22 +291,36 @@ export default function Index() {
       </Card>
 
       <InlineGrid columns={2} gap="400">
+        {/* Analytics card */}
         <Card>
           <BlockStack gap="200">
             <Text as="h3" variant="headingMd">📊 Analytics</Text>
             <Text as="p" tone="subdued">View template views, add-to-cart events, and conversion rates.</Text>
-            <Link to="/app/analytics" style={{ textDecoration: "none" }}>
-              <Button variant="plain">View Analytics →</Button>
-            </Link>
+            {limits.hasAnalytics ? (
+              <Link to="/app/analytics" style={{ textDecoration: "none" }}>
+                <Button variant="plain">View Analytics →</Button>
+              </Link>
+            ) : (
+              <Link to="/app/billing" style={{ textDecoration: "none" }}>
+                <Button variant="plain" tone="critical">🔒 Pro feature — Upgrade</Button>
+              </Link>
+            )}
           </BlockStack>
         </Card>
+        {/* Webhooks card */}
         <Card>
           <BlockStack gap="200">
             <Text as="h3" variant="headingMd">🔗 Webhooks</Text>
             <Text as="p" tone="subdued">Send order data with custom options to Zapier, Make, or any endpoint.</Text>
-            <Link to="/app/webhooks" style={{ textDecoration: "none" }}>
-              <Button variant="plain">Manage Webhooks →</Button>
-            </Link>
+            {limits.hasWebhooks ? (
+              <Link to="/app/webhooks" style={{ textDecoration: "none" }}>
+                <Button variant="plain">Manage Webhooks →</Button>
+              </Link>
+            ) : (
+              <Link to="/app/billing" style={{ textDecoration: "none" }}>
+                <Button variant="plain" tone="critical">🔒 Pro feature — Upgrade</Button>
+              </Link>
+            )}
           </BlockStack>
         </Card>
       </InlineGrid>
@@ -339,21 +382,33 @@ export default function Index() {
             A Template acts as a blueprint. For example, you might create a "T-Shirts" template containing fields for "Custom Name" and "Logo Upload".
             You can then assign that exact template to all of your T-Shirt products.
           </Text>
-          <Form method="post">
-            <input type="hidden" name="_intent" value="createTemplate" />
-            <InlineGrid columns="3fr 1fr" gap="400" alignItems="end">
-              <TextField
-                label="Template Name"
-                labelHidden
-                value={newTemplateName}
-                onChange={setNewTemplateName}
-                name="name"
-                autoComplete="off"
-                placeholder="e.g. T-Shirts"
-              />
-              <Button submit variant="primary" disabled={!newTemplateName.trim()}>Create</Button>
-            </InlineGrid>
-          </Form>
+          {atTemplateLimit ? (
+            <Banner
+              tone="warning"
+              title={`Free plan limit reached (${limits.maxTemplates} template)`}
+              action={{ content: "Upgrade to Pro", url: "/app/billing" }}
+            >
+              <Text as="p">
+                Upgrade to Pro for unlimited templates, fields, rules, datasets, analytics, and webhooks.
+              </Text>
+            </Banner>
+          ) : (
+            <Form method="post">
+              <input type="hidden" name="_intent" value="createTemplate" />
+              <InlineGrid columns="3fr 1fr" gap="400" alignItems="end">
+                <TextField
+                  label="Template Name"
+                  labelHidden
+                  value={newTemplateName}
+                  onChange={setNewTemplateName}
+                  name="name"
+                  autoComplete="off"
+                  placeholder="e.g. T-Shirts"
+                />
+                <Button submit variant="primary" disabled={!newTemplateName.trim()}>Create</Button>
+              </InlineGrid>
+            </Form>
+          )}
         </BlockStack>
       </Card>
 
@@ -398,7 +453,7 @@ export default function Index() {
     </BlockStack>
   );
 
-  const DatasetsView = (
+  const DatasetsView = limits.hasDatasets ? (
     <BlockStack gap="500">
       <Card>
         <BlockStack gap="400">
@@ -463,10 +518,31 @@ export default function Index() {
         </Card>
       )}
     </BlockStack>
+  ) : (
+    <Card>
+      <BlockStack gap="400">
+        <Text as="h2" variant="headingMd">🔒 Pro Feature: Global Datasets</Text>
+        <Text as="p" tone="subdued">
+          Global Datasets let you build massive reusable option lists (e.g. all 200 of your brand colors)
+          and reference them dynamically in your templates — without retyping them every time.
+          Available on the Pro plan.
+        </Text>
+        <InlineStack align="start">
+          <Link to="/app/billing" style={{ textDecoration: "none" }}>
+            <Button variant="primary">Upgrade to Pro — $9.99/mo</Button>
+          </Link>
+        </InlineStack>
+      </BlockStack>
+    </Card>
   );
 
   return (
-    <Page title="VariantIQ Manager">
+    <Page
+      title="VariantIQ Manager"
+      titleMetadata={
+        <Badge tone={planInfo.tone}>{planInfo.tier}</Badge>
+      }
+    >
       <Tabs tabs={tabs} selected={selectedTab} onSelect={handleTabChange}>
         <div style={{ paddingTop: '1rem' }}>
           {selectedTab === 0 && DashboardView}
