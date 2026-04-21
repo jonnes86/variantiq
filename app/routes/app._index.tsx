@@ -23,7 +23,7 @@ import {
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 import { prisma } from "../db.server";
-import { detectPlan, getLimits, isPro } from "../billing.server";
+import { detectPlan, getLimits } from "../billing.server";
 
 // --- LOADER ---
 export async function loader({ request }: LoaderFunctionArgs) {
@@ -47,8 +47,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const limits = getLimits(planInfo.tier);
   const url = new URL(request.url);
   const upgraded = url.searchParams.get("upgraded") === "1";
+  const atTemplateLimit = !limits.maxTemplates || templates.length >= limits.maxTemplates;
 
-  return json({ templates, datasets, planInfo, limits, upgraded });
+  return json({ templates, datasets, planInfo, limits, upgraded, atTemplateLimit });
 }
 
 async function ensureDummyProductExists(admin: any) {
@@ -220,9 +221,8 @@ export async function action({ request }: ActionFunctionArgs) {
 }
 
 export default function Index() {
-  const { templates, datasets, planInfo, limits, upgraded } = useLoaderData<typeof loader>();
+  const { templates, datasets, planInfo, limits, upgraded, atTemplateLimit } = useLoaderData<typeof loader>();
   const [searchParams] = useSearchParams();
-  const atTemplateLimit = !isPro(planInfo.tier) && templates.length >= limits.maxTemplates;
 
   const getInitialTab = () => {
     switch (searchParams.get("tab")) {
