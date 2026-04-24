@@ -1748,8 +1748,7 @@ export default function TemplateDetail() {
               <BlockStack gap="400">
                 <Text variant="headingMd" as="h2">Live Preview</Text>
                 <Divider />
-                  <StatefulLivePreview template={template} datasets={datasets} appearance={{ fontFamily, fontSize, fontWeight, textColor }} />
-                </div>
+                <StatefulLivePreview template={template} datasets={datasets} appearance={{ fontFamily, fontSize, fontWeight, textColor }} />
               </BlockStack>
             </Card>
           </div>
