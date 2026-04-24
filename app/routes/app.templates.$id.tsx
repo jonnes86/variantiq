@@ -721,6 +721,167 @@ export async function action({ request, params }: ActionFunctionArgs) {
   return null;
 }
 
+function StatefulLivePreview({ template, datasets, appearance }: { template: any, datasets: any[], appearance: any }) {
+  const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
+
+  const { fontFamily, fontSize, fontWeight, textColor } = appearance;
+
+  const handleFieldChange = (fieldId: string, value: string) => {
+    setFieldValues(prev => ({ ...prev, [fieldId]: value }));
+  };
+
+  const visibleFields = new Set<string>();
+  const limitOptions: Record<string, Set<string>> = {};
+
+  const rulesByTarget: Record<string, any[]> = {};
+  template.fields.forEach((f: any) => rulesByTarget[f.id] = []);
+  template.rules.forEach((r: any) => {
+    if (rulesByTarget[r.targetFieldId]) rulesByTarget[r.targetFieldId].push(r);
+  });
+
+  let missingRequiredEncountered = false;
+  const sortedFields = [...template.fields].sort((a: any, b: any) => a.sort - b.sort);
+
+  sortedFields.forEach(field => {
+    const fieldRules = rulesByTarget[field.id];
+    let shouldShow = true;
+
+    const showRules = fieldRules.filter(r => r.actionType === 'SHOW');
+    const hideRules = fieldRules.filter(r => r.actionType === 'HIDE');
+    const limitRules = fieldRules.filter(r => r.actionType === 'LIMIT_OPTIONS' || r.actionType === 'LIMIT_OPTIONS_DATASET');
+
+    const evaluateCondition = (rule: any) => {
+      const conditions = rule.conditionsJson || [];
+      if (conditions.length === 0) return false;
+      return conditions.every((c: any) => {
+        const val = fieldValues[c.fieldId] || "";
+        if (c.operator === 'EQUALS') return val === c.value;
+        if (c.operator === 'NOT_EQUALS') return val !== "" && val !== c.value;
+        if (c.operator === 'CONTAINS') return val !== "" && val.includes(c.value);
+        return false;
+      });
+    };
+
+    if (showRules.length > 0) {
+      shouldShow = showRules.some(evaluateCondition);
+    } else if (hideRules.length > 0) {
+      shouldShow = !hideRules.some(evaluateCondition);
+    }
+
+    if (missingRequiredEncountered && showRules.length === 0) {
+      shouldShow = false;
+    }
+
+    const passingLimitRules = limitRules.filter(evaluateCondition);
+    if (passingLimitRules.length > 0) {
+       limitOptions[field.id] = new Set();
+       passingLimitRules.forEach(r => {
+          if (r.actionType === 'LIMIT_OPTIONS') {
+            let opts = r.targetOptionsJson || [];
+            if (typeof opts === 'string') { try { opts = JSON.parse(opts); } catch(e){ opts = []; } }
+            if (Array.isArray(opts)) opts.forEach((o: string) => limitOptions[field.id].add(o));
+          } else if (r.actionType === 'LIMIT_OPTIONS_DATASET') {
+            const did = r.targetOptionsJson;
+            const d = datasets.find(d => d.id === did);
+            if (d) {
+               let opts = d.optionsJson || [];
+               if (typeof opts === 'string') { try { opts = JSON.parse(opts); } catch(e){ opts = []; } }
+               if (Array.isArray(opts)) opts.forEach((o: any) => limitOptions[field.id].add(typeof o === 'string' ? o : o.label || ""));
+            }
+          }
+       });
+    }
+
+    if (shouldShow) {
+       visibleFields.add(field.id);
+    }
+
+    if (shouldShow && field.required) {
+       const val = fieldValues[field.id];
+       if (!val || val.trim() === '') {
+         missingRequiredEncountered = true;
+       }
+    }
+  });
+
+  return (
+    <div
+      style={{
+        fontFamily: fontFamily || undefined,
+        fontSize: fontSize || undefined,
+        fontWeight: fontWeight || undefined,
+        color: textColor || undefined,
+      }}
+    >
+      <BlockStack gap="400">
+        {sortedFields.map(f => {
+          if (!visibleFields.has(f.id)) return null;
+
+          let parsedOpts: any[] = [];
+          try { parsedOpts = Array.isArray(f.optionsJson) ? f.optionsJson : JSON.parse(f.optionsJson || "[]"); } catch(e) {}
+          let mappedOpts = parsedOpts.map(o => typeof o === 'string' ? o : o.label || "");
+          
+          if (limitOptions[f.id]) {
+             mappedOpts = mappedOpts.filter(opt => limitOptions[f.id].has(opt));
+          }
+
+          const value = fieldValues[f.id] || "";
+
+          return (
+            <BlockStack gap="200" key={f.id}>
+              <Text variant="headingSm" as="h3">
+                {f.label} {f.required && <span style={{ color: "red" }}>*</span>}
+              </Text>
+              {f.type === "select" ? (
+                 <Select
+                   labelHidden
+                   label={f.label}
+                   options={[{label: `Select ${f.label}...`, value: ""}, ...mappedOpts.map(opt => ({ label: opt, value: opt }))]}
+                   value={value}
+                   onChange={(val) => handleFieldChange(f.id, val)}
+                 />
+              ) : f.type === "text" ? (
+                <TextField 
+                  labelHidden 
+                  label={f.label} 
+                  value={value} 
+                  onChange={(val) => handleFieldChange(f.id, val)} 
+                  autoComplete="off" 
+                />
+              ) : f.type === "checkbox" ? (
+                 <Checkbox 
+                   label={mappedOpts.length > 0 ? mappedOpts[0] : f.label} 
+                   checked={value === (mappedOpts.length > 0 ? mappedOpts[0] : f.label)} 
+                   onChange={(checked) => handleFieldChange(f.id, checked ? (mappedOpts.length > 0 ? mappedOpts[0] : f.label) : "")} 
+                 />
+              ) : f.type === "radio" ? (
+                 <BlockStack gap="200">
+                   {mappedOpts.map(opt => (
+                     <div key={opt}>
+                       <input 
+                         type="radio" 
+                         id={`preview-${f.id}-${opt}`} 
+                         name={`preview-${f.id}`} 
+                         checked={value === opt} 
+                         onChange={() => handleFieldChange(f.id, opt)} 
+                         style={{ marginRight: '8px', cursor: 'pointer' }}
+                       />
+                       <label htmlFor={`preview-${f.id}-${opt}`} style={{ cursor: 'pointer' }}>{opt}</label>
+                     </div>
+                   ))}
+                 </BlockStack>
+              ) : null}
+            </BlockStack>
+          );
+        })}
+        {template.fields.length === 0 && (
+          <Text tone="subdued" as="p">Add fields to see them previewed here.</Text>
+        )}
+      </BlockStack>
+    </div>
+  );
+}
+
 export default function TemplateDetail() {
   const { template, linkedProductsData, datasets, planInfo, limits, atFieldLimit } = useLoaderData<typeof loader>();
   const submit = useSubmit();
@@ -1587,51 +1748,7 @@ export default function TemplateDetail() {
               <BlockStack gap="400">
                 <Text variant="headingMd" as="h2">Live Preview</Text>
                 <Divider />
-                <div
-                  style={{
-                    fontFamily: fontFamily || undefined,
-                    fontSize: fontSize || undefined,
-                    fontWeight: fontWeight || undefined,
-                    color: textColor || undefined,
-                  }}
-                >
-                  <BlockStack gap="400">
-                    {template.fields.map((f: any) => {
-                      let parsedOpts: any[] = [];
-                      try {
-                        parsedOpts = Array.isArray(f.optionsJson) ? f.optionsJson : JSON.parse(f.optionsJson || "[]");
-                      } catch(e) {}
-                      const mappedOpts = parsedOpts.map((o: any) => typeof o === 'string' ? o : o.label || "");
-
-                      return (
-                        <BlockStack gap="200" key={f.id}>
-                          <Text variant="headingSm" as="h3">
-                            {f.label} {f.required && <span style={{ color: "red" }}>*</span>}
-                          </Text>
-                          {f.type === "select" ? (
-                             <Select
-                               labelHidden
-                               label={f.label}
-                               options={mappedOpts.map(opt => ({ label: opt, value: opt }))}
-                             />
-                          ) : f.type === "text" ? (
-                            <TextField labelHidden label={f.label} autoComplete="off" />
-                          ) : f.type === "checkbox" ? (
-                             <Checkbox label={mappedOpts.length > 0 ? mappedOpts[0] : f.label} checked={false} onChange={() => {}} />
-                          ) : f.type === "radio" ? (
-                             <BlockStack gap="200">
-                               {mappedOpts.map((opt: string) => (
-                                   <Checkbox key={opt} label={opt} checked={false} onChange={() => {}} />
-                               ))}
-                             </BlockStack>
-                          ) : null}
-                        </BlockStack>
-                      );
-                    })}
-                    {template.fields.length === 0 && (
-                      <Text tone="subdued" as="p">Add fields to see them previewed here.</Text>
-                    )}
-                  </BlockStack>
+                  <StatefulLivePreview template={template} datasets={datasets} appearance={{ fontFamily, fontSize, fontWeight, textColor }} />
                 </div>
               </BlockStack>
             </Card>
