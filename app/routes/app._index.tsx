@@ -418,9 +418,15 @@ export default function Index() {
           {templates.length === 0 ? (
             <Text as="p" tone="subdued">No templates yet.</Text>
           ) : (
-            <BlockStack gap="300">
-              {templates.map((t: any) => (
-                <Card key={t.id}>
+            <ResourceList
+              resourceName={{ singular: 'template', plural: 'templates' }}
+              items={templates}
+              renderItem={(t: any) => (
+                <ResourceItem
+                  id={t.id}
+                  url={`/app/templates/${t.id}`}
+                  accessibilityLabel={`Edit template ${t.name}`}
+                >
                   <InlineGrid columns="1fr auto" gap="200" alignItems="center">
                     <BlockStack gap="100">
                       <Text as="h3" variant="headingMd">{t.name}</Text>
@@ -429,24 +435,25 @@ export default function Index() {
                       </Text>
                     </BlockStack>
                     <InlineStack gap="200" align="end" blockAlign="center">
-                      <Form method="post" onSubmit={(e) => { if (!confirm(`Are you sure you want to duplicate ${t.name}?`)) e.preventDefault(); }}>
-                        <input type="hidden" name="_intent" value="duplicateTemplate" />
-                        <input type="hidden" name="id" value={t.id} />
-                        <Button submit variant="tertiary">Duplicate</Button>
-                      </Form>
-                      <Link to={`/app/templates/${t.id}`} style={{ textDecoration: 'none' }}>
-                        <Button>Edit</Button>
-                      </Link>
-                      <Form method="post" onSubmit={(e) => { if (!confirm(`Are you sure you would like to delete ${t.name}?`)) e.preventDefault(); }}>
-                        <input type="hidden" name="_intent" value="deleteTemplate" />
-                        <input type="hidden" name="id" value={t.id} />
-                        <Button submit tone="critical">Delete</Button>
-                      </Form>
+                      <div onClick={(e) => e.stopPropagation()}>
+                        <Form method="post" onSubmit={(e) => { if (!confirm(`Are you sure you want to duplicate ${t.name}?`)) e.preventDefault(); }}>
+                          <input type="hidden" name="_intent" value="duplicateTemplate" />
+                          <input type="hidden" name="id" value={t.id} />
+                          <Button submit variant="tertiary">Duplicate</Button>
+                        </Form>
+                      </div>
+                      <div onClick={(e) => e.stopPropagation()}>
+                        <Form method="post" onSubmit={(e) => { if (!confirm(`Are you sure you would like to delete ${t.name}?`)) e.preventDefault(); }}>
+                          <input type="hidden" name="_intent" value="deleteTemplate" />
+                          <input type="hidden" name="id" value={t.id} />
+                          <Button submit tone="critical">Delete</Button>
+                        </Form>
+                      </div>
                     </InlineStack>
                   </InlineGrid>
-                </Card>
-              ))}
-            </BlockStack>
+                </ResourceItem>
+              )}
+            />
           )}
         </BlockStack>
       </Card>

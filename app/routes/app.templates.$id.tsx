@@ -1596,36 +1596,38 @@ export default function TemplateDetail() {
                   }}
                 >
                   <BlockStack gap="400">
-                    {template.fields.map((f: any) => (
-                      <BlockStack gap="200" key={f.id}>
-                        <Text variant="headingSm" as="h3">
-                          {f.label} {f.required && <span style={{ color: "red" }}>*</span>}
-                        </Text>
-                        {f.type === "select" ? (
-                           <Select
-                             labelHidden
-                             label={f.label}
-                             options={
-                               f.optionsJson 
-                                 ? (Array.isArray(f.optionsJson) ? f.optionsJson : JSON.parse(f.optionsJson || "[]")).map((opt: string) => ({ label: opt, value: opt }))
-                                 : []
-                             }
-                           />
-                        ) : f.type === "text" ? (
-                          <TextField labelHidden label={f.label} autoComplete="off" />
-                        ) : f.type === "checkbox" ? (
-                           <Checkbox label={f.optionsJson ? (Array.isArray(f.optionsJson) ? f.optionsJson[0] : JSON.parse(f.optionsJson || "[]")[0]) : f.label} checked={false} onChange={() => {}} />
-                        ) : f.type === "radio" ? (
-                           <BlockStack gap="200">
-                             {f.optionsJson 
-                               ? (Array.isArray(f.optionsJson) ? f.optionsJson : JSON.parse(f.optionsJson || "[]")).map((opt: string) => (
+                    {template.fields.map((f: any) => {
+                      let parsedOpts: any[] = [];
+                      try {
+                        parsedOpts = Array.isArray(f.optionsJson) ? f.optionsJson : JSON.parse(f.optionsJson || "[]");
+                      } catch(e) {}
+                      const mappedOpts = parsedOpts.map((o: any) => typeof o === 'string' ? o : o.label || "");
+
+                      return (
+                        <BlockStack gap="200" key={f.id}>
+                          <Text variant="headingSm" as="h3">
+                            {f.label} {f.required && <span style={{ color: "red" }}>*</span>}
+                          </Text>
+                          {f.type === "select" ? (
+                             <Select
+                               labelHidden
+                               label={f.label}
+                               options={mappedOpts.map(opt => ({ label: opt, value: opt }))}
+                             />
+                          ) : f.type === "text" ? (
+                            <TextField labelHidden label={f.label} autoComplete="off" />
+                          ) : f.type === "checkbox" ? (
+                             <Checkbox label={mappedOpts.length > 0 ? mappedOpts[0] : f.label} checked={false} onChange={() => {}} />
+                          ) : f.type === "radio" ? (
+                             <BlockStack gap="200">
+                               {mappedOpts.map((opt: string) => (
                                    <Checkbox key={opt} label={opt} checked={false} onChange={() => {}} />
-                                 ))
-                               : null}
-                           </BlockStack>
-                        ) : null}
-                      </BlockStack>
-                    ))}
+                               ))}
+                             </BlockStack>
+                          ) : null}
+                        </BlockStack>
+                      );
+                    })}
                     {template.fields.length === 0 && (
                       <Text tone="subdued" as="p">Add fields to see them previewed here.</Text>
                     )}
