@@ -600,6 +600,18 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules, onAddN
     }, [fields]);
 
     const handleCompileRules = () => {
+        if (conflictedFieldIds.size > 0) {
+            if (!window.confirm("Warning: You have fields with CONFLICTS in your tree (assigned to multiple parent branches). This may cause them to be hidden unexpectedly.\n\nAre you sure you want to save?")) {
+                return;
+            }
+        }
+
+        if (availableFields.length > 0) {
+            if (!window.confirm(`Warning: You have ${availableFields.length} unassigned field(s) below the tree.\n\nUnassigned fields are UNCONDITIONALLY visible to all customers. This can cause duplicate fields if they are orphaned datasets.\n\nAre you sure you want to save? (To remove them, cancel and delete them from the Unassigned Fields list).`)) {
+                return;
+            }
+        }
+
         const compiledRules: Partial<Rule>[] = [];
         // Track each field's position in a DFS traversal so the backend can
         // re-sort fields to visually match the tree depth order.

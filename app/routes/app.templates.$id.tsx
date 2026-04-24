@@ -23,7 +23,10 @@ import {
   Tag,
   Divider,
   Thumbnail,
-  ButtonGroup
+  ButtonGroup,
+  Modal,
+  Box,
+  Layout
 } from "@shopify/polaris";
 import { prisma } from "../db.server";
 import React, { useState, useEffect, useRef } from "react";
@@ -745,6 +748,7 @@ export default function TemplateDetail() {
   const [fieldLabel, setFieldLabel] = useState("");
   const [fieldRequired, setFieldRequired] = useState(false);
   const [fieldOptionsList, setFieldOptionsList] = useState<Array<{ label: string, price: string, variantMapping: string }>>([]);
+  const [fieldModalTab, setFieldModalTab] = useState(0);
 
   useEffect(() => {
     setTemplateName(template.name);
@@ -834,6 +838,7 @@ export default function TemplateDetail() {
     setFieldLabel("");
     setFieldRequired(false);
     setFieldOptionsList([]);
+    setFieldModalTab(0);
   };
 
   const handleAddFieldClick = () => {
@@ -947,145 +952,165 @@ export default function TemplateDetail() {
             )}
           </InlineGrid>
 
-          {showFieldForm && (
-            <Card background="bg-surface-secondary">
-              <BlockStack gap="400">
-                <Text as="h4" variant="headingSm">
-                  {editingFieldId ? "Edit Field" : "New Field"}
-                </Text>
-
-                <Select
-                  label="Field Type"
-                  options={fieldTypeOptions}
-                  value={fieldType}
-                  onChange={setFieldType}
-                />
-
-                <TextField
-                  label="Field Name (internal)"
-                  value={fieldName}
-                  onChange={setFieldName}
-                  placeholder="e.g., shirt_size"
-                  helpText="Used for API/data, no spaces"
-                  autoComplete="off"
-                />
-
-                <TextField
-                  label="Field Label (customer-facing)"
-                  value={fieldLabel}
-                  onChange={setFieldLabel}
-                  placeholder="e.g., Shirt Size"
-                  autoComplete="off"
-                />
-
-                {["select", "radio", "checkbox"].includes(fieldType) && (
-                  <BlockStack gap="300">
-                    <Text as="h5" variant="headingSm">Options, Pricing & Shopify Variant Sync</Text>
-                    {fieldOptionsList.map((opt, index) => (
-                      <InlineGrid columns="1fr 100px 170px auto" gap="200" key={index} alignItems="center">
-                        <TextField
-                          labelHidden
-                          label={`Option ${index + 1}`}
-                          value={opt.label}
-                          onChange={(val) => {
-                            const newList = [...fieldOptionsList];
-                            newList[index].label = val;
-                            setFieldOptionsList(newList);
-                          }}
-                          placeholder="e.g., Small"
-                          autoComplete="off"
-                        />
-                        <TextField
-                          labelHidden
-                          label={`Price Adjustment ${index + 1}`}
-                          value={opt.price}
-                          onChange={(val) => {
-                            const newList = [...fieldOptionsList];
-                            newList[index].price = val;
-                            setFieldOptionsList(newList);
-                          }}
-                          prefix="$"
-                          type="number"
-                          placeholder="0.00"
-                          autoComplete="off"
-                        />
-                        <TextField
-                          labelHidden
-                          label={`Variant Mapping (Shopify ID)`}
-                          value={opt.variantMapping}
-                          onChange={(val) => {
-                            const newList = [...fieldOptionsList];
-                            newList[index].variantMapping = val;
-                            setFieldOptionsList(newList);
-                          }}
-                          placeholder="Variant ID (Optional)"
-                          autoComplete="off"
-                          connectedRight={
-                            <Button
-                              onClick={async () => {
-                                const selected = await shopify.resourcePicker({
-                                  type: "product",
-                                  multiple: false,
-                                  action: "select",
-                                });
-                                if (selected && selected.length > 0 && selected[0].variants && selected[0].variants.length > 0) {
-                                  // Pick the first variant selected or the default variant
-                                  let variantIdStr = selected[0].variants[0]?.id; // Output is like 'gid://shopify/ProductVariant/44716211765305'
-                                  if (variantIdStr) {
-                                    // Strip gid wrapper
-                                    const matches = variantIdStr.match(/\d+$/);
-                                    if (matches) {
-                                      const newList = [...fieldOptionsList];
-                                      newList[index].variantMapping = matches[0];
-                                      setFieldOptionsList(newList);
-                                    }
-                                  }
-                                }
-                              }}
-                            >
-                              Browse
-                            </Button>
-                          }
-                        />
-                        <Button
-                          tone="critical"
-                          variant="plain"
-                          accessibilityLabel="Remove option"
-                          onClick={() => setFieldOptionsList(fieldOptionsList.filter((_, i) => i !== index))}
-                        >
-                          Remove
-                        </Button>
-                      </InlineGrid>
-                    ))}
-                    <InlineStack>
-                      <Button onClick={() => setFieldOptionsList([...fieldOptionsList, { label: "", price: "", variantMapping: "" }])}>
-                        Add Option
-                      </Button>
-                    </InlineStack>
+          <Modal
+            open={showFieldForm}
+            onClose={resetFieldForm}
+            title={editingFieldId ? "Edit Field" : "New Field"}
+            primaryAction={{
+              content: editingFieldId ? "Save Field" : "Add Field",
+              onAction: handleSaveField,
+              disabled: !fieldName || !fieldLabel,
+            }}
+            secondaryActions={[
+              {
+                content: "Cancel",
+                onAction: resetFieldForm,
+              },
+            ]}
+            large
+          >
+            <Tabs
+              tabs={[
+                { id: "basic-info", content: "Basic Info", accessibilityLabel: "Basic Info", panelID: "basic-info-panel" },
+                { id: "options", content: "Options & Values", accessibilityLabel: "Options and Values", panelID: "options-panel" },
+                { id: "display", content: "Display Settings", accessibilityLabel: "Display Settings", panelID: "display-panel" },
+              ]}
+              selected={fieldModalTab}
+              onSelect={setFieldModalTab}
+            >
+              <Box padding="400">
+                {fieldModalTab === 0 && (
+                  <BlockStack gap="400">
+                    <Select
+                      label="Field Type"
+                      options={fieldTypeOptions}
+                      value={fieldType}
+                      onChange={setFieldType}
+                    />
+                    <TextField
+                      label="Field Name (internal)"
+                      value={fieldName}
+                      onChange={setFieldName}
+                      placeholder="e.g., shirt_size"
+                      helpText="Used for API/data, no spaces"
+                      autoComplete="off"
+                    />
+                    <TextField
+                      label="Field Label (customer-facing)"
+                      value={fieldLabel}
+                      onChange={setFieldLabel}
+                      placeholder="e.g., Shirt Size"
+                      autoComplete="off"
+                    />
+                    <Checkbox
+                      label="Required field"
+                      checked={fieldRequired}
+                      onChange={setFieldRequired}
+                    />
                   </BlockStack>
                 )}
-
-                <Checkbox
-                  label="Required field"
-                  checked={fieldRequired}
-                  onChange={setFieldRequired}
-                />
-
-                <InlineGrid columns={2} gap="200">
-                  <Button onClick={resetFieldForm}>
-                    Cancel
-                  </Button>
-                  <Button
-                    variant="primary"
-                    onClick={handleSaveField}
-                    disabled={!fieldName || !fieldLabel}
-                  >
-                    {editingFieldId ? "Save Field" : "Add Field"}
-                  </Button>
-                </InlineGrid>
-              </BlockStack>
-            </Card>
-          )}
+                {fieldModalTab === 1 && (
+                  <BlockStack gap="400">
+                    {["select", "radio", "checkbox"].includes(fieldType) ? (
+                      <BlockStack gap="300">
+                        <Text as="h5" variant="headingSm">Options, Pricing & Shopify Variant Sync</Text>
+                        {fieldOptionsList.map((opt, index) => (
+                          <InlineGrid columns="1fr 100px 170px auto" gap="200" key={index} alignItems="center">
+                            <TextField
+                              labelHidden
+                              label={`Option ${index + 1}`}
+                              value={opt.label}
+                              onChange={(val) => {
+                                const newList = [...fieldOptionsList];
+                                newList[index].label = val;
+                                setFieldOptionsList(newList);
+                              }}
+                              placeholder="e.g., Small"
+                              autoComplete="off"
+                            />
+                            <TextField
+                              labelHidden
+                              label={`Price Adjustment ${index + 1}`}
+                              value={opt.price}
+                              onChange={(val) => {
+                                const newList = [...fieldOptionsList];
+                                newList[index].price = val;
+                                setFieldOptionsList(newList);
+                              }}
+                              prefix="$"
+                              type="number"
+                              placeholder="0.00"
+                              autoComplete="off"
+                            />
+                            <TextField
+                              labelHidden
+                              label={`Variant Mapping (Shopify ID)`}
+                              value={opt.variantMapping}
+                              onChange={(val) => {
+                                const newList = [...fieldOptionsList];
+                                newList[index].variantMapping = val;
+                                setFieldOptionsList(newList);
+                              }}
+                              placeholder="Variant ID"
+                              autoComplete="off"
+                              connectedRight={
+                                <Button
+                                  onClick={async () => {
+                                    const selected = await shopify.resourcePicker({
+                                      type: "product",
+                                      multiple: false,
+                                      action: "select",
+                                    });
+                                    if (selected && selected.length > 0 && selected[0].variants && selected[0].variants.length > 0) {
+                                      let variantIdStr = selected[0].variants[0]?.id;
+                                      if (variantIdStr) {
+                                        const matches = variantIdStr.match(/\d+$/);
+                                        if (matches) {
+                                          const newList = [...fieldOptionsList];
+                                          newList[index].variantMapping = matches[0];
+                                          setFieldOptionsList(newList);
+                                        }
+                                      }
+                                    }
+                                  }}
+                                >
+                                  Browse
+                                </Button>
+                              }
+                            />
+                            <Button
+                              tone="critical"
+                              variant="plain"
+                              accessibilityLabel="Remove option"
+                              onClick={() => setFieldOptionsList(fieldOptionsList.filter((_, i) => i !== index))}
+                            >
+                              Remove
+                            </Button>
+                          </InlineGrid>
+                        ))}
+                        <InlineStack>
+                          <Button onClick={() => setFieldOptionsList([...fieldOptionsList, { label: "", price: "", variantMapping: "" }])}>
+                            Add Option
+                          </Button>
+                        </InlineStack>
+                      </BlockStack>
+                    ) : (
+                      <Banner tone="info">
+                        <Text as="p">The selected field type ({fieldType}) does not support predefined options. It relies on customer input.</Text>
+                      </Banner>
+                    )}
+                  </BlockStack>
+                )}
+                {fieldModalTab === 2 && (
+                  <BlockStack gap="400">
+                    <Banner tone="info">
+                      <Text as="p">Advanced display settings (Swatches, Button Pills) are coming soon.</Text>
+                    </Banner>
+                  </BlockStack>
+                )}
+              </Box>
+            </Tabs>
+          </Modal>
         </BlockStack>
       </Card>
 
@@ -1507,51 +1532,110 @@ export default function TemplateDetail() {
         },
       ]}
     >
-      <BlockStack gap="500">
-        <Card>
-          <BlockStack gap="400">
-            <TextField
-              label="Template Name"
-              value={templateName}
-              onChange={setTemplateName}
-              autoComplete="off"
-            />
-            <InlineGrid columns="1fr auto">
-              <div />
-              <Button
-                onClick={() =>
-                  submit(
-                    { templateName, _intent: "updateName" },
-                    { method: "post" }
-                  )
-                }
-                disabled={templateName === template.name}
-                variant="primary"
-              >
-                Save Name
-              </Button>
-            </InlineGrid>
-          </BlockStack>
-        </Card>
+      <Layout>
+        <Layout.Section>
+          <BlockStack gap="500">
+            <Card>
+              <BlockStack gap="400">
+                <TextField
+                  label="Template Name"
+                  value={templateName}
+                  onChange={setTemplateName}
+                  autoComplete="off"
+                />
+                <InlineGrid columns="1fr auto">
+                  <div />
+                  <Button
+                    onClick={() =>
+                      submit(
+                        { templateName, _intent: "updateName" },
+                        { method: "post" }
+                      )
+                    }
+                    disabled={templateName === template.name}
+                    variant="primary"
+                  >
+                    Save Name
+                  </Button>
+                </InlineGrid>
+              </BlockStack>
+            </Card>
 
-        <Tabs
-          tabs={[
-            { id: "fields", content: "Options", badge: String(template.fields.filter((f: any) => !template.rules.some((r: any) => r.actionType === 'LIMIT_OPTIONS_DATASET' && r.targetFieldId === f.id)).length) },
-            { id: "products", content: "Products", badge: String(template.links.length) },
-            { id: "rules", content: "Rules", badge: String(template.rules.length) },
-            { id: "appearance", content: "Appearance" },
-          ]}
-          selected={selectedTab}
-          onSelect={setSelectedTab}
-        >
-          <div style={{ marginTop: "1rem" }}>
-            {selectedTab === 0 && FieldsView}
-            {selectedTab === 1 && ProductsView}
-            {selectedTab === 2 && RulesView}
-            {selectedTab === 3 && AppearanceView}
+            <Tabs
+              tabs={[
+                { id: "fields", content: "Options", badge: String(template.fields.filter((f: any) => !template.rules.some((r: any) => r.actionType === 'LIMIT_OPTIONS_DATASET' && r.targetFieldId === f.id)).length) },
+                { id: "products", content: "Products", badge: String(template.links.length) },
+                { id: "rules", content: "Rules", badge: String(template.rules.length) },
+                { id: "appearance", content: "Appearance" },
+              ]}
+              selected={selectedTab}
+              onSelect={setSelectedTab}
+            >
+              <div style={{ marginTop: "1rem" }}>
+                {selectedTab === 0 && FieldsView}
+                {selectedTab === 1 && ProductsView}
+                {selectedTab === 2 && RulesView}
+                {selectedTab === 3 && AppearanceView}
+              </div>
+            </Tabs>
+          </BlockStack>
+        </Layout.Section>
+
+        <Layout.Section variant="oneThird">
+          <div style={{ position: 'sticky', top: '1rem' }}>
+            <Card>
+              <BlockStack gap="400">
+                <Text variant="headingMd" as="h2">Live Preview</Text>
+                <Divider />
+                <div
+                  style={{
+                    fontFamily: fontFamily || undefined,
+                    fontSize: fontSize || undefined,
+                    fontWeight: fontWeight || undefined,
+                    color: textColor || undefined,
+                  }}
+                >
+                  <BlockStack gap="400">
+                    {template.fields.map((f: any) => (
+                      <BlockStack gap="200" key={f.id}>
+                        <Text variant="headingSm" as="h3">
+                          {f.label} {f.required && <span style={{ color: "red" }}>*</span>}
+                        </Text>
+                        {f.type === "select" ? (
+                           <Select
+                             labelHidden
+                             label={f.label}
+                             options={
+                               f.optionsJson 
+                                 ? (Array.isArray(f.optionsJson) ? f.optionsJson : JSON.parse(f.optionsJson || "[]")).map((opt: string) => ({ label: opt, value: opt }))
+                                 : []
+                             }
+                           />
+                        ) : f.type === "text" ? (
+                          <TextField labelHidden label={f.label} autoComplete="off" />
+                        ) : f.type === "checkbox" ? (
+                           <Checkbox label={f.optionsJson ? (Array.isArray(f.optionsJson) ? f.optionsJson[0] : JSON.parse(f.optionsJson || "[]")[0]) : f.label} checked={false} onChange={() => {}} />
+                        ) : f.type === "radio" ? (
+                           <BlockStack gap="200">
+                             {f.optionsJson 
+                               ? (Array.isArray(f.optionsJson) ? f.optionsJson : JSON.parse(f.optionsJson || "[]")).map((opt: string) => (
+                                   <Checkbox key={opt} label={opt} checked={false} onChange={() => {}} />
+                                 ))
+                               : null}
+                           </BlockStack>
+                        ) : null}
+                      </BlockStack>
+                    ))}
+                    {template.fields.length === 0 && (
+                      <Text tone="subdued" as="p">Add fields to see them previewed here.</Text>
+                    )}
+                  </BlockStack>
+                </div>
+              </BlockStack>
+            </Card>
           </div>
-        </Tabs>
-      </BlockStack>
+        </Layout.Section>
+      </Layout>
     </Page>
   );
 }
