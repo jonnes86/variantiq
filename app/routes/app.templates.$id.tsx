@@ -26,10 +26,11 @@ import {
   ButtonGroup,
   Modal,
   Box,
-  Layout
+  Layout,
+  List
 } from "@shopify/polaris";
 import { prisma } from "../db.server";
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { authenticate } from "../shopify.server";
 import { CanvasRuleBuilder } from "../components/CanvasRuleBuilder";
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
