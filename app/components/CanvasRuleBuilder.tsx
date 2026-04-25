@@ -44,7 +44,7 @@ function FieldNodeComponent({ data, id }: any) {
 
     return (
         <div style={{ background: '#ffffff', border: '1px solid var(--p-color-border-strong)', borderRadius: '8px', minWidth: '220px', boxShadow: 'var(--p-shadow-100)' }}>
-            <Handle type="target" position={Position.Top} style={{ background: 'var(--p-color-bg-fill-info)', width: '16px', height: '16px', borderRadius: '4px' }} />
+            <Handle type="target" position={Position.Left} style={{ background: 'var(--p-color-bg-fill-info)', width: '16px', height: '16px', borderRadius: '4px', top: '24px', left: '-8px' }} />
             
             <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--p-color-border-subdued)', background: 'var(--p-color-bg-surface-secondary)', borderTopLeftRadius: '8px', borderTopRightRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <BlockStack gap="0">
