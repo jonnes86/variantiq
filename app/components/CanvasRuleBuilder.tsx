@@ -46,9 +46,14 @@ function FieldNodeComponent({ data, id }: any) {
         <div style={{ background: '#ffffff', border: '1px solid var(--p-color-border-strong)', borderRadius: '8px', minWidth: '220px', boxShadow: 'var(--p-shadow-100)' }}>
             <Handle type="target" position={Position.Top} style={{ background: 'var(--p-color-bg-fill-info)', width: '16px', height: '16px', borderRadius: '4px' }} />
             
-            <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--p-color-border-subdued)', background: 'var(--p-color-bg-surface-secondary)', borderTopLeftRadius: '8px', borderTopRightRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Text as="span" variant="bodyMd" fontWeight="bold">👖 {field.label || field.name}</Text>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--p-color-border-subdued)', background: 'var(--p-color-bg-surface-secondary)', borderTopLeftRadius: '8px', borderTopRightRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <BlockStack gap="0">
+                    <Text as="span" variant="bodyMd" fontWeight="bold">👖 {field.label || field.name}</Text>
+                    {field.label && field.label !== field.name && (
+                        <Text as="span" variant="bodySm" tone="subdued">Internal: {field.name}</Text>
+                    )}
+                </BlockStack>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingTop: '2px' }}>
                     <div onClick={(e) => { e.stopPropagation(); onEditField?.(id); }} style={{ cursor: 'pointer' }}>
                         <Icon source={EditIcon} tone="subdued" />
                     </div>
