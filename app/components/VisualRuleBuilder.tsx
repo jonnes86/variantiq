@@ -10,7 +10,8 @@ import {
     Modal,
     TextField,
     Checkbox,
-    InlineGrid
+    InlineGrid,
+    Badge
 } from "@shopify/polaris";
 import { DeleteIcon, PlusIcon } from "@shopify/polaris-icons";
 
@@ -72,14 +73,7 @@ function useVisualBuilder() {
 // COMPONENTS
 // ----------------------------------------------------
 
-// Alternating depth colours — higher contrast for easy visual scanning
-const DEPTH_COLORS = [
-    "#ffffff",  // depth 0 — root: white
-    "#eef0ff",  // depth 1 — medium lavender
-    "#e6f7ed",  // depth 2 — medium mint
-    "#fef9e7",  // depth 3 — medium amber
-    "#f3e8ff",  // depth 4 — medium violet
-];
+// Colors removed in favor of clean nested lines
 
 function FieldNode({
     field,
@@ -105,8 +99,7 @@ function FieldNode({
     const isDatasetDirty = datasetId !== savedDataset;
     const isDirty = isPositionDirty || isDatasetDirty;
 
-    const bgColor = DEPTH_COLORS[depth % DEPTH_COLORS.length];
-    const dirtyStyle = isDirty ? { borderLeft: "3px solid #f59e0b", background: "#fffbeb" } : { background: bgColor };
+    const dirtyStyle = isDirty ? { borderLeft: "3px solid #f59e0b", background: "#fffbeb" } : { background: "#ffffff" };
 
     // Build the dropdown options to include Fields AND Datasets
     const dropdownOptions = [
@@ -184,7 +177,7 @@ function FieldNode({
 
                         {/* Child Zones for Options */}
                         {options.length > 0 && !collapsedNodes.has(field.id) && (
-                            <div style={{ marginLeft: "14px", marginTop: "8px", display: "flex", flexDirection: "column", gap: "8px" }}>
+                            <div style={{ marginLeft: "14px", marginTop: "8px", display: "flex", flexDirection: "column", gap: "12px" }}>
                                 {options.map((opt) => {
                                     const dropId = `${field.id}::${opt}`;
                                     const nestedChildIds = tree[dropId] || [];
@@ -192,32 +185,30 @@ function FieldNode({
                                     return (
                                         <div key={opt} style={{
                                             paddingLeft: "16px",
-                                            borderLeft: `2px solid ${DEPTH_COLORS[(depth + 1) % DEPTH_COLORS.length] === "#ffffff" ? "var(--p-color-border)" : DEPTH_COLORS[(depth + 1) % DEPTH_COLORS.length]}`,
+                                            borderLeft: `2px solid var(--p-color-border)`,
                                             marginLeft: "8px"
                                         }}>
                                             <BlockStack gap="200">
-                                                <Text as="span" variant="bodySm" fontWeight="bold" tone="subdued">
-                                                    ↳ If chosen: {opt}
-                                                </Text>
+                                                <InlineStack align="start" blockAlign="center" gap="100">
+                                                    <Badge tone="info">IF</Badge>
+                                                    <Text as="span" variant="bodySm" fontWeight="bold">{field.label || field.name}</Text>
+                                                    <Text as="span" variant="bodySm">=</Text>
+                                                    <Badge tone="success">{opt}</Badge>
+                                                    <Text as="span" variant="bodySm" tone="subdued">THEN SHOW:</Text>
+                                                </InlineStack>
 
-                                                <div style={{ minHeight: "20px", padding: "8px", backgroundColor: DEPTH_COLORS[(depth + 1) % DEPTH_COLORS.length], borderRadius: "var(--p-border-radius-100)", border: "1px dashed var(--p-color-border)" }}>
-                                                    {nestedChildIds.length === 0 ? (
-                                                        <Text as="span" variant="bodySm" tone="subdued">
-                                                            No fields assigned to this choice.
-                                                        </Text>
-                                                    ) : (
-                                                        nestedChildIds.map(childId => (
-                                                            <RenderFieldNodeById
-                                                                key={childId}
-                                                                fieldId={childId}
-                                                                isNested={true}
-                                                                containerId={dropId}
-                                                                depth={depth + 1}
-                                                            />
-                                                        ))
-                                                    )}
+                                                <div style={{ minHeight: nestedChildIds.length > 0 ? "20px" : "auto", padding: nestedChildIds.length > 0 ? "8px" : "0 0 0 8px", backgroundColor: nestedChildIds.length > 0 ? "var(--p-color-bg-surface-secondary)" : "transparent", borderRadius: "var(--p-border-radius-100)", border: nestedChildIds.length > 0 ? "1px solid var(--p-color-border)" : "none" }}>
+                                                    {nestedChildIds.length > 0 && nestedChildIds.map(childId => (
+                                                        <RenderFieldNodeById
+                                                            key={childId}
+                                                            fieldId={childId}
+                                                            isNested={true}
+                                                            containerId={dropId}
+                                                            depth={depth + 1}
+                                                        />
+                                                    ))}
 
-                                                    <div style={{ marginTop: "12px", maxWidth: "300px" }}>
+                                                    <div style={{ marginTop: nestedChildIds.length > 0 ? "12px" : "4px", maxWidth: "300px" }}>
                                                         <Select
                                                             label="Assign rule: Show field"
                                                             labelHidden
