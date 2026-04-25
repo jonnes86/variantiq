@@ -18,7 +18,8 @@ import {
 } from '@xyflow/react';
 import dagre from 'dagre';
 import '@xyflow/react/dist/style.css';
-import { Card, BlockStack, Text, Button, InlineStack, Select, Badge, Box } from '@shopify/polaris';
+import { Card, BlockStack, Text, Button, InlineStack, Select, Badge, Box, Icon } from '@shopify/polaris';
+import { EditIcon } from '@shopify/polaris-icons';
 
 export interface Field {
     id: string;
@@ -37,7 +38,7 @@ export interface Rule {
 }
 
 function FieldNodeComponent({ data, id }: any) {
-    const { field, onDelete, onDatasetChange, datasets, selectedDatasetId } = data;
+    const { field, onDelete, onEditField, onDatasetChange, datasets, selectedDatasetId } = data;
     const options = Array.isArray(field.optionsJson) ? field.optionsJson : [];
 
     return (
@@ -46,8 +47,13 @@ function FieldNodeComponent({ data, id }: any) {
             
             <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--p-color-border-subdued)', background: 'var(--p-color-bg-surface-secondary)', borderTopLeftRadius: '8px', borderTopRightRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Text as="span" variant="bodyMd" fontWeight="bold">👖 {field.label || field.name}</Text>
-                <div onClick={(e) => { e.stopPropagation(); onDelete(id); }} style={{ cursor: 'pointer', color: 'var(--p-color-text-critical)', fontSize: '18px', lineHeight: '1' }}>
-                    ×
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div onClick={(e) => { e.stopPropagation(); onEditField?.(id); }} style={{ cursor: 'pointer' }}>
+                        <Icon source={EditIcon} tone="subdued" />
+                    </div>
+                    <div onClick={(e) => { e.stopPropagation(); onDelete(id); }} style={{ cursor: 'pointer', color: 'var(--p-color-text-critical)', fontSize: '18px', lineHeight: '1', paddingLeft: '4px' }}>
+                        ×
+                    </div>
                 </div>
             </div>
 
@@ -99,16 +105,26 @@ interface CanvasRuleBuilderProps {
     datasets?: any[];
     onSaveRules: (newRules: Partial<Rule>[], fieldSortOrder?: any[]) => void;
     onAddNewField?: () => void;
+    onEditField?: (fieldId: string) => void;
     onRegisterSaveRef?: (fn: () => void) => void;
     lastSavedAt?: Date | null;
 }
 
-export function CanvasRuleBuilder({ fields, rules, datasets = [], onSaveRules, onAddNewField, onRegisterSaveRef, lastSavedAt }: CanvasRuleBuilderProps) {
+export function CanvasRuleBuilder(props: CanvasRuleBuilderProps) {
+    return (
+        <ReactFlowProvider>
+            <CanvasRuleBuilderInner {...props} />
+        </ReactFlowProvider>
+    );
+}
+
+function CanvasRuleBuilderInner({ fields, rules, datasets = [], onSaveRules, onAddNewField, onEditField, onRegisterSaveRef, lastSavedAt }: CanvasRuleBuilderProps) {
     const [nodes, setNodes] = useState<Node[]>([]);
     const [edges, setEdges] = useState<Edge[]>([]);
     const nodesRef = React.useRef<Node[]>([]);
     const edgesRef = React.useRef<Edge[]>([]);
     const [history, setHistory] = useState<{nodes: Node[], edges: Edge[]}[]>([]);
+    const { fitView } = useReactFlow();
 
     useEffect(() => {
         nodesRef.current = nodes;
@@ -217,7 +233,7 @@ export function CanvasRuleBuilder({ fields, rules, datasets = [], onSaveRules, o
         // Update data callbacks dynamically
         const updatedNodes = initialNodes.map(n => ({
             ...n,
-            data: { ...n.data, onDelete: handleDeleteNode, onDatasetChange: handleDatasetChange, datasets }
+            data: { ...n.data, onDelete: handleDeleteNode, onEditField, onDatasetChange: handleDatasetChange, datasets }
         }));
 
         // Apply auto-layout if any nodes are missing saved coordinates (x=50, y=50 pattern)
@@ -250,7 +266,11 @@ export function CanvasRuleBuilder({ fields, rules, datasets = [], onSaveRules, o
 
         setNodes(updatedNodes);
         setEdges(initialEdges);
-    }, [fields, rules, datasets, handleDeleteNode, handleDatasetChange]);
+
+        setTimeout(() => {
+            fitView({ padding: 0.2, duration: 800 });
+        }, 50);
+    }, [fields, rules, datasets, handleDeleteNode, handleDatasetChange, fitView, onEditField]);
 
     const onLayout = useCallback(() => {
         saveHistory();
@@ -280,7 +300,11 @@ export function CanvasRuleBuilder({ fields, rules, datasets = [], onSaveRules, o
                 };
             })
         );
-    }, [nodes, edges, saveHistory]);
+
+        setTimeout(() => {
+            fitView({ padding: 0.2, duration: 800 });
+        }, 50);
+    }, [nodes, edges, saveHistory, fitView]);
 
     const handleSave = () => {
         const compiledRules: Partial<Rule>[] = [];

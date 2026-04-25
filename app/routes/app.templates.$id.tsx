@@ -720,6 +720,42 @@ export async function action({ request, params }: ActionFunctionArgs) {
     return redirect("/app");
   }
 
+  // Save dataset
+  if (intent === "saveDataset") {
+    const datasetId = String(form.get("datasetId") || "");
+    const name = String(form.get("name") || "").trim();
+    const label = String(form.get("label") || "").trim();
+    const type = String(form.get("type") || "select").trim();
+    const rawOptions = String(form.get("options") || "");
+
+    const newOptions = rawOptions
+      .split(/\r?\n/)
+      .map(opt => opt.trim())
+      .filter(opt => opt.length > 0);
+    const uniqueOptions = Array.from(new Set(newOptions));
+
+    if (!name) return json({ error: "Dataset name required" }, { status: 400 });
+
+    if (datasetId && datasetId !== "new") {
+      await prisma.dataset.update({
+        where: { id: datasetId, shop: session.shop },
+        data: { name, label, type, optionsJson: JSON.stringify(uniqueOptions) },
+      });
+    } else {
+      await prisma.dataset.create({
+        data: { shop: session.shop, name, label, type, optionsJson: JSON.stringify(uniqueOptions) },
+      });
+    }
+    return json({ success: true });
+  }
+
+  // Delete dataset
+  if (intent === "deleteDataset") {
+    const datasetId = String(form.get("datasetId") || "");
+    await prisma.dataset.delete({ where: { id: datasetId, shop: session.shop } });
+    return json({ success: true });
+  }
+
   return null;
 }
 
@@ -1064,6 +1100,53 @@ export default function TemplateDetail() {
     }
   };
 
+  // Dataset Modal State
+  const [showDatasetForm, setShowDatasetForm] = useState(false);
+  const [editingDatasetId, setEditingDatasetId] = useState<string | null>(null);
+  const [datasetName, setDatasetName] = useState("");
+  const [datasetLabel, setDatasetLabel] = useState("");
+  const [datasetType, setDatasetType] = useState("select");
+  const [datasetOptionsStr, setDatasetOptionsStr] = useState("");
+
+  const resetDatasetForm = useCallback(() => {
+    setEditingDatasetId(null);
+    setDatasetName("");
+    setDatasetLabel("");
+    setDatasetType("select");
+    setDatasetOptionsStr("");
+    setShowDatasetForm(false);
+  }, []);
+
+  const handleEditDatasetClick = useCallback((dataset: any) => {
+    setEditingDatasetId(dataset.id);
+    setDatasetName(dataset.name);
+    setDatasetLabel(dataset.label || "");
+    setDatasetType(dataset.type || "select");
+    
+    let opts: string[] = [];
+    try { opts = typeof dataset.optionsJson === 'string' ? JSON.parse(dataset.optionsJson) : (dataset.optionsJson || []); } catch(e){}
+    setDatasetOptionsStr(opts.join("\n"));
+    
+    setShowDatasetForm(true);
+  }, []);
+
+  const handleSaveDataset = useCallback(() => {
+    const formData = new FormData();
+    formData.append("_intent", "saveDataset");
+    formData.append("datasetId", editingDatasetId || "new");
+    formData.append("name", datasetName);
+    formData.append("label", datasetLabel);
+    formData.append("type", datasetType);
+    formData.append("options", datasetOptionsStr);
+    submit(formData, { method: "post" });
+    resetDatasetForm();
+  }, [editingDatasetId, datasetName, datasetLabel, datasetType, datasetOptionsStr, submit, resetDatasetForm]);
+
+  const handleDeleteDataset = useCallback((id: string) => {
+    if (!confirm("Are you sure you want to delete this dataset?")) return;
+    submit({ _intent: "deleteDataset", datasetId: id }, { method: "post" });
+  }, [submit]);
+
   const fieldTypeOptions = [
     { label: "Text Input", value: "text" },
     { label: "Dropdown", value: "select" },
@@ -1157,6 +1240,59 @@ export default function TemplateDetail() {
           </Card>
         );
       })()}
+    </BlockStack>
+  );
+
+  const DatasetsView = (
+    <BlockStack gap="400">
+      <Card>
+        <BlockStack gap="400">
+          <InlineGrid columns="1fr auto" gap="400" alignItems="start">
+            <BlockStack gap="200">
+              <Text as="h3" variant="headingMd">
+                Global Data Sets
+              </Text>
+              <Text as="p">
+                Data sets allow you to maintain massive lists of options (like hundreds of thread colors or fonts) in a single place. Any Option Set linked to a dataset will automatically update when you edit the dataset here!
+              </Text>
+            </BlockStack>
+            <Button onClick={() => setShowDatasetForm(true)}>Add Dataset</Button>
+          </InlineGrid>
+        </BlockStack>
+      </Card>
+      
+      {datasets.length === 0 ? (
+        <Card>
+          <Text as="p" tone="subdued">
+            No datasets created yet. Click 'Add Dataset' to get started.
+          </Text>
+        </Card>
+      ) : (
+        <Card padding="0">
+          <List type="bullet">
+            {datasets.map((dataset: any) => (
+              <div key={dataset.id} style={{ padding: '16px', borderBottom: '1px solid var(--p-color-border-subdued)' }}>
+                <InlineStack align="space-between" blockAlign="center">
+                  <BlockStack gap="100">
+                    <Text as="h4" variant="bodyMd" fontWeight="semibold">{dataset.name}</Text>
+                    <Text as="p" tone="subdued" variant="bodySm">
+                      {dataset.type} • {(() => {
+                        let len = 0;
+                        try { len = (typeof dataset.optionsJson === 'string' ? JSON.parse(dataset.optionsJson) : dataset.optionsJson).length; } catch(e){}
+                        return len;
+                      })()} options
+                    </Text>
+                  </BlockStack>
+                  <InlineStack gap="200">
+                    <Button onClick={() => handleEditDatasetClick(dataset)}>Edit</Button>
+                    <Button tone="critical" onClick={() => handleDeleteDataset(dataset.id)}>Delete</Button>
+                  </InlineStack>
+                </InlineStack>
+              </div>
+            ))}
+          </List>
+        </Card>
+      )}
     </BlockStack>
   );
 
@@ -1530,6 +1666,7 @@ export default function TemplateDetail() {
                 { id: "fields", content: "Option Sets", badge: String(template.fields.filter((f: any) => !template.rules.some((r: any) => r.actionType === 'LIMIT_OPTIONS_DATASET' && r.targetFieldId === f.id)).length) },
                 { id: "products", content: "Linked Products", badge: String(template.links.length) },
                 { id: "rules", content: "Rules Editor", badge: String(template.rules.length) },
+                { id: "datasets", content: "Global Data Sets", badge: String(datasets.length) },
                 { id: "appearance", content: "Appearance" },
               ]}
               selected={selectedTab}
@@ -1539,7 +1676,8 @@ export default function TemplateDetail() {
                 {selectedTab === 0 && FieldsView}
                 {selectedTab === 1 && ProductsView}
                 {selectedTab === 2 && RulesView}
-                {selectedTab === 3 && AppearanceView}
+                {selectedTab === 3 && DatasetsView}
+                {selectedTab === 4 && AppearanceView}
               </div>
             </Tabs>
           </BlockStack>
@@ -1567,6 +1705,10 @@ export default function TemplateDetail() {
             lastSavedAt={lastSavedAt}
             onRegisterSaveRef={(fn) => { saveRulesRef.current = fn; }}
             onAddNewField={handleAddFieldClick}
+            onEditField={(fieldId) => {
+              const field = template.fields.find(f => f.id === fieldId);
+              if (field) handleEditFieldClick(field);
+            }}
             onSaveRules={(newRules, fieldSortOrder) => {
               submit(
                 {
@@ -1743,6 +1885,58 @@ export default function TemplateDetail() {
           </Box>
         </Tabs>
       </Modal>
+
+      <Modal
+        open={showDatasetForm}
+        onClose={resetDatasetForm}
+        title={editingDatasetId ? "Edit Dataset" : "New Dataset"}
+        primaryAction={{
+          content: editingDatasetId ? "Save Dataset" : "Add Dataset",
+          onAction: handleSaveDataset,
+          disabled: !datasetName || !datasetOptionsStr,
+        }}
+        secondaryActions={[{ content: "Cancel", onAction: resetDatasetForm }]}
+      >
+        <Modal.Section>
+          <BlockStack gap="400">
+            <TextField
+                label="Dataset Name (Internal)"
+                value={datasetName}
+                onChange={setDatasetName}
+                autoComplete="off"
+                helpText="Identify this dataset in the rule builder (e.g., 'Nike Fall Colors')"
+            />
+            <TextField
+                label="Public Display Name"
+                value={datasetLabel}
+                onChange={setDatasetLabel}
+                autoComplete="off"
+                helpText="The label shown to customers on the storefront"
+            />
+            <Select
+                label="Display Type"
+                options={[
+                    { label: "Dropdown Select", value: "select" },
+                    { label: "Radio Buttons", value: "radio" },
+                    { label: "Checkboxes", value: "checkbox" }
+                ]}
+                value={datasetType}
+                onChange={setDatasetType}
+                helpText="How these options should be presented to customers"
+            />
+            <TextField
+                label="Options (one per line)"
+                value={datasetOptionsStr}
+                onChange={setDatasetOptionsStr}
+                multiline={12}
+                autoComplete="off"
+                placeholder="Red&#10;Blue&#10;Green"
+                helpText="Enter each option on a new line. Empty lines and exact duplicates will be automatically ignored upon saving."
+            />
+          </BlockStack>
+        </Modal.Section>
+      </Modal>
+
     </Page>
   );
 }
