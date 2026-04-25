@@ -11,7 +11,9 @@ import {
     TextField,
     Checkbox,
     InlineGrid,
-    Badge
+    Badge,
+    Popover,
+    ActionList
 } from "@shopify/polaris";
 import { DeleteIcon, PlusIcon } from "@shopify/polaris-icons";
 
@@ -132,10 +134,6 @@ function FieldNode({
                 gap: "12px",
                 minHeight: "44px"
             }}>
-                {/* Visual Tree Connector */}
-                {!isRoot && (
-                    <span style={{ color: "var(--p-color-border-strong)", userSelect: "none", fontFamily: "monospace", fontSize: "16px" }}>└─</span>
-                )}
                 {isRoot && (
                     <span style={{ color: "var(--p-color-icon)", userSelect: "none", fontSize: "12px" }}>▼</span>
                 )}
@@ -195,53 +193,134 @@ function FieldNode({
 
             {/* 2) Render the Options rows under this Field */}
             {options.length > 0 && !collapsedNodes.has(field.id) && (
-                options.map((opt) => {
-                    const dropId = `${field.id}::${opt}`;
-                    const nestedChildIds = tree[dropId] || [];
+                options.map((opt) => (
+                    <OptionRow 
+                        key={opt}
+                        opt={opt}
+                        fieldId={field.id}
+                        depth={depth}
+                        tree={tree}
+                        availableFields={availableFields}
+                        datasets={datasets}
+                        handleSelectChange={handleSelectChange}
+                    />
+                ))
+            )}
+        </React.Fragment>
+    );
+}
 
-                    return (
-                        <React.Fragment key={opt}>
-                            {/* Option Row */}
-                            <div style={{
-                                display: "flex",
-                                alignItems: "center",
-                                padding: "6px 16px",
-                                paddingLeft: `${depth * 32 + 36}px`,
-                                borderBottom: "1px dashed var(--p-color-border-subdued)",
-                                backgroundColor: "var(--p-color-bg-surface-secondary)",
-                                gap: "8px",
-                                minHeight: "36px"
-                            }}>
-                                <span style={{ color: "var(--p-color-border-strong)", userSelect: "none", fontFamily: "monospace", fontSize: "16px" }}>├─</span>
-                                <Text as="span" variant="bodySm" tone="subdued">If:</Text>
-                                <Badge tone="success">{opt}</Badge>
-                                
-                                <div style={{ flex: 1 }} />
+function OptionRow({
+    opt,
+    fieldId,
+    depth,
+    tree,
+    availableFields,
+    datasets,
+    handleSelectChange
+}: {
+    opt: string,
+    fieldId: string,
+    depth: number,
+    tree: Record<string, string[]>,
+    availableFields: Field[],
+    datasets: any[],
+    handleSelectChange: (val: string, dropId: string) => void
+}) {
+    const [popoverActive, setPopoverActive] = useState(false);
+    const dropId = `${fieldId}::${opt}`;
+    const nestedChildIds = tree[dropId] || [];
 
-                                <div style={{ maxWidth: "200px" }}>
-                                    <Select
-                                        label="Assign rule: Show field"
-                                        labelHidden
-                                        options={dropdownOptions}
-                                        value=""
-                                        onChange={(val) => handleSelectChange(val, dropId)}
-                                    />
-                                </div>
-                            </div>
+    const togglePopover = useCallback(() => setPopoverActive((prev) => !prev), []);
 
-                            {/* Nested Fields under this option */}
-                            {nestedChildIds.map(childId => (
-                                <RenderFieldNodeById
-                                    key={childId}
-                                    fieldId={childId}
-                                    isNested={true}
-                                    containerId={dropId}
-                                    depth={depth + 1}
-                                />
-                            ))}
-                        </React.Fragment>
-                    );
-                })
+    const actionSections = [
+        {
+            items: [
+                { content: '+ Create New Field', onAction: () => { setPopoverActive(false); handleSelectChange("CREATE_NEW", dropId); } }
+            ]
+        },
+        ...(availableFields.length > 0 ? [{
+            title: 'Available Fields',
+            items: availableFields.map(f => ({ content: f.name, onAction: () => { setPopoverActive(false); handleSelectChange(f.id, dropId); } }))
+        }] : []),
+        ...(datasets.length > 0 ? [{
+            title: 'Datasets',
+            items: datasets.map(d => ({ content: d.name, onAction: () => { setPopoverActive(false); handleSelectChange(`dataset_${d.id}`, dropId); } }))
+        }] : [])
+    ];
+
+    return (
+        <React.Fragment>
+            {/* Option Row */}
+            <div style={{
+                position: "relative",
+                display: "flex",
+                alignItems: "center",
+                padding: "6px 16px",
+                paddingLeft: `${depth * 32 + 48}px`, // Increased padding to fit the border line
+                borderBottom: "1px dashed var(--p-color-border-subdued)",
+                backgroundColor: "var(--p-color-bg-surface-secondary)",
+                gap: "8px",
+                minHeight: "36px"
+            }}>
+                {/* Continuous Vertical Branching Line */}
+                <div style={{
+                    position: "absolute",
+                    left: `${depth * 32 + 24}px`,
+                    top: 0,
+                    bottom: 0,
+                    width: "2px",
+                    backgroundColor: "var(--p-color-border-subdued)"
+                }} />
+
+                <Text as="span" variant="bodySm" tone="subdued">If:</Text>
+                <Badge tone="success">{opt}</Badge>
+                
+                <div style={{ flex: 1 }} />
+
+                <Popover
+                    active={popoverActive}
+                    activator={
+                        <Button variant="plain" size="micro" icon={PlusIcon} onClick={togglePopover}>
+                            Add logic
+                        </Button>
+                    }
+                    autofocusTarget="first-node"
+                    onClose={togglePopover}
+                >
+                    <ActionList
+                        actionRole="menuitem"
+                        sections={actionSections}
+                    />
+                </Popover>
+            </div>
+
+            {/* Nested Fields under this option */}
+            {nestedChildIds.length > 0 && (
+                <div style={{ position: "relative" }}>
+                    {/* Extend the vertical branching line behind the children */}
+                    <div style={{
+                        position: "absolute",
+                        left: `${depth * 32 + 24}px`,
+                        top: 0,
+                        bottom: 0,
+                        width: "2px",
+                        backgroundColor: "var(--p-color-border-subdued)",
+                        zIndex: 1
+                    }} />
+
+                    <div style={{ position: "relative", zIndex: 2 }}>
+                        {nestedChildIds.map(childId => (
+                            <RenderFieldNodeById
+                                key={childId}
+                                fieldId={childId}
+                                isNested={true}
+                                containerId={dropId}
+                                depth={depth + 1}
+                            />
+                        ))}
+                    </div>
+                </div>
             )}
         </React.Fragment>
     );
