@@ -160,7 +160,7 @@ function CanvasRuleBuilderInner({ fields, rules, datasets = [], onSaveRules, onA
     const onConnect: OnConnect = useCallback(
         (connection) => {
             saveHistory();
-            setEdges((eds) => addEdge({ ...connection, type: 'smoothstep', animated: true, style: { stroke: '#f59e0b', strokeWidth: 2 } }, eds));
+            setEdges((eds) => addEdge({ ...connection, type: 'smoothstep', animated: true, style: { stroke: '#f59e0b', strokeWidth: 2 }, zIndex: 1000 }, eds));
         },
         [saveHistory]
     );
@@ -206,7 +206,8 @@ function CanvasRuleBuilderInner({ fields, rules, datasets = [], onSaveRules, onA
                         target: r.targetFieldId,
                         type: 'smoothstep',
                         animated: true,
-                        style: { stroke: '#f59e0b', strokeWidth: 2 }
+                        style: { stroke: '#f59e0b', strokeWidth: 2 },
+                        zIndex: 1000
                     });
 
                     // Add nodes if they don't exist
@@ -226,6 +227,22 @@ function CanvasRuleBuilderInner({ fields, rules, datasets = [], onSaveRules, onA
                             }
                         }
                     });
+                }
+            } else if (r.actionType === 'SHOW' && conds.length === 0) {
+                // Unlinked node
+                if (!addedFields.has(r.targetFieldId)) {
+                    const fieldDef = fields.find(f => f.id === r.targetFieldId);
+                    if (fieldDef) {
+                        initialNodes.push({
+                            id: r.targetFieldId,
+                            type: 'fieldNode',
+                            position: targetOpts.x !== undefined ? { x: targetOpts.x, y: targetOpts.y } : { x: rootX, y: rootY },
+                            data: { field: fieldDef, onDelete: handleDeleteNode, onDatasetChange: handleDatasetChange, datasets, selectedDatasetId: targetOpts.datasetId || '' }
+                        });
+                        addedFields.add(r.targetFieldId);
+                        rootX += 50;
+                        rootY += 50;
+                    }
                 }
             } else if (r.actionType === 'LIMIT_OPTIONS_DATASET' && targetOpts.datasetId) {
                 // Attach dataset to existing node
@@ -315,25 +332,37 @@ function CanvasRuleBuilderInner({ fields, rules, datasets = [], onSaveRules, onA
     const handleSave = () => {
         const compiledRules: Partial<Rule>[] = [];
         
-        edges.forEach(edge => {
-            const targetNode = nodes.find(n => n.id === edge.target);
-            const datasetId = targetNode?.data?.selectedDatasetId;
-            const x = targetNode?.position?.x || 0;
-            const y = targetNode?.position?.y || 0;
-
-            compiledRules.push({
-                targetFieldId: edge.target,
-                actionType: "SHOW",
-                conditionsJson: [{ fieldId: edge.source, operator: "EQUALS", value: edge.sourceHandle }],
-                targetOptionsJson: { x, y }
-            });
-
-            if (datasetId) {
+        nodes.forEach(node => {
+            const datasetId = node.data?.selectedDatasetId;
+            const x = node.position.x || 0;
+            const y = node.position.y || 0;
+            
+            const incomingEdges = edges.filter(e => e.target === node.id);
+            
+            if (incomingEdges.length === 0) {
                 compiledRules.push({
-                    targetFieldId: edge.target,
-                    actionType: "LIMIT_OPTIONS_DATASET",
-                    conditionsJson: [{ fieldId: edge.source, operator: "EQUALS", value: edge.sourceHandle }],
-                    targetOptionsJson: { datasetId, x, y }
+                    targetFieldId: node.id,
+                    actionType: "SHOW",
+                    conditionsJson: [],
+                    targetOptionsJson: datasetId ? { datasetId, x, y } : { x, y }
+                });
+            } else {
+                incomingEdges.forEach(edge => {
+                    compiledRules.push({
+                        targetFieldId: edge.target,
+                        actionType: "SHOW",
+                        conditionsJson: [{ fieldId: edge.source, operator: "EQUALS", value: edge.sourceHandle }],
+                        targetOptionsJson: { x, y }
+                    });
+                    
+                    if (datasetId) {
+                        compiledRules.push({
+                            targetFieldId: edge.target,
+                            actionType: "LIMIT_OPTIONS_DATASET",
+                            conditionsJson: [{ fieldId: edge.source, operator: "EQUALS", value: edge.sourceHandle }],
+                            targetOptionsJson: { datasetId, x, y }
+                        });
+                    }
                 });
             }
         });
@@ -369,7 +398,7 @@ function CanvasRuleBuilderInner({ fields, rules, datasets = [], onSaveRules, onA
         ]);
     };
 
-    const fieldOptions = [{ label: "Add field to canvas...", value: "" }, ...fields.map(f => ({ label: f.label || f.name, value: f.id }))];
+    const fieldOptions = [{ label: "Add field to canvas...", value: "" }, ...fields.map(f => ({ label: f.label && f.label !== f.name ? `${f.label} (${f.name})` : f.name, value: f.id }))];
 
     return (
         <Card padding="0">
