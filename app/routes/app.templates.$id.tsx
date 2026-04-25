@@ -66,8 +66,9 @@ function SortableFieldListItem({ field, handleEditFieldClick, handleDeleteField 
             <div {...attributes} {...listeners} style={{ cursor: 'grab', touchAction: 'none' }}>
               <Icon source={DragHandleIcon} tone="subdued" />
             </div>
-            <BlockStack gap="100">
-              <Text as="h4" variant="bodyMd" fontWeight="semibold">
+            <div onClick={() => handleEditFieldClick(field)} style={{ cursor: 'pointer' }}>
+              <BlockStack gap="100">
+                <Text as="h4" variant="bodyMd" fontWeight="semibold">
                 {field.name}
                 {field.required && (
                   <Text as="span" tone="critical"> *</Text>
@@ -85,6 +86,7 @@ function SortableFieldListItem({ field, handleEditFieldClick, handleDeleteField 
                 </Text>
               )}
             </BlockStack>
+            </div>
           </InlineStack>
           <InlineStack gap="200">
             <Button onClick={() => handleEditFieldClick(field)}>Edit</Button>
@@ -1108,170 +1110,11 @@ export default function TemplateDetail() {
                   <Text as="p">Upgrade to Pro for unlimited fields, conditional rules, datasets, and more.</Text>
                 </Banner>
               ) : (
-                <Button onClick={handleAddFieldClick}>Add Field</Button>
+                <Button onClick={handleAddFieldClick}>Add Option Set</Button>
               )
             )}
           </InlineGrid>
 
-          <Modal
-            open={showFieldForm}
-            onClose={resetFieldForm}
-            title={editingFieldId ? "Edit Field" : "New Field"}
-            primaryAction={{
-              content: editingFieldId ? "Save Field" : "Add Field",
-              onAction: handleSaveField,
-              disabled: !fieldName || !fieldLabel,
-            }}
-            secondaryActions={[
-              {
-                content: "Cancel",
-                onAction: resetFieldForm,
-              },
-            ]}
-            large
-          >
-            <Tabs
-              tabs={[
-                { id: "basic-info", content: "Basic Info", accessibilityLabel: "Basic Info", panelID: "basic-info-panel" },
-                { id: "options", content: "Options & Values", accessibilityLabel: "Options and Values", panelID: "options-panel" },
-                { id: "display", content: "Display Settings", accessibilityLabel: "Display Settings", panelID: "display-panel" },
-              ]}
-              selected={fieldModalTab}
-              onSelect={setFieldModalTab}
-            >
-              <Box padding="400">
-                {fieldModalTab === 0 && (
-                  <BlockStack gap="400">
-                    <Select
-                      label="Field Type"
-                      options={fieldTypeOptions}
-                      value={fieldType}
-                      onChange={setFieldType}
-                    />
-                    <TextField
-                      label="Field Name (internal)"
-                      value={fieldName}
-                      onChange={setFieldName}
-                      placeholder="e.g., shirt_size"
-                      helpText="Used for API/data, no spaces"
-                      autoComplete="off"
-                    />
-                    <TextField
-                      label="Field Label (customer-facing)"
-                      value={fieldLabel}
-                      onChange={setFieldLabel}
-                      placeholder="e.g., Shirt Size"
-                      autoComplete="off"
-                    />
-                    <Checkbox
-                      label="Required field"
-                      checked={fieldRequired}
-                      onChange={setFieldRequired}
-                    />
-                  </BlockStack>
-                )}
-                {fieldModalTab === 1 && (
-                  <BlockStack gap="400">
-                    {["select", "radio", "checkbox"].includes(fieldType) ? (
-                      <BlockStack gap="300">
-                        <Text as="h5" variant="headingSm">Options, Pricing & Shopify Variant Sync</Text>
-                        {fieldOptionsList.map((opt, index) => (
-                          <InlineGrid columns="1fr 100px 170px auto" gap="200" key={index} alignItems="center">
-                            <TextField
-                              labelHidden
-                              label={`Option ${index + 1}`}
-                              value={opt.label}
-                              onChange={(val) => {
-                                const newList = [...fieldOptionsList];
-                                newList[index].label = val;
-                                setFieldOptionsList(newList);
-                              }}
-                              placeholder="e.g., Small"
-                              autoComplete="off"
-                            />
-                            <TextField
-                              labelHidden
-                              label={`Price Adjustment ${index + 1}`}
-                              value={opt.price}
-                              onChange={(val) => {
-                                const newList = [...fieldOptionsList];
-                                newList[index].price = val;
-                                setFieldOptionsList(newList);
-                              }}
-                              prefix="$"
-                              type="number"
-                              placeholder="0.00"
-                              autoComplete="off"
-                            />
-                            <TextField
-                              labelHidden
-                              label={`Variant Mapping (Shopify ID)`}
-                              value={opt.variantMapping}
-                              onChange={(val) => {
-                                const newList = [...fieldOptionsList];
-                                newList[index].variantMapping = val;
-                                setFieldOptionsList(newList);
-                              }}
-                              placeholder="Variant ID"
-                              autoComplete="off"
-                              connectedRight={
-                                <Button
-                                  onClick={async () => {
-                                    const selected = await shopify.resourcePicker({
-                                      type: "product",
-                                      multiple: false,
-                                      action: "select",
-                                    });
-                                    if (selected && selected.length > 0 && selected[0].variants && selected[0].variants.length > 0) {
-                                      let variantIdStr = selected[0].variants[0]?.id;
-                                      if (variantIdStr) {
-                                        const matches = variantIdStr.match(/\d+$/);
-                                        if (matches) {
-                                          const newList = [...fieldOptionsList];
-                                          newList[index].variantMapping = matches[0];
-                                          setFieldOptionsList(newList);
-                                        }
-                                      }
-                                    }
-                                  }}
-                                >
-                                  Browse
-                                </Button>
-                              }
-                            />
-                            <Button
-                              tone="critical"
-                              variant="plain"
-                              accessibilityLabel="Remove option"
-                              onClick={() => setFieldOptionsList(fieldOptionsList.filter((_, i) => i !== index))}
-                            >
-                              Remove
-                            </Button>
-                          </InlineGrid>
-                        ))}
-                        <InlineStack>
-                          <Button onClick={() => setFieldOptionsList([...fieldOptionsList, { label: "", price: "", variantMapping: "" }])}>
-                            Add Option
-                          </Button>
-                        </InlineStack>
-                      </BlockStack>
-                    ) : (
-                      <Banner tone="info">
-                        <Text as="p">The selected field type ({fieldType}) does not support predefined options. It relies on customer input.</Text>
-                      </Banner>
-                    )}
-                  </BlockStack>
-                )}
-                {fieldModalTab === 2 && (
-                  <BlockStack gap="400">
-                    <Banner tone="info">
-                      <Text as="p">Advanced display settings (Swatches, Button Pills) are coming soon.</Text>
-                    </Banner>
-                  </BlockStack>
-                )}
-              </Box>
-            </Tabs>
-          </Modal>
         </BlockStack>
       </Card>
 
@@ -1413,34 +1256,31 @@ export default function TemplateDetail() {
           <InlineGrid columns="1fr auto">
             <BlockStack gap="200">
               <Text as="h3" variant="headingMd">
-                Cascading Rules Architecture
+                Rules Editor
               </Text>
-              <Text as="p">
-                Easily dictate exactly when specific product fields should be shown based on what the customer has already selected using the Visual Rule Tree.
-              </Text>
-              <Card background="bg-surface-secondary">
-                <BlockStack gap="200">
-                  <Text as="p" variant="bodyMd">
-                    <Text as="strong">Step 1 (The Root Canvas):</Text><br />
-                    Fields that exist directly on the <Text as="strong">Root Canvas</Text> will be unconditionally visible to every customer on this product. By default, newly created fields start here until you assign them elsewhere.
-                  </Text>
-
-                  <Divider />
-
-                  <Text as="p" variant="bodyMd">
-                    <Text as="strong">Step 2 (Nesting Dependencies):</Text><br />
-                    If you have an "Apparel Type" field with the options "Shirt" and "Pants", two sub-branches will appear beneath the Apparel Type field.<br />
-                    By using the dropdown to assign a "Shirt Size" field directly into the "↳ If chosen: Shirt" nested zone, the system automatically builds the cascade so that the Shirt Size dropdown ONLY appears when "Shirt" is chosen!
-                  </Text>
-
-                  <Divider />
-
-                  <Text as="p" variant="bodyMd">
-                    <Text as="strong">Step 3 (Limiting Options to Datasets):</Text><br />
-                    When nesting drop-down fields in the visual builder, you can attach a <Text as="strong">Global Dataset</Text> constraint using the select box next to the field name. This lets you say "If Shirt is selected, show the Colors field, but LIMIT the choices to the 'Shirt Colors' dataset." You can automatically generate dataset fields directly from the Visual Tree dropdowns!
-                  </Text>
-                </BlockStack>
-              </Card>
+              
+              <details style={{ background: 'var(--p-color-bg-surface-secondary)', padding: '12px', borderRadius: '8px', border: '1px solid var(--p-color-border)', cursor: 'pointer' }}>
+                <summary style={{ fontWeight: 'bold' }}>Instructions & More Info</summary>
+                <div style={{ marginTop: '12px', cursor: 'auto' }}>
+                  <BlockStack gap="200">
+                    <Text as="p" variant="bodyMd">
+                      <Text as="strong">Step 1 (The Root Canvas):</Text><br />
+                      Option Sets that have no incoming connections will be unconditionally visible to every customer on this product.
+                    </Text>
+                    <Divider />
+                    <Text as="p" variant="bodyMd">
+                      <Text as="strong">Step 2 (Nesting Dependencies):</Text><br />
+                      To create a dependency, click and drag from the orange port of a parent option to the blue target port of a child Option Set.<br />
+                      This builds a cascading rule so the child ONLY appears when that option is chosen!
+                    </Text>
+                    <Divider />
+                    <Text as="p" variant="bodyMd">
+                      <Text as="strong">Step 3 (Limiting Options to Datasets):</Text><br />
+                      You can attach a <Text as="strong">Global Dataset</Text> constraint using the select box next to the Option Set name. This lets you say "If Shirt is selected, show the Colors field, but LIMIT the choices to the 'Shirt Colors' dataset."
+                    </Text>
+                  </BlockStack>
+                </div>
+              </details>
             </BlockStack>
           </InlineGrid>
 
@@ -1687,9 +1527,9 @@ export default function TemplateDetail() {
 
             <Tabs
               tabs={[
-                { id: "fields", content: "Options", badge: String(template.fields.filter((f: any) => !template.rules.some((r: any) => r.actionType === 'LIMIT_OPTIONS_DATASET' && r.targetFieldId === f.id)).length) },
-                { id: "products", content: "Products", badge: String(template.links.length) },
-                { id: "rules", content: "Rules", badge: String(template.rules.length) },
+                { id: "fields", content: "Option Sets", badge: String(template.fields.filter((f: any) => !template.rules.some((r: any) => r.actionType === 'LIMIT_OPTIONS_DATASET' && r.targetFieldId === f.id)).length) },
+                { id: "products", content: "Linked Products", badge: String(template.links.length) },
+                { id: "rules", content: "Rules Editor", badge: String(template.rules.length) },
                 { id: "appearance", content: "Appearance" },
               ]}
               selected={selectedTab}
@@ -1726,6 +1566,7 @@ export default function TemplateDetail() {
             datasets={datasets}
             lastSavedAt={lastSavedAt}
             onRegisterSaveRef={(fn) => { saveRulesRef.current = fn; }}
+            onAddNewField={handleAddFieldClick}
             onSaveRules={(newRules, fieldSortOrder) => {
               submit(
                 {
@@ -1742,6 +1583,166 @@ export default function TemplateDetail() {
           />
         </div>
       )}
+
+      <Modal
+        open={showFieldForm}
+        onClose={resetFieldForm}
+        title={editingFieldId ? "Edit Option Set" : "New Option Set"}
+        primaryAction={{
+          content: editingFieldId ? "Save Option Set" : "Add Option Set",
+          onAction: handleSaveField,
+          disabled: !fieldName || !fieldLabel,
+        }}
+        secondaryActions={[
+          {
+            content: "Cancel",
+            onAction: resetFieldForm,
+          },
+        ]}
+        large
+      >
+        <Tabs
+          tabs={[
+            { id: "basic-info", content: "Basic Info", accessibilityLabel: "Basic Info", panelID: "basic-info-panel" },
+            { id: "options", content: "Options & Values", accessibilityLabel: "Options and Values", panelID: "options-panel" },
+            { id: "display", content: "Display Settings", accessibilityLabel: "Display Settings", panelID: "display-panel" },
+          ]}
+          selected={fieldModalTab}
+          onSelect={setFieldModalTab}
+        >
+          <Box padding="400">
+            {fieldModalTab === 0 && (
+              <BlockStack gap="400">
+                <Select
+                  label="Field Type"
+                  options={fieldTypeOptions}
+                  value={fieldType}
+                  onChange={setFieldType}
+                />
+                <TextField
+                  label="Field Name (internal)"
+                  value={fieldName}
+                  onChange={setFieldName}
+                  placeholder="e.g., shirt_size"
+                  helpText="Used for API/data, no spaces"
+                  autoComplete="off"
+                />
+                <TextField
+                  label="Field Label (customer-facing)"
+                  value={fieldLabel}
+                  onChange={setFieldLabel}
+                  placeholder="e.g., Shirt Size"
+                  autoComplete="off"
+                />
+                <Checkbox
+                  label="Required field"
+                  checked={fieldRequired}
+                  onChange={setFieldRequired}
+                />
+              </BlockStack>
+            )}
+            {fieldModalTab === 1 && (
+              <BlockStack gap="400">
+                {["select", "radio", "checkbox"].includes(fieldType) ? (
+                  <BlockStack gap="300">
+                    <Text as="h5" variant="headingSm">Options, Pricing & Shopify Variant Sync</Text>
+                    {fieldOptionsList.map((opt, index) => (
+                      <InlineGrid columns="1fr 100px 170px auto" gap="200" key={index} alignItems="center">
+                        <TextField
+                          labelHidden
+                          label={`Option ${index + 1}`}
+                          value={opt.label}
+                          onChange={(val) => {
+                            const newList = [...fieldOptionsList];
+                            newList[index].label = val;
+                            setFieldOptionsList(newList);
+                          }}
+                          placeholder="e.g., Small"
+                          autoComplete="off"
+                        />
+                        <TextField
+                          labelHidden
+                          label={`Price Adjustment ${index + 1}`}
+                          value={opt.price}
+                          onChange={(val) => {
+                            const newList = [...fieldOptionsList];
+                            newList[index].price = val;
+                            setFieldOptionsList(newList);
+                          }}
+                          prefix="$"
+                          type="number"
+                          placeholder="0.00"
+                          autoComplete="off"
+                        />
+                        <TextField
+                          labelHidden
+                          label={`Variant Mapping (Shopify ID)`}
+                          value={opt.variantMapping}
+                          onChange={(val) => {
+                            const newList = [...fieldOptionsList];
+                            newList[index].variantMapping = val;
+                            setFieldOptionsList(newList);
+                          }}
+                          placeholder="Variant ID"
+                          autoComplete="off"
+                          connectedRight={
+                            <Button
+                              onClick={async () => {
+                                const selected = await shopify.resourcePicker({
+                                  type: "product",
+                                  multiple: false,
+                                  action: "select",
+                                });
+                                if (selected && selected.length > 0 && selected[0].variants && selected[0].variants.length > 0) {
+                                  let variantIdStr = selected[0].variants[0]?.id;
+                                  if (variantIdStr) {
+                                    const matches = variantIdStr.match(/\d+$/);
+                                    if (matches) {
+                                      const newList = [...fieldOptionsList];
+                                      newList[index].variantMapping = matches[0];
+                                      setFieldOptionsList(newList);
+                                    }
+                                  }
+                                }
+                              }}
+                            >
+                              Browse
+                            </Button>
+                          }
+                        />
+                        <Button
+                          tone="critical"
+                          variant="plain"
+                          accessibilityLabel="Remove option"
+                          onClick={() => setFieldOptionsList(fieldOptionsList.filter((_, i) => i !== index))}
+                        >
+                          Remove
+                        </Button>
+                      </InlineGrid>
+                    ))}
+                    <InlineStack>
+                      <Button onClick={() => setFieldOptionsList([...fieldOptionsList, { label: "", price: "", variantMapping: "" }])}>
+                        Add Option
+                      </Button>
+                    </InlineStack>
+                  </BlockStack>
+                ) : (
+                  <Banner tone="info">
+                    <Text as="p">The selected field type ({fieldType}) does not support predefined options. It relies on customer input.</Text>
+                  </Banner>
+                )}
+              </BlockStack>
+            )}
+            {fieldModalTab === 2 && (
+              <BlockStack gap="400">
+                <Banner tone="info">
+                  <Text as="p">Advanced display settings (Swatches, Button Pills) are coming soon.</Text>
+                </Banner>
+              </BlockStack>
+            )}
+          </Box>
+        </Tabs>
+      </Modal>
     </Page>
   );
 }

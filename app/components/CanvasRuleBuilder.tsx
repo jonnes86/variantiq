@@ -98,11 +98,12 @@ interface CanvasRuleBuilderProps {
     rules: Rule[];
     datasets?: any[];
     onSaveRules: (newRules: Partial<Rule>[], fieldSortOrder?: any[]) => void;
+    onAddNewField?: () => void;
     onRegisterSaveRef?: (fn: () => void) => void;
     lastSavedAt?: Date | null;
 }
 
-export function CanvasRuleBuilder({ fields, rules, datasets = [], onSaveRules, onRegisterSaveRef, lastSavedAt }: CanvasRuleBuilderProps) {
+export function CanvasRuleBuilder({ fields, rules, datasets = [], onSaveRules, onAddNewField, onRegisterSaveRef, lastSavedAt }: CanvasRuleBuilderProps) {
     const [nodes, setNodes] = useState<Node[]>([]);
     const [edges, setEdges] = useState<Edge[]>([]);
     const nodesRef = React.useRef<Node[]>([]);
@@ -347,8 +348,7 @@ export function CanvasRuleBuilder({ fields, rules, datasets = [], onSaveRules, o
                     <BlockStack gap="100">
                         <Text as="h3" variant="headingMd">2D Visual Logic Graph</Text>
                         <Text as="p" tone="subdued">
-                            Drag fields onto the canvas. Connect a Field's option (orange dot) to another Field (blue dot) to create conditional logic.<br/>
-                            Use the dropdown on the right to add fields. To create brand new fields, go back to the "Options" tab.
+                            Drag Option Sets onto the canvas. Connect an option (orange dot) to another Option Set (blue dot) to create conditional logic.
                         </Text>
                     </BlockStack>
                     <InlineStack gap="300" blockAlign="center">
@@ -356,6 +356,7 @@ export function CanvasRuleBuilder({ fields, rules, datasets = [], onSaveRules, o
                         {history.length > 0 && (
                             <Button variant="plain" onClick={handleUndo}>Undo</Button>
                         )}
+                        <Button onClick={onAddNewField}>Add Option Set</Button>
                         <Select
                             label="Add Node"
                             labelHidden
