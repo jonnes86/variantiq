@@ -15,6 +15,7 @@ import {
     OnEdgesChange,
     OnConnect,
 } from '@xyflow/react';
+import dagre from 'dagre';
 import '@xyflow/react/dist/style.css';
 import { Card, BlockStack, Text, Button, InlineStack, Select, Badge, Box } from '@shopify/polaris';
 
@@ -205,9 +206,67 @@ export function CanvasRuleBuilder({ fields, rules, datasets = [], onSaveRules, o
             data: { ...n.data, onDelete: handleDeleteNode, onDatasetChange: handleDatasetChange, datasets }
         }));
 
+        // Apply auto-layout if any nodes are missing saved coordinates (x=50, y=50 pattern)
+        const needsLayout = updatedNodes.some(n => n.position.x === 50 && n.position.y === 50);
+        
+        if (needsLayout && updatedNodes.length > 0) {
+            const dagreGraph = new dagre.graphlib.Graph();
+            dagreGraph.setDefaultEdgeLabel(() => ({}));
+            dagreGraph.setGraph({ rankdir: 'LR', align: 'UL', ranksep: 100, nodesep: 50 });
+
+            updatedNodes.forEach((node) => {
+                dagreGraph.setNode(node.id, { width: 280, height: 150 });
+            });
+
+            initialEdges.forEach((edge) => {
+                dagreGraph.setEdge(edge.source, edge.target);
+            });
+
+            dagre.layout(dagreGraph);
+
+            updatedNodes.forEach((node) => {
+                const nodeWithPosition = dagreGraph.node(node.id);
+                // Only override if it didn't have a specifically saved manual position
+                node.position = {
+                    x: nodeWithPosition.x - 140,
+                    y: nodeWithPosition.y - 75,
+                };
+            });
+        }
+
         setNodes(updatedNodes);
         setEdges(initialEdges);
     }, [fields, rules, datasets, handleDeleteNode, handleDatasetChange]);
+
+    const onLayout = useCallback(() => {
+        saveHistory();
+        const dagreGraph = new dagre.graphlib.Graph();
+        dagreGraph.setDefaultEdgeLabel(() => ({}));
+        dagreGraph.setGraph({ rankdir: 'LR', ranksep: 150, nodesep: 50 });
+
+        nodes.forEach((node) => {
+            dagreGraph.setNode(node.id, { width: 280, height: 150 });
+        });
+
+        edges.forEach((edge) => {
+            dagreGraph.setEdge(edge.source, edge.target);
+        });
+
+        dagre.layout(dagreGraph);
+
+        setNodes((nds) =>
+            nds.map((node) => {
+                const nodeWithPosition = dagreGraph.node(node.id);
+                return {
+                    ...node,
+                    position: {
+                        x: nodeWithPosition.x - 140,
+                        y: nodeWithPosition.y - 75,
+                    },
+                };
+            })
+        );
+    }, [nodes, edges, saveHistory]);
 
     const handleSave = () => {
         const compiledRules: Partial<Rule>[] = [];
@@ -279,6 +338,7 @@ export function CanvasRuleBuilder({ fields, rules, datasets = [], onSaveRules, o
                         </Text>
                     </BlockStack>
                     <InlineStack gap="300" blockAlign="center">
+                        <Button variant="plain" onClick={onLayout}>Auto Layout</Button>
                         {history.length > 0 && (
                             <Button variant="plain" onClick={handleUndo}>Undo</Button>
                         )}
