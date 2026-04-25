@@ -99,8 +99,6 @@ function FieldNode({
     const isDatasetDirty = datasetId !== savedDataset;
     const isDirty = isPositionDirty || isDatasetDirty;
 
-    const dirtyStyle = isDirty ? { borderLeft: "3px solid #f59e0b", background: "#fffbeb" } : { background: "#ffffff" };
-
     // Build the dropdown options to include Fields AND Datasets
     const dropdownOptions = [
         { label: "Assign rule: Show field...", value: "" },
@@ -118,116 +116,134 @@ function FieldNode({
         }
     };
 
+    const isRoot = containerId === "root";
+
     return (
-        <div style={{ marginBottom: "12px" }}>
-            <div style={{ borderRadius: "var(--p-border-radius-200)", overflow: "hidden", border: "1px solid var(--p-color-border)", ...dirtyStyle }}>
-                <div style={{ padding: "12px" }}>
-                    <BlockStack gap="200">
-                        {/* Field Header */}
-                        <InlineStack align="space-between" blockAlign="center">
-                            <InlineStack align="start" blockAlign="center" gap="200" wrap={false}>
-                                {isDirty && (
-                                    <span title="Unsaved changes" style={{ fontSize: "10px", background: "#f59e0b", color: "white", fontWeight: 700, padding: "1px 6px", borderRadius: "9999px", whiteSpace: "nowrap" }}>UNSAVED</span>
-                                )}
-                                {conflictedFieldIds.has(field.id) && (
-                                    <span title="This field is assigned to more than one branch — only one will take effect" style={{ fontSize: "10px", background: "#ef4444", color: "white", fontWeight: 700, padding: "1px 6px", borderRadius: "9999px", whiteSpace: "nowrap" }}>⚠ CONFLICT</span>
-                                )}
-                                <div style={{ flex: 1 }}>
-                                    <Text as="span" variant="bodyMd" fontWeight="semibold">
-                                        {field.label || field.name}
-                                    </Text>
-                                    <Text as="span" variant="bodySm" tone="subdued">
-                                        {" "} {field.label ? `(Internal: ${field.name})` : `— ${field.type}`}
-                                    </Text>
-                                </div>
+        <React.Fragment>
+            {/* 1) Render the Field Row */}
+            <div style={{
+                display: "flex",
+                alignItems: "center",
+                padding: "8px 16px",
+                paddingLeft: `${depth * 32 + 16}px`,
+                borderBottom: "1px solid var(--p-color-border-subdued)",
+                backgroundColor: isDirty ? "#fffbeb" : "#ffffff",
+                borderLeft: isDirty ? "4px solid #f59e0b" : "4px solid transparent",
+                gap: "12px",
+                minHeight: "44px"
+            }}>
+                {/* Visual Tree Connector */}
+                {!isRoot && (
+                    <span style={{ color: "var(--p-color-border-strong)", userSelect: "none", fontFamily: "monospace", fontSize: "16px" }}>└─</span>
+                )}
+                {isRoot && (
+                    <span style={{ color: "var(--p-color-icon)", userSelect: "none", fontSize: "12px" }}>▼</span>
+                )}
 
-                                {options.length > 0 && (
-                                    <Button
-                                        size="micro"
-                                        variant="tertiary"
-                                        onClick={() => onToggleCollapse(field.id)}
-                                    >
-                                        {collapsedNodes.has(field.id) ? `Expand ${options.length} Options` : `Collapse Options`}
-                                    </Button>
-                                )}
-                                {isNested && datasets.length > 0 && options.length > 0 && (
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                        <span
-                                            title="Swap this field's options with a Global Dataset on the storefront. Useful for colors or sizes managed centrally."
-                                            style={{ cursor: 'help', fontSize: '12px', background: 'var(--p-color-bg-surface-secondary)', borderRadius: '50%', width: '16px', height: '16px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: 'var(--p-color-text-secondary)', border: '1px solid var(--p-color-border)', flexShrink: 0 }}
-                                        >?</span>
-                                        <Select
-                                            label="Swap options with Dataset"
-                                            labelHidden
-                                            options={[{ label: 'Use own options', value: '' }, ...datasets.map(d => ({ label: `↔ Dataset: ${d.name}`, value: d.id }))]}
-                                            value={datasetId || ''}
-                                            onChange={(value) => onChangeDataset(nodeId, value)}
-                                        />
-                                    </div>
-                                )}
-                            </InlineStack>
-                            <Button
-                                variant="plain"
-                                tone="critical"
-                                icon={DeleteIcon}
-                                onClick={() => onRemoveField(field.id, containerId)}
-                                accessibilityLabel="Remove field"
+                <Badge tone="info">Field</Badge>
+                
+                <Text as="span" variant="bodyMd" fontWeight="bold">
+                    {field.label || field.name}
+                </Text>
+
+                <Text as="span" variant="bodySm" tone="subdued">
+                    {field.label ? `(${field.name})` : `— ${field.type}`}
+                </Text>
+
+                {isDirty && (
+                    <span title="Unsaved changes" style={{ fontSize: "10px", background: "#f59e0b", color: "white", fontWeight: 700, padding: "2px 6px", borderRadius: "9999px", whiteSpace: "nowrap" }}>UNSAVED</span>
+                )}
+                {conflictedFieldIds.has(field.id) && (
+                    <span title="This field is assigned to more than one branch — only one will take effect" style={{ fontSize: "10px", background: "#ef4444", color: "white", fontWeight: 700, padding: "2px 6px", borderRadius: "9999px", whiteSpace: "nowrap" }}>⚠ CONFLICT</span>
+                )}
+
+                <div style={{ flex: 1 }} />
+
+                {/* Right Side Actions */}
+                <InlineStack align="end" blockAlign="center" gap="200" wrap={false}>
+                    {options.length > 0 && (
+                        <Button
+                            size="micro"
+                            variant="tertiary"
+                            onClick={() => onToggleCollapse(field.id)}
+                        >
+                            {collapsedNodes.has(field.id) ? `Expand Options (${options.length})` : `Collapse Options`}
+                        </Button>
+                    )}
+
+                    {!isRoot && datasets.length > 0 && options.length > 0 && (
+                        <div style={{ width: '140px' }}>
+                            <Select
+                                label="Swap options with Dataset"
+                                labelHidden
+                                options={[{ label: 'Use own options', value: '' }, ...datasets.map(d => ({ label: `↔ Dataset: ${d.name}`, value: d.id }))]}
+                                value={datasetId || ''}
+                                onChange={(value) => onChangeDataset(nodeId, value)}
                             />
-                        </InlineStack>
+                        </div>
+                    )}
 
-                        {/* Child Zones for Options */}
-                        {options.length > 0 && !collapsedNodes.has(field.id) && (
-                            <div style={{ marginLeft: "14px", marginTop: "8px", display: "flex", flexDirection: "column", gap: "12px" }}>
-                                {options.map((opt) => {
-                                    const dropId = `${field.id}::${opt}`;
-                                    const nestedChildIds = tree[dropId] || [];
-
-                                    return (
-                                        <div key={opt} style={{
-                                            paddingLeft: "16px",
-                                            borderLeft: `2px solid var(--p-color-border)`,
-                                            marginLeft: "8px"
-                                        }}>
-                                            <BlockStack gap="200">
-                                                <InlineStack align="start" blockAlign="center" gap="100">
-                                                    <Badge tone="info">IF</Badge>
-                                                    <Text as="span" variant="bodySm" fontWeight="bold">{field.label || field.name}</Text>
-                                                    <Text as="span" variant="bodySm">=</Text>
-                                                    <Badge tone="success">{opt}</Badge>
-                                                    <Text as="span" variant="bodySm" tone="subdued">THEN SHOW:</Text>
-                                                </InlineStack>
-
-                                                <div style={{ minHeight: nestedChildIds.length > 0 ? "20px" : "auto", padding: nestedChildIds.length > 0 ? "8px" : "0 0 0 8px", backgroundColor: nestedChildIds.length > 0 ? "var(--p-color-bg-surface-secondary)" : "transparent", borderRadius: "var(--p-border-radius-100)", border: nestedChildIds.length > 0 ? "1px solid var(--p-color-border)" : "none" }}>
-                                                    {nestedChildIds.length > 0 && nestedChildIds.map(childId => (
-                                                        <RenderFieldNodeById
-                                                            key={childId}
-                                                            fieldId={childId}
-                                                            isNested={true}
-                                                            containerId={dropId}
-                                                            depth={depth + 1}
-                                                        />
-                                                    ))}
-
-                                                    <div style={{ marginTop: nestedChildIds.length > 0 ? "12px" : "4px", maxWidth: "300px" }}>
-                                                        <Select
-                                                            label="Assign rule: Show field"
-                                                            labelHidden
-                                                            options={dropdownOptions}
-                                                            value=""
-                                                            onChange={(val) => handleSelectChange(val, dropId)}
-                                                        />
-                                                    </div>
-                                                </div>
-                                            </BlockStack>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        )}
-                    </BlockStack>
-                </div>
+                    <Button
+                        variant="plain"
+                        tone="critical"
+                        icon={DeleteIcon}
+                        onClick={() => onRemoveField(field.id, containerId)}
+                        accessibilityLabel="Remove field"
+                    />
+                </InlineStack>
             </div>
-        </div>
+
+            {/* 2) Render the Options rows under this Field */}
+            {options.length > 0 && !collapsedNodes.has(field.id) && (
+                options.map((opt) => {
+                    const dropId = `${field.id}::${opt}`;
+                    const nestedChildIds = tree[dropId] || [];
+
+                    return (
+                        <React.Fragment key={opt}>
+                            {/* Option Row */}
+                            <div style={{
+                                display: "flex",
+                                alignItems: "center",
+                                padding: "6px 16px",
+                                paddingLeft: `${depth * 32 + 36}px`,
+                                borderBottom: "1px dashed var(--p-color-border-subdued)",
+                                backgroundColor: "var(--p-color-bg-surface-secondary)",
+                                gap: "8px",
+                                minHeight: "36px"
+                            }}>
+                                <span style={{ color: "var(--p-color-border-strong)", userSelect: "none", fontFamily: "monospace", fontSize: "16px" }}>├─</span>
+                                <Text as="span" variant="bodySm" tone="subdued">If:</Text>
+                                <Badge tone="success">{opt}</Badge>
+                                
+                                <div style={{ flex: 1 }} />
+
+                                <div style={{ maxWidth: "200px" }}>
+                                    <Select
+                                        label="Assign rule: Show field"
+                                        labelHidden
+                                        options={dropdownOptions}
+                                        value=""
+                                        onChange={(val) => handleSelectChange(val, dropId)}
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Nested Fields under this option */}
+                            {nestedChildIds.map(childId => (
+                                <RenderFieldNodeById
+                                    key={childId}
+                                    fieldId={childId}
+                                    isNested={true}
+                                    containerId={dropId}
+                                    depth={depth + 1}
+                                />
+                            ))}
+                        </React.Fragment>
+                    );
+                })
+            )}
+        </React.Fragment>
     );
 }
 
@@ -736,10 +752,10 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules, onAddN
                         </BlockStack>
                     </InlineStack>
 
-                    <Box background="bg-surface-secondary" padding="400" borderRadius="200" minHeight="400px">
-                        <div style={{ paddingBottom: "100px" }}>
+                    <Box padding="0" borderRadius="200" minHeight="400px" borderColor="border" borderWidth="025">
+                        <div style={{ overflow: "hidden", borderRadius: "var(--p-border-radius-200)", border: "1px solid var(--p-color-border-subdued)" }}>
                             {tree["root"]?.length === 0 && (
-                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 20px', gap: '12px', textAlign: 'center' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 20px', gap: '12px', textAlign: 'center', backgroundColor: "var(--p-color-bg-surface-secondary)" }}>
                                     <div style={{ fontSize: '40px' }}>🌳</div>
                                     <Text as="p" variant="bodyMd" fontWeight="semibold">Your rule tree is empty</Text>
                                     <Text as="p" variant="bodySm" tone="subdued">Use the dropdown below to add your first root field. Root fields are always visible to customers — then nest deeper fields conditionally under each option.</Text>
@@ -753,14 +769,16 @@ export function VisualRuleBuilder({ fields, rules, datasets, onSaveRules, onAddN
                                 />
                             ))}
 
-                            <div style={{ marginTop: "16px", maxWidth: "300px" }}>
-                                <Select
-                                    label="Add root field"
-                                    labelHidden
-                                    options={rootDropdownOptions}
-                                    value=""
-                                    onChange={handleRootSelectChange}
-                                />
+                            <div style={{ padding: "16px", backgroundColor: "var(--p-color-bg-surface-secondary)" }}>
+                                <div style={{ maxWidth: "300px" }}>
+                                    <Select
+                                        label="Add root field"
+                                        labelHidden
+                                        options={rootDropdownOptions}
+                                        value=""
+                                        onChange={handleRootSelectChange}
+                                    />
+                                </div>
                             </div>
                         </div>
                     </Box>
