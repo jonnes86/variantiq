@@ -14,6 +14,7 @@ import {
     OnNodesChange,
     OnEdgesChange,
     OnConnect,
+    useReactFlow,
 } from '@xyflow/react';
 import dagre from 'dagre';
 import '@xyflow/react/dist/style.css';
@@ -41,7 +42,7 @@ function FieldNodeComponent({ data, id }: any) {
 
     return (
         <div style={{ background: '#ffffff', border: '1px solid var(--p-color-border-strong)', borderRadius: '8px', minWidth: '220px', boxShadow: 'var(--p-shadow-100)' }}>
-            <Handle type="target" position={Position.Top} style={{ background: 'var(--p-color-bg-fill-info)', width: '12px', height: '12px', borderRadius: '2px' }} />
+            <Handle type="target" position={Position.Top} style={{ background: 'var(--p-color-bg-fill-info)', width: '16px', height: '16px', borderRadius: '4px' }} />
             
             <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--p-color-border-subdued)', background: 'var(--p-color-bg-surface-secondary)', borderTopLeftRadius: '8px', borderTopRightRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Text as="span" variant="bodyMd" fontWeight="bold">👖 {field.label || field.name}</Text>
@@ -53,8 +54,8 @@ function FieldNodeComponent({ data, id }: any) {
             {datasets && datasets.length > 0 && options.length > 0 && (
                 <div style={{ padding: '8px', borderBottom: '1px solid var(--p-color-border-subdued)' }} className="nodrag">
                     <Select
-                        label="Dataset Swap"
-                        labelHidden
+                        label="Attach Dataset"
+                        labelHidden={false}
                         options={[{label: 'Use own options', value: ''}, ...datasets.map((d: any) => ({ label: `Dataset: ${d.name}`, value: d.id }))]}
                         value={selectedDatasetId || ''}
                         onChange={(val) => onDatasetChange(id, val)}
@@ -69,13 +70,18 @@ function FieldNodeComponent({ data, id }: any) {
                     </div>
                 ) : (
                     options.map((opt: string) => (
-                        <div key={opt} style={{ position: 'relative', textAlign: 'right', padding: '0 20px 0 12px', display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
-                            <Badge tone="success">{opt}</Badge>
+                        <div key={opt} style={{ position: 'relative', textAlign: 'right', padding: '4px 30px 4px 12px', display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
+                            <Text as="span" variant="bodySm" tone="subdued" fontWeight="medium" truncate>
+                                drag →
+                            </Text>
+                            <div style={{ paddingLeft: '8px' }}>
+                                <Badge tone="success">{opt}</Badge>
+                            </div>
                             <Handle 
                                 type="source" 
                                 position={Position.Right} 
                                 id={opt} 
-                                style={{ top: '50%', right: '-6px', background: '#f59e0b', width: '12px', height: '12px', border: '2px solid #fff' }} 
+                                style={{ top: '50%', right: '-8px', background: '#f59e0b', width: '16px', height: '16px', border: '2px solid #fff' }} 
                             />
                         </div>
                     ))
@@ -99,11 +105,18 @@ interface CanvasRuleBuilderProps {
 export function CanvasRuleBuilder({ fields, rules, datasets = [], onSaveRules, onRegisterSaveRef, lastSavedAt }: CanvasRuleBuilderProps) {
     const [nodes, setNodes] = useState<Node[]>([]);
     const [edges, setEdges] = useState<Edge[]>([]);
+    const nodesRef = React.useRef<Node[]>([]);
+    const edgesRef = React.useRef<Edge[]>([]);
     const [history, setHistory] = useState<{nodes: Node[], edges: Edge[]}[]>([]);
 
-    const saveHistory = useCallback(() => {
-        setHistory(prev => [...prev.slice(-19), { nodes, edges }]);
+    useEffect(() => {
+        nodesRef.current = nodes;
+        edgesRef.current = edges;
     }, [nodes, edges]);
+
+    const saveHistory = useCallback(() => {
+        setHistory(prev => [...prev.slice(-19), { nodes: nodesRef.current, edges: edgesRef.current }]);
+    }, []);
 
     const handleUndo = useCallback(() => {
         if (history.length === 0) return;
@@ -334,7 +347,8 @@ export function CanvasRuleBuilder({ fields, rules, datasets = [], onSaveRules, o
                     <BlockStack gap="100">
                         <Text as="h3" variant="headingMd">2D Visual Logic Graph</Text>
                         <Text as="p" tone="subdued">
-                            Drag fields onto the canvas. Connect a Field's option to another Field to create conditional logic.
+                            Drag fields onto the canvas. Connect a Field's option (orange dot) to another Field (blue dot) to create conditional logic.<br/>
+                            Use the dropdown on the right to add fields. To create brand new fields, go back to the "Options" tab.
                         </Text>
                     </BlockStack>
                     <InlineStack gap="300" blockAlign="center">
