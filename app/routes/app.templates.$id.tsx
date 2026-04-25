@@ -1452,39 +1452,6 @@ export default function TemplateDetail() {
         </BlockStack>
       </Card>
 
-      {template.fields.length >= 2 && (
-        <Box paddingBlockEnd="800">
-          <CanvasRuleBuilder
-            fields={[...template.fields, ...localFields]}
-            rules={template.rules}
-            datasets={datasets}
-            lastSavedAt={lastSavedAt}
-            onRegisterSaveRef={(fn) => { saveRulesRef.current = fn; }}
-            onSaveRules={(newRules, fieldSortOrder) => {
-              submit(
-                {
-                  _intent: "bulkSaveRules",
-                  rulesJson: JSON.stringify(newRules),
-                  newFieldsJson: JSON.stringify(localFields),
-                  fieldSortOrderJson: JSON.stringify(fieldSortOrder || [])
-                },
-                { method: "post" }
-              );
-              setLocalFields([]); // Reset on save
-              setLastSavedAt(new Date());
-            }}
-            onDeleteOrphanedField={(fieldId) => {
-              if (fieldId.startsWith("local_")) {
-                setLocalFields(prev => prev.filter(f => f.id !== fieldId));
-              } else {
-                if (confirm("Permanently delete this unassigned field? This cannot be undone.")) {
-                  submit({ _intent: "deleteField", fieldId }, { method: "post" });
-                }
-              }
-            }}
-          />
-        </Box>
-      )}
     </BlockStack>
   ); // end Pro RulesView branch
 
@@ -1670,6 +1637,7 @@ export default function TemplateDetail() {
 
   return (
     <Page
+      fullWidth
       backAction={{ content: "Templates", url: "/app?tab=templates" }}
       title={template.name}
       secondaryActions={[
@@ -1749,6 +1717,31 @@ export default function TemplateDetail() {
           </div>
         </Layout.Section>
       </Layout>
+
+      {selectedTab === 2 && template.fields.length >= 2 && (
+        <div style={{ marginTop: '2rem' }}>
+          <CanvasRuleBuilder
+            fields={[...template.fields, ...localFields]}
+            rules={template.rules}
+            datasets={datasets}
+            lastSavedAt={lastSavedAt}
+            onRegisterSaveRef={(fn) => { saveRulesRef.current = fn; }}
+            onSaveRules={(newRules, fieldSortOrder) => {
+              submit(
+                {
+                  _intent: "bulkSaveRules",
+                  rulesJson: JSON.stringify(newRules),
+                  newFieldsJson: JSON.stringify(localFields),
+                  fieldSortOrderJson: JSON.stringify(fieldSortOrder || [])
+                },
+                { method: "post" }
+              );
+              setLocalFields([]); // Reset on save
+              setLastSavedAt(new Date());
+            }}
+          />
+        </div>
+      )}
     </Page>
   );
 }

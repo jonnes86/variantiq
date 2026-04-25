@@ -98,6 +98,19 @@ interface CanvasRuleBuilderProps {
 export function CanvasRuleBuilder({ fields, rules, datasets = [], onSaveRules, onRegisterSaveRef, lastSavedAt }: CanvasRuleBuilderProps) {
     const [nodes, setNodes] = useState<Node[]>([]);
     const [edges, setEdges] = useState<Edge[]>([]);
+    const [history, setHistory] = useState<{nodes: Node[], edges: Edge[]}[]>([]);
+
+    const saveHistory = useCallback(() => {
+        setHistory(prev => [...prev.slice(-19), { nodes, edges }]);
+    }, [nodes, edges]);
+
+    const handleUndo = useCallback(() => {
+        if (history.length === 0) return;
+        const lastState = history[history.length - 1];
+        setNodes(lastState.nodes);
+        setEdges(lastState.edges);
+        setHistory(prev => prev.slice(0, -1));
+    }, [history]);
 
     const onNodesChange: OnNodesChange = useCallback(
         (changes) => setNodes((nds) => applyNodeChanges(changes, nds)),
@@ -108,14 +121,18 @@ export function CanvasRuleBuilder({ fields, rules, datasets = [], onSaveRules, o
         []
     );
     const onConnect: OnConnect = useCallback(
-        (connection) => setEdges((eds) => addEdge({ ...connection, type: 'smoothstep', animated: true, style: { stroke: '#f59e0b', strokeWidth: 2 } }, eds)),
-        []
+        (connection) => {
+            saveHistory();
+            setEdges((eds) => addEdge({ ...connection, type: 'smoothstep', animated: true, style: { stroke: '#f59e0b', strokeWidth: 2 } }, eds));
+        },
+        [saveHistory]
     );
 
     const handleDeleteNode = useCallback((nodeId: string) => {
+        saveHistory();
         setNodes((nds) => nds.filter((n) => n.id !== nodeId));
         setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId));
-    }, []);
+    }, [saveHistory]);
 
     const handleDatasetChange = useCallback((nodeId: string, datasetId: string) => {
         setNodes((nds) => nds.map(n => {
@@ -236,6 +253,8 @@ export function CanvasRuleBuilder({ fields, rules, datasets = [], onSaveRules, o
             return;
         }
 
+        saveHistory();
+
         setNodes(nds => [
             ...nds,
             {
@@ -260,6 +279,9 @@ export function CanvasRuleBuilder({ fields, rules, datasets = [], onSaveRules, o
                         </Text>
                     </BlockStack>
                     <InlineStack gap="300" blockAlign="center">
+                        {history.length > 0 && (
+                            <Button variant="plain" onClick={handleUndo}>Undo</Button>
+                        )}
                         <Select
                             label="Add Node"
                             labelHidden
