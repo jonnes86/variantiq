@@ -265,10 +265,12 @@ function CanvasRuleBuilderInner({ fields, rules, datasets = [], onSaveRules, onA
         if (needsLayout && updatedNodes.length > 0) {
             const dagreGraph = new dagre.graphlib.Graph();
             dagreGraph.setDefaultEdgeLabel(() => ({}));
-            dagreGraph.setGraph({ rankdir: 'LR', align: 'UL', ranksep: 100, nodesep: 50 });
+            dagreGraph.setGraph({ rankdir: 'LR', align: 'UL', ranksep: 200, nodesep: 50 });
 
             updatedNodes.forEach((node) => {
-                dagreGraph.setNode(node.id, { width: 280, height: 150 });
+                const optionsCount = Array.isArray(node.data?.field?.optionsJson) ? node.data.field.optionsJson.length : 0;
+                const dynamicHeight = 100 + (optionsCount * 45); // Approximate height based on UI elements
+                dagreGraph.setNode(node.id, { width: 280, height: Math.max(150, dynamicHeight) });
             });
 
             initialEdges.forEach((edge) => {
@@ -299,10 +301,12 @@ function CanvasRuleBuilderInner({ fields, rules, datasets = [], onSaveRules, onA
         saveHistory();
         const dagreGraph = new dagre.graphlib.Graph();
         dagreGraph.setDefaultEdgeLabel(() => ({}));
-        dagreGraph.setGraph({ rankdir: 'LR', ranksep: 150, nodesep: 50 });
+        dagreGraph.setGraph({ rankdir: 'LR', ranksep: 200, nodesep: 50 });
 
         nodes.forEach((node) => {
-            dagreGraph.setNode(node.id, { width: 280, height: 150 });
+            const optionsCount = Array.isArray(node.data?.field?.optionsJson) ? node.data.field.optionsJson.length : 0;
+            const dynamicHeight = 100 + (optionsCount * 45);
+            dagreGraph.setNode(node.id, { width: 280, height: Math.max(150, dynamicHeight) });
         });
 
         edges.forEach((edge) => {
