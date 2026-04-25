@@ -31,7 +31,7 @@ import {
 import { prisma } from "../db.server";
 import React, { useState, useEffect, useRef } from "react";
 import { authenticate } from "../shopify.server";
-import { VisualRuleBuilder } from "../components/VisualRuleBuilder";
+import { LogicRulesBuilder } from "../components/LogicRulesBuilder";
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -1454,7 +1454,7 @@ export default function TemplateDetail() {
 
       {template.fields.length >= 2 && (
         <Card background="bg-surface-secondary">
-          <VisualRuleBuilder
+          <LogicRulesBuilder
             fields={[...template.fields, ...localFields]}
             rules={template.rules}
             datasets={datasets}
