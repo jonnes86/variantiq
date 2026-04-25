@@ -1,0 +1,292 @@
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import {
+    ReactFlow,
+    Controls,
+    Background,
+    applyNodeChanges,
+    applyEdgeChanges,
+    addEdge,
+    Handle,
+    Position,
+    Node,
+    Edge,
+    NodeTypes,
+    OnNodesChange,
+    OnEdgesChange,
+    OnConnect,
+} from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
+import { Card, BlockStack, Text, Button, InlineStack, Select, Badge, Box } from '@shopify/polaris';
+
+export interface Field {
+    id: string;
+    name: string;
+    type: string;
+    label: string;
+    optionsJson: any;
+}
+
+export interface Rule {
+    id: string;
+    conditionsJson: any;
+    targetFieldId: string;
+    actionType: string;
+    targetOptionsJson: any;
+}
+
+function FieldNodeComponent({ data, id }: any) {
+    const { field, onDelete, onDatasetChange, datasets, selectedDatasetId } = data;
+    const options = Array.isArray(field.optionsJson) ? field.optionsJson : [];
+
+    return (
+        <div style={{ background: '#ffffff', border: '1px solid var(--p-color-border-strong)', borderRadius: '8px', minWidth: '220px', boxShadow: 'var(--p-shadow-100)' }}>
+            <Handle type="target" position={Position.Top} style={{ background: 'var(--p-color-bg-fill-info)', width: '12px', height: '12px', borderRadius: '2px' }} />
+            
+            <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--p-color-border-subdued)', background: 'var(--p-color-bg-surface-secondary)', borderTopLeftRadius: '8px', borderTopRightRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text as="span" variant="bodyMd" fontWeight="bold">👖 {field.label || field.name}</Text>
+                <div onClick={(e) => { e.stopPropagation(); onDelete(id); }} style={{ cursor: 'pointer', color: 'var(--p-color-text-critical)', fontSize: '18px', lineHeight: '1' }}>
+                    ×
+                </div>
+            </div>
+
+            {datasets && datasets.length > 0 && options.length > 0 && (
+                <div style={{ padding: '8px', borderBottom: '1px solid var(--p-color-border-subdued)' }} className="nodrag">
+                    <Select
+                        label="Dataset Swap"
+                        labelHidden
+                        options={[{label: 'Use own options', value: ''}, ...datasets.map((d: any) => ({ label: `Dataset: ${d.name}`, value: d.id }))]}
+                        value={selectedDatasetId || ''}
+                        onChange={(val) => onDatasetChange(id, val)}
+                    />
+                </div>
+            )}
+
+            <div style={{ padding: '8px 0', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {options.length === 0 ? (
+                    <div style={{ padding: '0 12px' }}>
+                        <Text as="span" variant="bodySm" tone="subdued">No options available</Text>
+                    </div>
+                ) : (
+                    options.map((opt: string) => (
+                        <div key={opt} style={{ position: 'relative', textAlign: 'right', padding: '0 20px 0 12px', display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
+                            <Badge tone="success">{opt}</Badge>
+                            <Handle 
+                                type="source" 
+                                position={Position.Right} 
+                                id={opt} 
+                                style={{ top: '50%', right: '-6px', background: '#f59e0b', width: '12px', height: '12px', border: '2px solid #fff' }} 
+                            />
+                        </div>
+                    ))
+                )}
+            </div>
+        </div>
+    );
+}
+
+const nodeTypes: NodeTypes = { fieldNode: FieldNodeComponent };
+
+interface CanvasRuleBuilderProps {
+    fields: Field[];
+    rules: Rule[];
+    datasets?: any[];
+    onSaveRules: (newRules: Partial<Rule>[], fieldSortOrder?: any[]) => void;
+    onRegisterSaveRef?: (fn: () => void) => void;
+    lastSavedAt?: Date | null;
+}
+
+export function CanvasRuleBuilder({ fields, rules, datasets = [], onSaveRules, onRegisterSaveRef, lastSavedAt }: CanvasRuleBuilderProps) {
+    const [nodes, setNodes] = useState<Node[]>([]);
+    const [edges, setEdges] = useState<Edge[]>([]);
+
+    const onNodesChange: OnNodesChange = useCallback(
+        (changes) => setNodes((nds) => applyNodeChanges(changes, nds)),
+        []
+    );
+    const onEdgesChange: OnEdgesChange = useCallback(
+        (changes) => setEdges((eds) => applyEdgeChanges(changes, eds)),
+        []
+    );
+    const onConnect: OnConnect = useCallback(
+        (connection) => setEdges((eds) => addEdge({ ...connection, type: 'smoothstep', animated: true, style: { stroke: '#f59e0b', strokeWidth: 2 } }, eds)),
+        []
+    );
+
+    const handleDeleteNode = useCallback((nodeId: string) => {
+        setNodes((nds) => nds.filter((n) => n.id !== nodeId));
+        setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId));
+    }, []);
+
+    const handleDatasetChange = useCallback((nodeId: string, datasetId: string) => {
+        setNodes((nds) => nds.map(n => {
+            if (n.id === nodeId) {
+                return { ...n, data: { ...n.data, selectedDatasetId: datasetId } };
+            }
+            return n;
+        }));
+    }, []);
+
+    // Initialize from existing rules
+    useEffect(() => {
+        const initialNodes: Node[] = [];
+        const initialEdges: Edge[] = [];
+        const addedFields = new Set<string>();
+        
+        let rootX = 50;
+        let rootY = 50;
+
+        rules.forEach(r => {
+            let conds = [];
+            try { conds = typeof r.conditionsJson === 'string' ? JSON.parse(r.conditionsJson) : (r.conditionsJson || []); } catch(e){}
+            let targetOpts = {};
+            try { targetOpts = typeof r.targetOptionsJson === 'string' ? JSON.parse(r.targetOptionsJson) : (r.targetOptionsJson || {}); } catch(e){}
+            
+            if (r.actionType === 'SHOW' && conds.length > 0) {
+                const c = conds[conds.length - 1]; // last condition usually dictates immediate parent
+                if (c.operator === 'EQUALS') {
+                    // Create edge
+                    initialEdges.push({
+                        id: `e_${c.fieldId}_${c.value}_${r.targetFieldId}`,
+                        source: c.fieldId,
+                        sourceHandle: c.value,
+                        target: r.targetFieldId,
+                        type: 'smoothstep',
+                        animated: true,
+                        style: { stroke: '#f59e0b', strokeWidth: 2 }
+                    });
+
+                    // Add nodes if they don't exist
+                    [c.fieldId, r.targetFieldId].forEach(id => {
+                        if (!addedFields.has(id)) {
+                            const fieldDef = fields.find(f => f.id === id);
+                            if (fieldDef) {
+                                initialNodes.push({
+                                    id,
+                                    type: 'fieldNode',
+                                    position: id === r.targetFieldId && targetOpts.x ? { x: targetOpts.x, y: targetOpts.y } : { x: rootX, y: rootY },
+                                    data: { field: fieldDef, onDelete: handleDeleteNode, onDatasetChange: handleDatasetChange, datasets, selectedDatasetId: '' }
+                                });
+                                addedFields.add(id);
+                                rootX += 50;
+                                rootY += 50;
+                            }
+                        }
+                    });
+                }
+            } else if (r.actionType === 'LIMIT_OPTIONS_DATASET' && targetOpts.datasetId) {
+                // Attach dataset to existing node
+                const node = initialNodes.find(n => n.id === r.targetFieldId);
+                if (node) {
+                    node.data.selectedDatasetId = targetOpts.datasetId;
+                }
+            }
+        });
+
+        // Update data callbacks dynamically
+        const updatedNodes = initialNodes.map(n => ({
+            ...n,
+            data: { ...n.data, onDelete: handleDeleteNode, onDatasetChange: handleDatasetChange, datasets }
+        }));
+
+        setNodes(updatedNodes);
+        setEdges(initialEdges);
+    }, [fields, rules, datasets, handleDeleteNode, handleDatasetChange]);
+
+    const handleSave = () => {
+        const compiledRules: Partial<Rule>[] = [];
+        
+        edges.forEach(edge => {
+            const targetNode = nodes.find(n => n.id === edge.target);
+            const datasetId = targetNode?.data?.selectedDatasetId;
+            const x = targetNode?.position?.x || 0;
+            const y = targetNode?.position?.y || 0;
+
+            compiledRules.push({
+                targetFieldId: edge.target,
+                actionType: "SHOW",
+                conditionsJson: [{ fieldId: edge.source, operator: "EQUALS", value: edge.sourceHandle }],
+                targetOptionsJson: { x, y }
+            });
+
+            if (datasetId) {
+                compiledRules.push({
+                    targetFieldId: edge.target,
+                    actionType: "LIMIT_OPTIONS_DATASET",
+                    conditionsJson: [{ fieldId: edge.source, operator: "EQUALS", value: edge.sourceHandle }],
+                    targetOptionsJson: { datasetId, x, y }
+                });
+            }
+        });
+
+        onSaveRules(compiledRules, []);
+    };
+
+    useEffect(() => {
+        onRegisterSaveRef?.(handleSave);
+    });
+
+    const addFieldToCanvas = (fieldId: string) => {
+        if (!fieldId) return;
+        const fieldDef = fields.find(f => f.id === fieldId);
+        if (!fieldDef) return;
+
+        // Ensure we don't add duplicates
+        if (nodes.some(n => n.id === fieldId)) {
+            alert("This field is already on the canvas.");
+            return;
+        }
+
+        setNodes(nds => [
+            ...nds,
+            {
+                id: fieldId,
+                type: 'fieldNode',
+                position: { x: 100, y: 100 },
+                data: { field: fieldDef, onDelete: handleDeleteNode, onDatasetChange: handleDatasetChange, datasets, selectedDatasetId: '' }
+            }
+        ]);
+    };
+
+    const fieldOptions = [{ label: "Add field to canvas...", value: "" }, ...fields.map(f => ({ label: f.label || f.name, value: f.id }))];
+
+    return (
+        <Card padding="0">
+            <div style={{ padding: '16px', borderBottom: '1px solid var(--p-color-border-subdued)' }}>
+                <InlineStack align="space-between" blockAlign="center">
+                    <BlockStack gap="100">
+                        <Text as="h3" variant="headingMd">2D Visual Logic Graph</Text>
+                        <Text as="p" tone="subdued">
+                            Drag fields onto the canvas. Connect a Field's option to another Field to create conditional logic.
+                        </Text>
+                    </BlockStack>
+                    <InlineStack gap="300" blockAlign="center">
+                        <Select
+                            label="Add Node"
+                            labelHidden
+                            options={fieldOptions}
+                            value=""
+                            onChange={addFieldToCanvas}
+                        />
+                        <Button variant="primary" onClick={handleSave}>Save Canvas</Button>
+                    </InlineStack>
+                </InlineStack>
+            </div>
+            
+            <div style={{ height: '600px', width: '100%', backgroundColor: '#fafafa' }}>
+                <ReactFlow
+                    nodes={nodes}
+                    edges={edges}
+                    onNodesChange={onNodesChange}
+                    onEdgesChange={onEdgesChange}
+                    onConnect={onConnect}
+                    nodeTypes={nodeTypes}
+                    fitView
+                    defaultEdgeOptions={{ type: 'smoothstep', animated: true }}
+                >
+                    <Background color="#ccc" gap={16} />
+                    <Controls />
+                </ReactFlow>
+            </div>
+        </Card>
+    );
+}

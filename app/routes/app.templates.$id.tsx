@@ -31,7 +31,7 @@ import {
 import { prisma } from "../db.server";
 import React, { useState, useEffect, useRef } from "react";
 import { authenticate } from "../shopify.server";
-import { LogicRulesBuilder } from "../components/LogicRulesBuilder";
+import { CanvasRuleBuilder } from "../components/CanvasRuleBuilder";
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -1453,18 +1453,13 @@ export default function TemplateDetail() {
       </Card>
 
       {template.fields.length >= 2 && (
-        <Card background="bg-surface-secondary">
-          <LogicRulesBuilder
+        <Box paddingBlockEnd="800">
+          <CanvasRuleBuilder
             fields={[...template.fields, ...localFields]}
             rules={template.rules}
             datasets={datasets}
             lastSavedAt={lastSavedAt}
             onRegisterSaveRef={(fn) => { saveRulesRef.current = fn; }}
-            onAddNewField={(newField) => {
-              const newId = "local_" + Math.random().toString(36).substring(2, 9);
-              setLocalFields(prev => [...prev, { ...newField, id: newId }]);
-              return newId;
-            }}
             onSaveRules={(newRules, fieldSortOrder) => {
               submit(
                 {
@@ -1488,7 +1483,7 @@ export default function TemplateDetail() {
               }
             }}
           />
-        </Card>
+        </Box>
       )}
     </BlockStack>
   ); // end Pro RulesView branch
