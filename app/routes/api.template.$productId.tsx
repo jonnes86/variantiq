@@ -1,5 +1,6 @@
 import { json, type LoaderFunctionArgs, type ActionFunctionArgs } from "@remix-run/node";
 import { prisma } from "../db.server";
+import { unauthenticated } from "../shopify.server";
 
 /**
  * Public API endpoint - returns template data for a product
@@ -180,11 +181,42 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       });
     }
 
+    // Fetch dummy product
+    let dummyVariantId = null;
+    try {
+      const { admin } = await unauthenticated.admin(link.shop);
+      const response = await admin.graphql(`
+        query {
+          products(first: 1, query: "title:'VariantIQ Options Fee'") {
+            edges {
+              node {
+                variants(first: 1) {
+                  edges {
+                    node {
+                      id
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      `);
+      const dummyData = await response.json();
+      const gid = dummyData?.data?.products?.edges?.[0]?.node?.variants?.edges?.[0]?.node?.id;
+      if (gid) {
+        dummyVariantId = gid.split('/').pop();
+      }
+    } catch (e) {
+      console.error("[API] Failed to fetch dummy variant ID:", e);
+    }
+
     // Return template data
     return json(
       {
         template: resolvedTemplate,
         productGid,
+        dummyVariantId,
       },
       {
         headers: {

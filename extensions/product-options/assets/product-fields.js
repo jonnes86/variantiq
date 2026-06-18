@@ -936,11 +936,16 @@ class VariantIQFields {
     }
 
     try {
-      // Fetch dummy product variant ID directly from Shopify's open Storefront JSON wrapper
-      const optionsRes = await fetch('/products/variantiq-options-fee-hidden.js');
-      if (!optionsRes.ok) throw new Error('Dummy product missing from Shopify Storefront');
-      const dummyProduct = await optionsRes.json();
-      const dummyVariantId = dummyProduct.variants[0].id;
+      let dummyVariantId = this.templateData.dummyVariantId;
+      
+      if (!dummyVariantId) {
+        const optionsRes = await fetch('/products/variantiq-options-fee-hidden.js');
+        if (!optionsRes.ok) throw new Error('Dummy product missing from Shopify Storefront');
+        const dummyProduct = await optionsRes.json();
+        dummyVariantId = dummyProduct.variants[0].id;
+      }
+      
+      if (!dummyVariantId) throw new Error('Fee variant ID not found');
 
       const feeQuantity = Math.round(adjustmentsTotal * 100);
 
@@ -966,8 +971,11 @@ class VariantIQFields {
 
     } catch (e) {
       console.error('VariantIQ Cart Override Failed:', e);
-      // Fallback: Submit strictly to prevent blocking checkout completely
-      HTMLFormElement.prototype.submit.call(form);
+      // Fallback: Add the base item via AJAX so it actually completes before the caller redirects to /cart
+      await fetch('/cart/add.js', {
+        method: 'POST',
+        body: formData,
+      });
     }
   }
 
