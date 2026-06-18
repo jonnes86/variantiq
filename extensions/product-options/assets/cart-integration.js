@@ -65,8 +65,13 @@ class VariantIQCartWatchdog {
 
     // Group items
     cart.items.forEach(item => {
-      const groupId = item.properties && item.properties['_variantiq_group'];
-      const isFee = item.properties && item.properties['_variantiq_fee'];
+      let props = item.properties || {};
+      if (Array.isArray(props)) {
+        props = props.reduce((acc, p) => ({ ...acc, [p.name]: p.value }), {});
+      }
+      
+      const groupId = props['_variantiq_group'];
+      const isFee = props['_variantiq_fee'];
 
       if (groupId) {
         if (isFee) {
@@ -82,7 +87,11 @@ class VariantIQCartWatchdog {
 
     // Check for orphaned fees or quantity mismatches
     feeItems.forEach(feeItem => {
-      const groupId = feeItem.properties['_variantiq_group'];
+      let props = feeItem.properties || {};
+      if (Array.isArray(props)) {
+        props = props.reduce((acc, p) => ({ ...acc, [p.name]: p.value }), {});
+      }
+      const groupId = props['_variantiq_group'];
       const parent = parentItems[groupId];
 
       if (!parent) {
@@ -143,27 +152,50 @@ class VariantIQCartWatchdog {
 
     // Visually bundle the prices
     cart.items.forEach(item => {
-      const groupId = item.properties && item.properties['_variantiq_group'];
-      const isFee = item.properties && item.properties['_variantiq_fee'];
+      let props = item.properties || {};
+      if (Array.isArray(props)) {
+        props = props.reduce((acc, p) => ({ ...acc, [p.name]: p.value }), {});
+      }
+      
+      const groupId = props['_variantiq_group'];
+      const isFee = props['_variantiq_fee'];
 
       if (groupId && !isFee) {
         // Find the associated fee item
-        const feeItem = cart.items.find(i => 
-          i.properties && i.properties['_variantiq_group'] === groupId && i.properties['_variantiq_fee']
-        );
+        const feeItem = cart.items.find(i => {
+          let iProps = i.properties || {};
+          if (Array.isArray(iProps)) iProps = iProps.reduce((acc, p) => ({ ...acc, [p.name]: p.value }), {});
+          return iProps['_variantiq_group'] === groupId && iProps['_variantiq_fee'];
+        });
 
         if (feeItem) {
           const combinedPrice = item.price + Math.round((feeItem.price * feeItem.quantity) / item.quantity);
           const combinedLinePrice = item.line_price + feeItem.line_price;
           
-          // Find the row for this item by locating the property element that contains the groupId
-          const propertyElements = document.querySelectorAll('dt, span, p, dd');
           let row = null;
-          propertyElements.forEach(el => {
-             if (el.textContent && el.textContent.includes(groupId)) {
-                row = el.closest('tr, li, .cart-item, .cart__item');
-             }
-          });
+          // Strategy 1: Look for exact data attributes containing the item key
+          const itemKeyElements = document.querySelectorAll(`[data-key="${item.key}"], [data-line-item-key="${item.key}"], [id*="${item.key.replace(':', '_')}"]`);
+          if (itemKeyElements.length > 0) {
+            row = itemKeyElements[0].closest('tr, li, .cart-item, .cart__item');
+          }
+
+          // Strategy 2: Match the variant URL and the visible properties
+          if (!row) {
+            const variantLinks = document.querySelectorAll(`a[href*="variant=${item.variant_id}"]`);
+            const visibleProps = Object.entries(props).filter(([k]) => !k.startsWith('_')).map(([k,v]) => v);
+            
+            for (const link of variantLinks) {
+              const candidateRow = link.closest('tr, li, .cart-item, .cart__item');
+              if (candidateRow) {
+                const text = candidateRow.textContent;
+                const matchesAll = visibleProps.every(v => text.includes(v));
+                if (matchesAll) {
+                  row = candidateRow;
+                  break;
+                }
+              }
+            }
+          }
 
           if (row) {
             // Helper to get common string formats for prices
