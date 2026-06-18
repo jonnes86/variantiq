@@ -945,9 +945,13 @@ class VariantIQFields {
         dummyVariantId = dummyProduct.variants[0].id;
       }
       
-      if (!dummyVariantId) throw new Error('Fee variant ID not found');
+      let baseQuantity = 1;
+      const quantityInput = form.querySelector('input[name="quantity"]');
+      if (quantityInput && quantityInput.value) {
+        baseQuantity = parseInt(quantityInput.value) || 1;
+      }
 
-      const feeQuantity = Math.round(adjustmentsTotal * 100);
+      const feeQuantity = Math.round(adjustmentsTotal * 100) * baseQuantity;
 
       // Inject Fee Product
       const feeFormData = new URLSearchParams();

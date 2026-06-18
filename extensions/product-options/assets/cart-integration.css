@@ -1,0 +1,31 @@
+/**
+ * VariantIQ Cart Integration
+ * Forcefully hides the dummy fee items from the cart.
+ */
+
+/* For modern browsers, immediately hide rows containing the hidden fee inputs */
+tr:has(input[name*="properties[_variantiq_fee]"]),
+li:has(input[name*="properties[_variantiq_fee]"]),
+.cart-item:has(input[name*="properties[_variantiq_fee]"]),
+tr:has(a[href*="variantiq-options-fee-hidden"]),
+li:has(a[href*="variantiq-options-fee-hidden"]),
+.cart-item:has(a[href*="variantiq-options-fee-hidden"]) {
+  display: none !important;
+}
+
+/* The class our Javascript will aggressively apply to fee rows */
+.variantiq-hidden-fee-item {
+  display: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  height: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+  pointer-events: none !important;
+}
+
+/* Hide the internal properties from the main item's property list */
+.variantiq-hidden-property {
+  display: none !important;
+}
