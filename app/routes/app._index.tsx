@@ -332,16 +332,22 @@ export default function Index() {
           onDismiss={handleDismiss}
         >
           <Text as="p" variant="bodyMd">
-            Before your custom fields will appear to customers, you must add the VariantIQ App Block to your theme.
+            Before your custom fields will appear to customers and function properly, you must enable the VariantIQ App Embed and App Block in your theme.
           </Text>
           <div style={{ paddingLeft: "16px", marginTop: "12px", paddingBottom: "8px" }}>
             <BlockStack gap="200">
+              <Text as="p"><Text as="strong">Part 1: Enable the Cart Sync (App Embed)</Text></Text>
               <Text as="p">1. Go to your Shopify Admin and click <Text as="strong">Online Store {">"} Themes</Text>.</Text>
               <Text as="p">2. Click <Text as="strong">Customize</Text> on your current theme.</Text>
-              <Text as="p">3. Navigate to your <Text as="strong">Default Product</Text> template using the top dropdown.</Text>
-              <Text as="p">4. On the left sidebar, under the <Text as="strong">Product Information</Text> section, click <Text as="strong">+ Add block</Text>.</Text>
-              <Text as="p">5. Select <Text as="strong">VariantIQ Custom Fields</Text> from the Apps section and drag it above your Add to Cart button.</Text>
-              <Text as="p">6. Click <Text as="strong">Save</Text> in the top right corner.</Text>
+              <Text as="p">3. On the far left panel, click the <Text as="strong">App Embeds</Text> icon.</Text>
+              <Text as="p">4. Find <Text as="strong">VariantIQ Cart Sync</Text> and toggle it <Text as="strong">ON</Text>.</Text>
+              
+              <br />
+              <Text as="p"><Text as="strong">Part 2: Add the Custom Fields Block (App Block)</Text></Text>
+              <Text as="p">5. Navigate to your <Text as="strong">Default Product</Text> template using the top center dropdown.</Text>
+              <Text as="p">6. On the left sidebar, under the <Text as="strong">Product Information</Text> section, click <Text as="strong">+ Add block</Text>.</Text>
+              <Text as="p">7. Select <Text as="strong">VariantIQ Custom Fields</Text> from the Apps section and drag it above your Add to Cart button.</Text>
+              <Text as="p">8. Click <Text as="strong">Save</Text> in the top right corner.</Text>
             </BlockStack>
           </div>
         </Banner>

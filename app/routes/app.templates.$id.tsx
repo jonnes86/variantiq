@@ -1791,6 +1791,7 @@ export default function TemplateDetail() {
                 {["select", "radio", "checkbox"].includes(fieldType) ? (
                   <BlockStack gap="300">
                     <Text as="h5" variant="headingSm">Options, Pricing & Shopify Variant Sync</Text>
+                    <Text as="p" tone="subdued" variant="bodySm">Specify your options. If an option costs extra, enter the additional amount in the Price Adjustment field (this is added on top of the item's base price).</Text>
                     {fieldOptionsList.map((opt, index) => (
                       <InlineGrid columns="1fr 100px 170px auto" gap="200" key={index} alignItems="center">
                         <TextField
