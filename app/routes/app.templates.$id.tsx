@@ -929,6 +929,11 @@ export default function TemplateDetail() {
   const initialTab = searchParams.get("tab") === "products" ? 1 : 0;
   const [selectedTab, setSelectedTab] = useState(initialTab);
 
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
   useEffect(() => {
     if (actionData && 'success' in actionData && actionData.success) {
       if (typeof shopify !== 'undefined' && shopify.toast) {
@@ -1218,10 +1223,7 @@ export default function TemplateDetail() {
         ) : (
           <Card>
             <DndContext
-              sensors={useSensors(
-                useSensor(PointerSensor),
-                useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
-              )}
+              sensors={sensors}
               collisionDetection={closestCenter}
               onDragEnd={handleDragEndFields}
             >
