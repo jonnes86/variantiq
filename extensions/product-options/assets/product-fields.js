@@ -904,8 +904,26 @@ class VariantIQFields {
     // Add each visible field value as a line item property
     const visibleFields = this.getVisibleFields();
     visibleFields.forEach(field => {
-      const value = this.fieldValues[field.id];
+      let value = this.fieldValues[field.id];
       if (value && value.trim() !== '') {
+        const activePrices = this.dynamicFieldPrices[field.id] || field.priceAdjustmentsJson;
+        if (activePrices) {
+          if (field.type === 'checkbox') {
+            const selectedOpts = value.split(', ').map(s => s.trim());
+            const pricedOpts = selectedOpts.map(opt => {
+              if (activePrices[opt] && parseFloat(activePrices[opt]) > 0) {
+                return `${opt} (+$${parseFloat(activePrices[opt]).toFixed(2)})`;
+              }
+              return opt;
+            });
+            value = pricedOpts.join(', ');
+          } else {
+            if (activePrices[value] && parseFloat(activePrices[value]) > 0) {
+              value = `${value} (+$${parseFloat(activePrices[value]).toFixed(2)})`;
+            }
+          }
+        }
+
         const input = document.createElement('input');
         input.type = 'hidden';
         input.name = `properties[${field.label || field.name}]`;
