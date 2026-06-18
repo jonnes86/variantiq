@@ -153,11 +153,62 @@ class VariantIQCartWatchdog {
         );
 
         if (feeItem) {
-          const combinedPrice = item.price + (feeItem.price * feeItem.quantity / item.quantity);
+          const combinedPrice = item.price + Math.round((feeItem.price * feeItem.quantity) / item.quantity);
           const combinedLinePrice = item.line_price + feeItem.line_price;
-          // We can optionally inject this into the DOM if we can reliably find the price element for this specific line item.
-          // Since theme DOMs vary drastically, it's safer to just let the Cart Total reflect the accurate total,
-          // while the individual row price shows the base price, or we can attempt a best-effort swap if the theme uses standard data attributes.
+          
+          // Find the row for this item by locating the property element that contains the groupId
+          const propertyElements = document.querySelectorAll('dt, span, p, dd');
+          let row = null;
+          propertyElements.forEach(el => {
+             if (el.textContent && el.textContent.includes(groupId)) {
+                row = el.closest('tr, li, .cart-item, .cart__item');
+             }
+          });
+
+          if (row) {
+            // Helper to get common string formats for prices
+            const getFormats = (cents) => {
+              const str = (cents / 100).toFixed(2);
+              return [str, str.replace('.', ',')];
+            };
+
+            const oldPrices = [...getFormats(item.final_price || item.price), ...getFormats(item.original_price || item.price)];
+            const oldLinePrices = [...getFormats(item.final_line_price || item.line_price), ...getFormats(item.original_line_price || item.line_price)];
+            
+            const newPriceStr = (combinedPrice / 100).toFixed(2);
+            const newLinePriceStr = (combinedLinePrice / 100).toFixed(2);
+
+            // Walk all text nodes in the row and replace the prices safely
+            const walk = document.createTreeWalker(row, NodeFilter.SHOW_TEXT, null, false);
+            let n;
+            while(n = walk.nextNode()) {
+              let text = n.nodeValue;
+              let changed = false;
+
+              // Replace line prices first (usually larger/different)
+              for (const old of oldLinePrices) {
+                if (text.includes(old)) {
+                  // Attempt to match the comma format if it was used
+                  const replacement = old.includes(',') ? newLinePriceStr.replace('.', ',') : newLinePriceStr;
+                  text = text.replace(old, replacement);
+                  changed = true;
+                }
+              }
+
+              // Replace unit prices
+              for (const old of oldPrices) {
+                if (text.includes(old)) {
+                  const replacement = old.includes(',') ? newPriceStr.replace('.', ',') : newPriceStr;
+                  text = text.replace(old, replacement);
+                  changed = true;
+                }
+              }
+
+              if (changed) {
+                n.nodeValue = text;
+              }
+            }
+          }
         }
       }
     });
