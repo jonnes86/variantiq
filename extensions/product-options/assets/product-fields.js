@@ -763,31 +763,19 @@ class VariantIQFields {
             }
           }
 
-          if (adjustmentsTotal > 0) {
-            // Hijack the cart submit completely to push multiple items
-            e.preventDefault();
-            e.stopPropagation();
+          // Hijack the cart submit to inject properties or bundle items via AJAX
+          e.preventDefault();
+          e.stopPropagation();
+          
+          const originalHTML = addToCartButton.innerHTML;
+          addToCartButton.dataset.originalHtml = originalHTML;
+          addToCartButton.innerHTML = adjustmentsTotal > 0 ? 'Syncing Cart...' : 'Adding...';
+          addToCartButton.disabled = true;
 
-            const originalText = addToCartButton.innerHTML;
-            addToCartButton.innerHTML = 'Syncing Cart...';
-            addToCartButton.disabled = true;
-
-            await this.addFeeAndPropertiesToCart(form, adjustmentsTotal);
-
-            // Redirect specifically to cart to view combined items
-            window.location.href = '/cart';
-            return false;
-          } else {
-            // For AJAX-cart themes that may serialize the form before our hidden inputs
-            // are available, take control of the submission ourselves and post directly
-            // to /cart/add.js with all properties included.
-            e.preventDefault();
-            e.stopPropagation();
-
-            const originalHTML = addToCartButton.innerHTML;
-            addToCartButton.disabled = true;
-
-            try {
+          try {
+            if (adjustmentsTotal > 0) {
+              await this.addFeeAndPropertiesToCart(form, adjustmentsTotal);
+            } else {
               // Build the properties object from visible field selections
               const properties = {};
               this.getVisibleFields().forEach(field => {
@@ -801,7 +789,6 @@ class VariantIQFields {
               // Build the cart/add.js payload from the form, merging in our properties
               const formData = new FormData(form);
               // Remove any pre-existing properties[...] keys the form may have added
-              // AND remove raw vq_ inputs so only our clean properties[Label] keys are sent
               for (const key of [...formData.keys()]) {
                 if (key.startsWith('properties[') || key.startsWith('vq_') || key.startsWith('_vq_')) formData.delete(key);
               }
@@ -816,38 +803,40 @@ class VariantIQFields {
               });
 
               if (!response.ok) throw new Error('cart/add.js failed');
-
-              // Dispatch events that AJAX cart themes listen to for drawer refresh
-              document.dispatchEvent(new CustomEvent('cart:refresh'));
-              document.dispatchEvent(new CustomEvent('theme:cart:open'));
-              // Dawn / Debut style
-              const cartDrawer = document.querySelector('cart-drawer');
-              if (cartDrawer && typeof cartDrawer.renderContents === 'function') {
-                const refreshRes = await fetch(`${window.Shopify.routes.root}cart.js`);
-                const cartData = await refreshRes.json();
-                cartDrawer.renderContents({ sections: {}, cartData });
-              }
-              // Generic fallback: trigger a page reload if no drawer found
-              const hasDrawer = document.querySelector('cart-drawer, [id*="cart-drawer"], [class*="cart-drawer"]');
-              if (!hasDrawer) {
-                window.location.href = '/cart';
-              } else {
-                // Let the theme update its cart count badge
-                fetch('/cart.js').then(r => r.json()).then(cart => {
-                  document.querySelectorAll('[data-cart-count]').forEach(el => {
-                    el.textContent = cart.item_count;
-                  });
-                });
-              }
-            } catch (err) {
-              console.error('VariantIQ: cart/add.js failed, falling back to form submit', err);
-              // Fallback: inject hidden inputs and let native form submit proceed
-              this.addPropertiesToCart(form);
-              HTMLFormElement.prototype.submit.call(form);
-            } finally {
-              addToCartButton.innerHTML = originalHTML;
-              addToCartButton.disabled = false;
             }
+
+            // Dispatch events that AJAX cart themes listen to for drawer refresh
+            document.dispatchEvent(new CustomEvent('cart:refresh'));
+            document.dispatchEvent(new CustomEvent('theme:cart:open'));
+            
+            // Dawn / Debut style
+            const cartDrawer = document.querySelector('cart-drawer');
+            if (cartDrawer && typeof cartDrawer.renderContents === 'function') {
+              const refreshRes = await fetch(`${window.Shopify.routes.root}cart.js`);
+              const cartData = await refreshRes.json();
+              cartDrawer.renderContents({ sections: {}, cartData });
+            }
+
+            // Generic fallback: trigger a page reload if no drawer found
+            const hasDrawer = document.querySelector('cart-drawer, [id*="cart-drawer"], [class*="cart-drawer"]');
+            if (!hasDrawer) {
+              window.location.href = '/cart';
+            } else {
+              // Let the theme update its cart count badge
+              fetch('/cart.js').then(r => r.json()).then(cart => {
+                document.querySelectorAll('[data-cart-count]').forEach(el => {
+                  el.textContent = cart.item_count;
+                });
+              });
+            }
+          } catch (err) {
+            console.error('VariantIQ: cart/add.js failed, falling back to form submit', err);
+            // Fallback: inject hidden inputs and let native form submit proceed
+            this.addPropertiesToCart(form);
+            HTMLFormElement.prototype.submit.call(form);
+          } finally {
+            addToCartButton.innerHTML = originalHTML;
+            addToCartButton.disabled = false;
           }
         } else {
           console.error('VariantIQ: Could not find form to add properties');
@@ -1069,4 +1058,15 @@ document.addEventListener('DOMContentLoaded', () => {
   containers.forEach(container => {
     new VariantIQFields(container);
   });
+});
+
+// Fix BFCache stuck button issue when users click the browser Back button
+window.addEventListener('pageshow', (event) => {
+  if (event.persisted) {
+    const btn = document.querySelector('form[action^="/cart/add"] button[type="submit"], form[action^="/cart/add"] input[type="submit"]');
+    if (btn) {
+      btn.innerHTML = btn.dataset.originalHtml || 'Add to cart';
+      btn.disabled = false;
+    }
+  }
 });
