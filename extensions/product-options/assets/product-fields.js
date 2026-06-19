@@ -29,7 +29,11 @@ class VariantIQFields {
   }
 
   findBasePrice() {
-    this.priceElement = document.querySelector('.price-item--regular, .price__regular, .product__price, [data-product-price]');
+    this.priceElement = document.querySelector('.price-item--regular') || 
+                        document.querySelector('.price__regular') || 
+                        document.querySelector('.product__price') || 
+                        document.querySelector('[data-product-price]');
+    
     if (this.priceElement) {
       this.originalPriceHTML = this.priceElement.innerHTML;
       this.originalPriceText = this.priceElement.innerText.trim();
@@ -519,9 +523,23 @@ class VariantIQFields {
     // Write DOM modification
     if (adjustmentsTotal > 0) {
       const newTotal = (this.basePrice + adjustmentsTotal).toFixed(2);
-      // Use string replace to safely insert the injected price while maintaining currency symbols
-      const newText = this.originalPriceText.replace(/[\d,\.]+/, newTotal);
-      this.priceElement.innerText = newText;
+      
+      // Update innerHTML instead of innerText to preserve any span structures
+      // We look for the first number sequence in the HTML and replace it
+      let newHTML = this.originalPriceHTML;
+      
+      // Find the first occurrence of the number outside of HTML attributes
+      // A simple heuristic is to replace the first number that isn't inside a tag definition
+      const originalNumStr = this.originalPriceText.match(/[\d,\.]+/)[0];
+      
+      // If the HTML contains the exact string, replace it safely
+      if (newHTML.includes(originalNumStr)) {
+         newHTML = newHTML.replace(originalNumStr, newTotal);
+         this.priceElement.innerHTML = newHTML;
+      } else {
+         // Fallback if formatting differs
+         this.priceElement.innerText = this.originalPriceText.replace(originalNumStr, newTotal);
+      }
     } else {
       // Revert exactly to the initial parsed text node or HTML
       this.priceElement.innerHTML = this.originalPriceHTML;
