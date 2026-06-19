@@ -971,33 +971,47 @@ class VariantIQFields {
 
       const feeQuantity = Math.round(adjustmentsTotal * 100) * baseQuantity;
 
-      // Inject Fee Product
-      const feeFormData = new URLSearchParams();
-      feeFormData.append('id', dummyVariantId);
-      feeFormData.append('quantity', feeQuantity);
-      feeFormData.append('properties[_variantiq_group]', groupId);
-      feeFormData.append('properties[_variantiq_fee]', 'true');
+      const mainId = formData.get('id');
+      const mainProperties = {};
+      for (const [key, value] of formData.entries()) {
+        if (key.startsWith('properties[')) {
+          const propName = key.slice(11, -1);
+          mainProperties[propName] = value;
+        }
+      }
 
-      await fetch('/cart/add.js', {
+      const payload = {
+        items: [
+          {
+            id: mainId,
+            quantity: baseQuantity,
+            properties: mainProperties
+          },
+          {
+            id: dummyVariantId,
+            quantity: feeQuantity,
+            properties: {
+              '_variantiq_group': groupId,
+              '_variantiq_fee': 'true'
+            }
+          }
+        ]
+      };
+
+      const res = await fetch('/cart/add.js', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: feeFormData.toString(),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
       });
 
-      // Let native fetch handle the base item
-      // Make sure the main form data contains the exact id that we swapped in line 496
-      await fetch('/cart/add.js', {
-        method: 'POST',
-        body: formData,
-      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(`Cart Add failed: ${errData.description || res.statusText}`);
+      }
 
     } catch (e) {
       console.error('VariantIQ Cart Override Failed:', e);
-      // Fallback: Add the base item via AJAX so it actually completes before the caller redirects to /cart
-      await fetch('/cart/add.js', {
-        method: 'POST',
-        body: formData,
-      });
+      throw e; // Rethrow to let the interceptor handle the UI fallback
     }
   }
 
