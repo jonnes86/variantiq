@@ -271,6 +271,7 @@ export default function Index() {
     { id: 'dashboard-tab', content: 'Dashboard' },
     { id: 'templates-tab', content: 'Templates' },
     { id: 'datasets-tab', content: 'Datasets' },
+    { id: 'integrations-tab', content: 'Integrations' },
     { id: 'help-tab', content: 'Help & Setup' },
   ];
 
