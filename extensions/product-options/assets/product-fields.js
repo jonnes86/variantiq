@@ -12,6 +12,7 @@ class VariantIQFields {
     this.templateData = null;
     this.fieldValues = {};
     this.dynamicFieldPrices = {};
+    this.ssInventory = [];
     this.instanceId = Math.random().toString(36).substr(2, 9);
     this.init();
   }
@@ -19,7 +20,10 @@ class VariantIQFields {
   async init() {
     try {
       this.findBasePrice();
-      await this.fetchTemplate();
+      await Promise.all([
+        this.fetchTemplate(),
+        this.fetchSSInventory()
+      ]);
       this.render();
       this.attachEventListeners();
     } catch (error) {
@@ -59,6 +63,18 @@ class VariantIQFields {
     // Track View Analytic
     if (this.templateData && this.templateData.template && this.templateData.template.id) {
       this.trackAnalytics('view');
+    }
+  }
+
+  async fetchSSInventory() {
+    try {
+      const response = await fetch(`${this.apiUrl}/api/ss-inventory?shop=${encodeURIComponent(this.shop)}&productId=${encodeURIComponent(this.productId)}`);
+      if (response.ok) {
+        const data = await response.json();
+        this.ssInventory = data.items || [];
+      }
+    } catch (e) {
+      console.warn('VariantIQ S&S Inventory fetch failed:', e);
     }
   }
 
@@ -108,6 +124,7 @@ class VariantIQFields {
 
     fieldsContainer.innerHTML = html;
     this.evaluateRules();
+    this.applySSInventoryRules();
     this.updateProgressBar();
   }
 
@@ -141,24 +158,56 @@ class VariantIQFields {
         <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px;">
     `;
     fieldOptions.forEach(option => {
-      const bg = this.getSwatchBg(option);
-      const dotHtml = bg
-        ? `<span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:${bg};border:1px solid rgba(0,0,0,0.15);flex-shrink:0;"></span>`
-        : '';
+      const bg = field.swatchesJson && field.swatchesJson[option] ? field.swatchesJson[option] : this.getSwatchBg(option) || '#dddddd';
+      const optionPrice = field.priceAdjustmentsJson && field.priceAdjustmentsJson[option]
+          ? ` <span class="variantiq-price-label">(+$${parseFloat(field.priceAdjustmentsJson[option]).toFixed(2)})</span>`
+          : ``;
       html += `
         <button type="button"
           class="variantiq-swatch-btn"
           data-field-id="${field.id}"
           data-value="${option}"
           title="${option}"
-          style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:9999px;cursor:pointer;border:2px solid #d1d5db;background:#fff;font-size:13px;line-height:1.3;color:#1a1a1a;outline:none;transition:transform 0.1s,box-shadow 0.1s,border-color 0.15s;white-space:nowrap;"
+          style="display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;cursor:pointer;border:2px solid #e5e7eb;background:${bg};outline:none;transition:transform 0.1s,box-shadow 0.1s,border-color 0.15s;flex-shrink:0;"
           aria-label="${option}"
-        >${dotHtml}<span>${option}</span></button>
+        ></button>
       `;
     });
     html += `
         </div>
+        <div class="variantiq-swatch-selected-label" style="margin-top: 6px; font-size: 13px; color: #6b7280; display: none;"></div>
         <input type="hidden" name="_vq_${this.instanceId}_${field.id}" value="" id="vq-${this.instanceId}-${field.id}" ${isRequired} class="variantiq-swatch-input" />
+      </fieldset>
+    `;
+    return html;
+  }
+
+  renderButtonPills(field) {
+    const fieldOptions = field.optionsJson || [];
+    const isRequired = field.required ? 'required' : '';
+    const requiredMark = field.required ? '<span class="required">*</span>' : '';
+    let html = `
+      <fieldset class="variantiq-field variantiq-button-pills js product-form__input" data-field-id="${field.id}" style="display: none; border: none; padding: 0; margin: 0 0 1rem 0;">
+        <legend class="form__label" style="width: 100%; margin-bottom: 0.8rem; text-align: left; display: block;">${field.label}${requiredMark}</legend>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px;">
+    `;
+    fieldOptions.forEach(option => {
+      const optionPrice = field.priceAdjustmentsJson && field.priceAdjustmentsJson[option]
+          ? ` <span class="variantiq-price-label">(+$${parseFloat(field.priceAdjustmentsJson[option]).toFixed(2)})</span>`
+          : ``;
+      html += `
+        <button type="button"
+          class="variantiq-pill-btn"
+          data-field-id="${field.id}"
+          data-value="${option}"
+          style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:9999px;cursor:pointer;border:2px solid #e5e7eb;background:#ffffff;font-size:14px;line-height:1.3;color:#1a1a1a;outline:none;transition:all 0.15s;white-space:nowrap;"
+          aria-label="${option}"
+        ><span>${option}${optionPrice}</span></button>
+      `;
+    });
+    html += `
+        </div>
+        <input type="hidden" name="_vq_${this.instanceId}_${field.id}" value="" id="vq-${this.instanceId}-${field.id}" ${isRequired} class="variantiq-pill-input" />
       </fieldset>
     `;
     return html;
@@ -215,6 +264,14 @@ class VariantIQFields {
     const fieldOptions = field.optionsJson || [];
     const isRequired = field.required ? 'required' : '';
     const requiredMark = field.required ? '<span class="required">*</span>' : '';
+
+    if (field.displayStyle === 'swatches') {
+      return this.renderColorSwatches(field);
+    }
+    
+    if (field.displayStyle === 'button_pills') {
+      return this.renderButtonPills(field);
+    }
 
     if (field.type === 'radio' || field.type === 'checkbox') {
       let html = `
@@ -324,6 +381,32 @@ class VariantIQFields {
       this.updateProgressBar();
     });
 
+    // Button pill click handler
+    this.container.addEventListener('click', (e) => {
+      const btn = e.target.closest('.variantiq-pill-btn');
+      if (!btn) return;
+      const fieldId = btn.dataset.fieldId;
+      const value = btn.dataset.value;
+      const fieldEl = this.container.querySelector(`.variantiq-field[data-field-id="${fieldId}"]`);
+      if (!fieldEl) return;
+
+      // Update hidden input
+      const hidden = fieldEl.querySelector('.variantiq-pill-input');
+      if (hidden) hidden.value = value;
+
+      // Toggle active style on pills
+      fieldEl.querySelectorAll('.variantiq-pill-btn').forEach(b => {
+        b.style.borderColor = b === btn ? '#1a1a1a' : '#e5e7eb';
+        b.style.background = b === btn ? '#f3f4f6' : '#ffffff';
+        b.style.fontWeight = b === btn ? '600' : 'normal';
+      });
+
+      // Store value and re-evaluate
+      this.fieldValues[fieldId] = value;
+      this.evaluateRules();
+      this.updateProgressBar();
+    });
+
     // Intercept Add to Cart form submission
     this.interceptAddToCart();
   }
@@ -351,6 +434,7 @@ class VariantIQFields {
 
     // Re-evaluate rules globally every time a generic field changes
     this.evaluateRules();
+    this.applySSInventoryRules();
     this.updateProgressBar();
   }
 
@@ -1019,6 +1103,75 @@ class VariantIQFields {
     } catch (e) {
       console.error('VariantIQ Cart Override Failed:', e);
       throw e; // Rethrow to let the interceptor handle the UI fallback
+    }
+  }
+
+  applySSInventoryRules() {
+    if (!this.ssInventory || this.ssInventory.length === 0) return;
+
+    const { fields } = this.templateData.template;
+    const colorField = fields.find(f => this.isColorField(f));
+    const sizeField = fields.find(f => (f.label || f.name || '').toLowerCase().includes('size'));
+
+    if (!colorField || !sizeField) return;
+
+    const selectedColor = this.fieldValues[colorField.id];
+    const selectedSize = this.fieldValues[sizeField.id];
+
+    // Check Color availability based on Size
+    const colorFieldEl = this.container.querySelector(`.variantiq-field[data-field-id="${colorField.id}"]`);
+    if (colorFieldEl) {
+      const colorButtons = colorFieldEl.querySelectorAll('button');
+      colorButtons.forEach(btn => {
+        const colorName = btn.dataset.value;
+        let hasStock = false;
+        if (selectedSize) {
+          const stock = this.ssInventory.find(item => item.color === colorName && item.size === selectedSize);
+          hasStock = stock && stock.qty > 0;
+        } else {
+          const totalStock = this.ssInventory.filter(item => item.color === colorName).reduce((a, b) => a + b.qty, 0);
+          hasStock = totalStock > 0;
+        }
+        
+        btn.disabled = !hasStock;
+        btn.style.opacity = hasStock ? '1' : '0.3';
+        btn.style.cursor = hasStock ? 'pointer' : 'not-allowed';
+        
+        // Visual crossed out effect for swatches
+        if (!hasStock && btn.classList.contains('variantiq-swatch-btn') && !btn.querySelector('.variantiq-out-of-stock')) {
+          const cross = document.createElement('div');
+          cross.className = 'variantiq-out-of-stock';
+          cross.style.cssText = 'position:absolute;top:50%;left:50%;width:100%;height:2px;background:#ef4444;transform:translate(-50%,-50%) rotate(-45deg);';
+          btn.style.position = 'relative';
+          btn.style.overflow = 'hidden';
+          btn.appendChild(cross);
+        } else if (hasStock) {
+          const cross = btn.querySelector('.variantiq-out-of-stock');
+          if (cross) cross.remove();
+        }
+      });
+    }
+
+    // Check Size availability based on Color
+    const sizeFieldEl = this.container.querySelector(`.variantiq-field[data-field-id="${sizeField.id}"]`);
+    if (sizeFieldEl) {
+      const sizeButtons = sizeFieldEl.querySelectorAll('button');
+      sizeButtons.forEach(btn => {
+        const sizeName = btn.dataset.value;
+        let hasStock = false;
+        if (selectedColor) {
+          const stock = this.ssInventory.find(item => item.size === sizeName && item.color === selectedColor);
+          hasStock = stock && stock.qty > 0;
+        } else {
+          const totalStock = this.ssInventory.filter(item => item.size === sizeName).reduce((a, b) => a + b.qty, 0);
+          hasStock = totalStock > 0;
+        }
+
+        btn.disabled = !hasStock;
+        btn.style.opacity = hasStock ? '1' : '0.3';
+        btn.style.cursor = hasStock ? 'pointer' : 'not-allowed';
+        btn.style.textDecoration = hasStock ? 'none' : 'line-through';
+      });
     }
   }
 

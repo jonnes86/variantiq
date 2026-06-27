@@ -291,6 +291,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
     const name = String(form.get("fieldName") || "").trim();
     const label = String(form.get("fieldLabel") || "").trim();
     const required = form.get("fieldRequired") === "true";
+    const displayStyle = String(form.get("fieldDisplayStyle") || "default");
     const optionsDataStr = String(form.get("optionsData") || "");
 
     if (!type || !name || !label) {
@@ -301,6 +302,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
     let optionsJson: any = null;
     let priceAdjustmentsJson: any = null;
     let variantMappingJson: any = null;
+    let swatchesJson: any = null;
 
     if (["select", "radio", "checkbox"].includes(type) && optionsDataStr) {
       try {
@@ -310,8 +312,10 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
           const priceMap: Record<string, number> = {};
           const mappingMap: Record<string, string> = {};
+          const swatchMap: Record<string, string> = {};
           let hasPrices = false;
           let hasMappings = false;
+          let hasSwatches = false;
 
           parsedOptions.forEach(o => {
             const price = parseFloat(o.price);
@@ -323,10 +327,15 @@ export async function action({ request, params }: ActionFunctionArgs) {
               mappingMap[o.label.trim()] = o.variantMapping.trim();
               hasMappings = true;
             }
+            if (o.swatchColor && o.swatchColor.trim() !== "") {
+              swatchMap[o.label.trim()] = o.swatchColor.trim();
+              hasSwatches = true;
+            }
           });
 
           if (hasPrices) priceAdjustmentsJson = priceMap;
           if (hasMappings) variantMappingJson = mappingMap;
+          if (hasSwatches) swatchesJson = swatchMap;
         }
       } catch (e) {
         console.error("Failed to parse optionsData", e);
@@ -357,7 +366,9 @@ export async function action({ request, params }: ActionFunctionArgs) {
           required,
           optionsJson: optionsJson as any,
           priceAdjustmentsJson: priceAdjustmentsJson as any,
-          variantMappingJson: variantMappingJson as any
+          variantMappingJson: variantMappingJson as any,
+          swatchesJson: swatchesJson as any,
+          displayStyle
         }
       });
     } else {
@@ -371,6 +382,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
           optionsJson: optionsJson as any,
           priceAdjustmentsJson: priceAdjustmentsJson as any,
           variantMappingJson: variantMappingJson as any,
+          swatchesJson: swatchesJson as any,
+          displayStyle,
           sort: sortOrder,
         },
       });
@@ -706,6 +719,32 @@ export async function action({ request, params }: ActionFunctionArgs) {
     return json({ success: true });
   }
 
+  // Link multiple products
+  if (intent === "linkProducts") {
+    const productIdsStr = String(form.get("productIds") || "[]");
+    let productIds: string[] = [];
+    try {
+      productIds = JSON.parse(productIdsStr);
+    } catch (e) {
+      return json({ error: "Invalid product IDs format" }, { status: 400 });
+    }
+
+    if (productIds.length > 0) {
+      for (const gid of productIds) {
+        // Prevent duplicate links
+        const existing = await prisma.productTemplateLink.findFirst({
+          where: { shop: session.shop, templateId, productGid: gid }
+        });
+        if (!existing) {
+          await prisma.productTemplateLink.create({
+            data: { shop: session.shop, templateId, productGid: gid }
+          });
+        }
+      }
+    }
+    return json({ success: true });
+  }
+
   // Unlink product
   if (intent === "unlinkProduct") {
     const productGid = String(form.get("productGid") || "");
@@ -762,6 +801,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
 function StatefulLivePreview({ template, datasets, appearance }: { template: any, datasets: any[], appearance: any }) {
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
+  const [isHover, setIsHover] = useState(false);
 
   const { fontFamily, fontSize, fontWeight, textColor } = appearance;
 
@@ -916,6 +956,35 @@ function StatefulLivePreview({ template, datasets, appearance }: { template: any
         {template.fields.length === 0 && (
           <Text tone="subdued" as="p">Add fields to see them previewed here.</Text>
         )}
+        <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--p-color-border-subdued)' }}>
+          <Text as="p" tone="subdued" variant="bodySm" fontWeight="bold">Storefront Button Preview</Text>
+          <div
+            onMouseEnter={() => setIsHover(true)}
+            onMouseLeave={() => setIsHover(false)}
+            style={{
+              display: "inline-block",
+              marginTop: "8px",
+              fontFamily: appearance.fontFamily || undefined,
+              fontSize: appearance.fontSize || undefined,
+              fontWeight: appearance.fontWeight || undefined,
+              color:
+                isHover && appearance.hoverTextColor
+                  ? appearance.hoverTextColor
+                  : appearance.textColor || undefined,
+              backgroundColor:
+                isHover && appearance.hoverBackgroundColor
+                  ? appearance.hoverBackgroundColor
+                  : appearance.backgroundColor || undefined,
+              border: appearance.borderColor ? `1px solid ${appearance.borderColor}` : undefined,
+              borderRadius: appearance.borderRadius || undefined,
+              padding: appearance.padding || undefined,
+            }}
+          >
+            <Button>
+              Sample Button
+            </Button>
+          </div>
+        </div>
       </BlockStack>
     </div>
   );
@@ -952,7 +1021,8 @@ export default function TemplateDetail() {
   const [fieldName, setFieldName] = useState("");
   const [fieldLabel, setFieldLabel] = useState("");
   const [fieldRequired, setFieldRequired] = useState(false);
-  const [fieldOptionsList, setFieldOptionsList] = useState<Array<{ label: string, price: string, variantMapping: string }>>([]);
+  const [fieldDisplayStyle, setFieldDisplayStyle] = useState("default");
+  const [fieldOptionsList, setFieldOptionsList] = useState<Array<{ label: string, price: string, variantMapping: string, swatchColor: string }>>([]);
   const [fieldModalTab, setFieldModalTab] = useState(0);
 
   useEffect(() => {
@@ -1042,12 +1112,14 @@ export default function TemplateDetail() {
     setFieldName("");
     setFieldLabel("");
     setFieldRequired(false);
+    setFieldDisplayStyle("default");
     setFieldOptionsList([]);
     setFieldModalTab(0);
   };
 
-  const handleAddFieldClick = () => {
+  const handleAddFieldClick = (type = "select") => {
     resetFieldForm();
+    setFieldType(type);
     setShowFieldForm(true);
   };
 
@@ -1057,13 +1129,15 @@ export default function TemplateDetail() {
     setFieldName(field.name);
     setFieldLabel(field.label);
     setFieldRequired(field.required);
+    setFieldDisplayStyle(field.displayStyle || "default");
 
     // Map existing JSON options and pricing back to UI state
     const initialOptions = field.optionsJson
       ? field.optionsJson.map((opt: string) => ({
         label: opt,
         price: field.priceAdjustmentsJson?.[opt] ? String(field.priceAdjustmentsJson[opt]) : "",
-        variantMapping: field.variantMappingJson?.[opt] ? String(field.variantMappingJson[opt]) : ""
+        variantMapping: field.variantMappingJson?.[opt] ? String(field.variantMappingJson[opt]) : "",
+        swatchColor: field.swatchesJson?.[opt] ? String(field.swatchesJson[opt]) : "#000000"
       }))
       : [];
     setFieldOptionsList(initialOptions);
@@ -1082,6 +1156,7 @@ export default function TemplateDetail() {
         fieldName,
         fieldLabel,
         fieldRequired: String(fieldRequired),
+        fieldDisplayStyle,
         optionsData: JSON.stringify(fieldOptionsList.filter(o => o.label.trim() !== "")),
       },
       { method: "post" },
@@ -1106,52 +1181,8 @@ export default function TemplateDetail() {
     }
   };
 
-  // Dataset Modal State
-  const [showDatasetForm, setShowDatasetForm] = useState(false);
-  const [editingDatasetId, setEditingDatasetId] = useState<string | null>(null);
-  const [datasetName, setDatasetName] = useState("");
-  const [datasetLabel, setDatasetLabel] = useState("");
-  const [datasetType, setDatasetType] = useState("select");
-  const [datasetOptionsStr, setDatasetOptionsStr] = useState("");
-
-  const resetDatasetForm = useCallback(() => {
-    setEditingDatasetId(null);
-    setDatasetName("");
-    setDatasetLabel("");
-    setDatasetType("select");
-    setDatasetOptionsStr("");
-    setShowDatasetForm(false);
-  }, []);
-
-  const handleEditDatasetClick = useCallback((dataset: any) => {
-    setEditingDatasetId(dataset.id);
-    setDatasetName(dataset.name);
-    setDatasetLabel(dataset.label || "");
-    setDatasetType(dataset.type || "select");
-    
-    let opts: string[] = [];
-    try { opts = typeof dataset.optionsJson === 'string' ? JSON.parse(dataset.optionsJson) : (dataset.optionsJson || []); } catch(e){}
-    setDatasetOptionsStr(opts.join("\n"));
-    
-    setShowDatasetForm(true);
-  }, []);
-
-  const handleSaveDataset = useCallback(() => {
-    const formData = new FormData();
-    formData.append("_intent", "saveDataset");
-    formData.append("datasetId", editingDatasetId || "new");
-    formData.append("name", datasetName);
-    formData.append("label", datasetLabel);
-    formData.append("type", datasetType);
-    formData.append("options", datasetOptionsStr);
-    submit(formData, { method: "post" });
-    resetDatasetForm();
-  }, [editingDatasetId, datasetName, datasetLabel, datasetType, datasetOptionsStr, submit, resetDatasetForm]);
-
-  const handleDeleteDataset = useCallback((id: string) => {
-    if (!confirm("Are you sure you want to delete this dataset?")) return;
-    submit({ _intent: "deleteDataset", datasetId: id }, { method: "post" });
-  }, [submit]);
+  // Datasets are managed globally on the dashboard now.
+  // We only load datasets to use them in the Rule builder dropdowns.
 
   const fieldTypeOptions = [
     { label: "Text Input", value: "text" },
@@ -1216,9 +1247,36 @@ export default function TemplateDetail() {
 
         return editableFields.length === 0 ? (
           <Card>
-            <Text as="p" tone="subdued">
-              No fields yet. Add your first field to get started.
-            </Text>
+            <BlockStack gap="400">
+              <Text as="h3" variant="headingMd">No Option Sets Yet</Text>
+              <Text as="p" tone="subdued">Add your first custom option to this template. Choose a common type below to get started quickly.</Text>
+              <InlineGrid columns={2} gap="400">
+                <Button onClick={() => handleAddFieldClick('text')} variant="secondary" textAlign="left">
+                  <BlockStack gap="100">
+                    <Text as="p" fontWeight="bold">✏️ Text Input</Text>
+                    <Text as="p" tone="subdued" variant="bodySm">For names, monograms, or short messages.</Text>
+                  </BlockStack>
+                </Button>
+                <Button onClick={() => handleAddFieldClick('select')} variant="secondary" textAlign="left">
+                  <BlockStack gap="100">
+                    <Text as="p" fontWeight="bold">▼ Dropdown</Text>
+                    <Text as="p" tone="subdued" variant="bodySm">For selecting one option from a list.</Text>
+                  </BlockStack>
+                </Button>
+                <Button onClick={() => handleAddFieldClick('radio')} variant="secondary" textAlign="left">
+                  <BlockStack gap="100">
+                    <Text as="p" fontWeight="bold">🔘 Radio Buttons</Text>
+                    <Text as="p" tone="subdued" variant="bodySm">For selecting one option where all choices are visible.</Text>
+                  </BlockStack>
+                </Button>
+                <Button onClick={() => handleAddFieldClick('checkbox')} variant="secondary" textAlign="left">
+                  <BlockStack gap="100">
+                    <Text as="p" fontWeight="bold">☑️ Checkboxes</Text>
+                    <Text as="p" tone="subdued" variant="bodySm">For selecting multiple add-ons or options.</Text>
+                  </BlockStack>
+                </Button>
+              </InlineGrid>
+            </BlockStack>
           </Card>
         ) : (
           <Card>
@@ -1246,58 +1304,6 @@ export default function TemplateDetail() {
     </BlockStack>
   );
 
-  const DatasetsView = (
-    <BlockStack gap="400">
-      <Card>
-        <BlockStack gap="400">
-          <InlineGrid columns="1fr auto" gap="400" alignItems="start">
-            <BlockStack gap="200">
-              <Text as="h3" variant="headingMd">
-                Global Data Sets
-              </Text>
-              <Text as="p">
-                Data sets allow you to maintain massive lists of options (like hundreds of thread colors or fonts) in a single place. Any Option Set linked to a dataset will automatically update when you edit the dataset here!
-              </Text>
-            </BlockStack>
-            <Button onClick={() => setShowDatasetForm(true)}>Add Dataset</Button>
-          </InlineGrid>
-        </BlockStack>
-      </Card>
-      
-      {datasets.length === 0 ? (
-        <Card>
-          <Text as="p" tone="subdued">
-            No datasets created yet. Click 'Add Dataset' to get started.
-          </Text>
-        </Card>
-      ) : (
-        <Card padding="0">
-          <List type="bullet">
-            {datasets.map((dataset: any) => (
-              <div key={dataset.id} style={{ padding: '16px', borderBottom: '1px solid var(--p-color-border-subdued)' }}>
-                <InlineStack align="space-between" blockAlign="center">
-                  <BlockStack gap="100">
-                    <Text as="h4" variant="bodyMd" fontWeight="semibold">{dataset.name}</Text>
-                    <Text as="p" tone="subdued" variant="bodySm">
-                      {dataset.type} • {(() => {
-                        let len = 0;
-                        try { len = (typeof dataset.optionsJson === 'string' ? JSON.parse(dataset.optionsJson) : dataset.optionsJson).length; } catch(e){}
-                        return len;
-                      })()} options
-                    </Text>
-                  </BlockStack>
-                  <InlineStack gap="200">
-                    <Button onClick={() => handleEditDatasetClick(dataset)}>Edit</Button>
-                    <Button tone="critical" onClick={() => handleDeleteDataset(dataset.id)}>Delete</Button>
-                  </InlineStack>
-                </InlineStack>
-              </div>
-            ))}
-          </List>
-        </Card>
-      )}
-    </BlockStack>
-  );
 
   const ProductsView = (
     <BlockStack gap="400">
@@ -1325,9 +1331,21 @@ export default function TemplateDetail() {
                 {template.links.length} product(s) using this template
               </Text>
             </BlockStack>
-            <Link to={`/app/templates/${template.id}/products`} style={{ textDecoration: 'none' }}>
-              <Button variant="primary">Manage Product Links</Button>
-            </Link>
+            <Button variant="primary" onClick={async () => {
+              if (typeof shopify !== 'undefined' && shopify.resourcePicker) {
+                 const selected = await shopify.resourcePicker({
+                    type: 'product',
+                    action: 'select',
+                    multiple: true
+                 });
+                 if (selected && selected.length > 0) {
+                    const ids = selected.map((p: any) => p.id);
+                    submit({ _intent: "linkProducts", productIds: JSON.stringify(ids) }, { method: "post" });
+                 }
+              }
+            }}>
+              Manage Product Links
+            </Button>
           </InlineGrid>
         </BlockStack>
       </Card>
@@ -1355,13 +1373,18 @@ export default function TemplateDetail() {
                     <Text variant="bodyMd" fontWeight="bold" as="h3">
                       {product.title}
                     </Text>
-                    <Form method="post">
-                      <input type="hidden" name="_intent" value="unlinkProduct" />
-                      <input type="hidden" name="productGid" value={product.id} />
-                      <Button submit tone="critical">
-                        Unlink
-                      </Button>
-                    </Form>
+                    <InlineStack gap="200">
+                      <Link to={`/app/templates/${template.id}/products/${numericProductId}`} style={{ textDecoration: 'none' }}>
+                        <Button>Edit Overrides</Button>
+                      </Link>
+                      <Form method="post">
+                        <input type="hidden" name="_intent" value="unlinkProduct" />
+                        <input type="hidden" name="productGid" value={product.id} />
+                        <Button submit tone="critical">
+                          Unlink
+                        </Button>
+                      </Form>
+                    </InlineStack>
                   </InlineStack>
                 </ResourceItem>
               );
@@ -1398,28 +1421,20 @@ export default function TemplateDetail() {
                 Rules Editor
               </Text>
               
-              <details style={{ background: 'var(--p-color-bg-surface-secondary)', padding: '12px', borderRadius: '8px', border: '1px solid var(--p-color-border)', cursor: 'pointer' }}>
-                <summary style={{ fontWeight: 'bold' }}>Instructions & More Info</summary>
-                <div style={{ marginTop: '12px', cursor: 'auto' }}>
-                  <BlockStack gap="200">
-                    <Text as="p" variant="bodyMd">
-                      <Text as="strong">Step 1 (The Root Canvas):</Text><br />
-                      Option Sets that have no incoming connections will be unconditionally visible to every customer on this product.
-                    </Text>
-                    <Divider />
-                    <Text as="p" variant="bodyMd">
-                      <Text as="strong">Step 2 (Nesting Dependencies):</Text><br />
-                      To create a dependency, click and drag from the orange port of a parent option to the blue target port of a child Option Set.<br />
-                      This builds a cascading rule so the child ONLY appears when that option is chosen!
-                    </Text>
-                    <Divider />
-                    <Text as="p" variant="bodyMd">
-                      <Text as="strong">Step 3 (Limiting Options to Datasets):</Text><br />
-                      You can attach a <Text as="strong">Global Dataset</Text> constraint using the select box next to the Option Set name. This lets you say "If Shirt is selected, show the Colors field, but LIMIT the choices to the 'Shirt Colors' dataset."
-                    </Text>
-                  </BlockStack>
-                </div>
-              </details>
+              <Card background="bg-surface-secondary">
+                <BlockStack gap="200">
+                  <Text as="h4" variant="headingSm">💡 How Rules Work:</Text>
+                  <Text as="p" variant="bodyMd">
+                    Rules allow you to conditionally show, hide, or limit options based on what the customer selects.<br />
+                    For example: <em>"IF [Shirt Size] is [4XL], THEN [Hide] the [Gift Wrap] option."</em>
+                  </Text>
+                  <Text as="p" variant="bodyMd">
+                    <strong>Step 1:</strong> Option Sets with no incoming connections are unconditionally visible.<br />
+                    <strong>Step 2:</strong> Click and drag from an orange port to a blue target port to create a dependency.<br />
+                    <strong>Step 3:</strong> You can attach a Global Dataset constraint using the select box next to the Option Set name.
+                  </Text>
+                </BlockStack>
+              </Card>
             </BlockStack>
           </InlineGrid>
 
@@ -1574,38 +1589,7 @@ export default function TemplateDetail() {
           </InlineGrid>
         </BlockStack>
       </Card>
-      <Card>
-        <BlockStack gap="200">
-          <Text as="h4" variant="headingSm">
-            Preview
-          </Text>
-          <div
-            onMouseEnter={() => setIsHover(true)}
-            onMouseLeave={() => setIsHover(false)}
-            style={{
-              display: "inline-block",
-              fontFamily: fontFamily || undefined,
-              fontSize: fontSize || undefined,
-              fontWeight: fontWeight || undefined,
-              color:
-                isHover && hoverTextColor
-                  ? hoverTextColor
-                  : textColor || undefined,
-              backgroundColor:
-                isHover && hoverBackgroundColor
-                  ? hoverBackgroundColor
-                  : backgroundColor || undefined,
-              border: borderColor ? `1px solid ${borderColor}` : undefined,
-              borderRadius: borderRadius || undefined,
-              padding: padding || undefined,
-            }}
-          >
-            <Button>
-              Sample Button
-            </Button>
-          </div>
-        </BlockStack>
-      </Card>
+
       <InlineGrid columns={2} gap="200">
         <Button onClick={handleSaveAppearance} variant="primary">
           Save Appearance
@@ -1669,7 +1653,6 @@ export default function TemplateDetail() {
                 { id: "fields", content: "Option Sets", badge: String(template.fields.filter((f: any) => !template.rules.some((r: any) => r.actionType === 'LIMIT_OPTIONS_DATASET' && r.targetFieldId === f.id)).length) },
                 { id: "products", content: "Linked Products", badge: String(template.links.length) },
                 { id: "rules", content: "Rules Editor", badge: String(template.rules.length) },
-                { id: "datasets", content: "Global Data Sets", badge: String(datasets.length) },
                 { id: "appearance", content: "Appearance" },
               ]}
               selected={selectedTab}
@@ -1679,8 +1662,7 @@ export default function TemplateDetail() {
                 {selectedTab === 0 && FieldsView}
                 {selectedTab === 1 && ProductsView}
                 {selectedTab === 2 && RulesView}
-                {selectedTab === 3 && DatasetsView}
-                {selectedTab === 4 && AppearanceView}
+                {selectedTab === 3 && AppearanceView}
               </div>
             </Tabs>
           </BlockStack>
@@ -1692,7 +1674,7 @@ export default function TemplateDetail() {
               <BlockStack gap="400">
                 <Text variant="headingMd" as="h2">Live Preview</Text>
                 <Divider />
-                <StatefulLivePreview template={template} datasets={datasets} appearance={{ fontFamily, fontSize, fontWeight, textColor }} />
+                <StatefulLivePreview template={template} datasets={datasets} appearance={{ fontFamily, fontSize, fontWeight, textColor, backgroundColor, borderColor, borderRadius, padding, hoverBackgroundColor, hoverTextColor }} />
               </BlockStack>
             </Card>
           </div>
@@ -1792,6 +1774,11 @@ export default function TemplateDetail() {
                   <BlockStack gap="300">
                     <Text as="h5" variant="headingSm">Options, Pricing & Shopify Variant Sync</Text>
                     <Text as="p" tone="subdued" variant="bodySm">Specify your options. If an option costs extra, enter the additional amount in the Price Adjustment field (this is added on top of the item's base price).</Text>
+                    <Banner tone="warning">
+                      <Text as="p">
+                        ⚠️ <strong>Note:</strong> To ensure additional costs are automatically added to the cart, make sure you have enabled the <strong>"VariantIQ Cart Sync" App Embed</strong> in your theme settings.
+                      </Text>
+                    </Banner>
                     {fieldOptionsList.map((opt, index) => (
                       <InlineGrid columns="1fr 100px 170px auto" gap="200" key={index} alignItems="center">
                         <TextField
@@ -1867,7 +1854,7 @@ export default function TemplateDetail() {
                       </InlineGrid>
                     ))}
                     <InlineStack>
-                      <Button onClick={() => setFieldOptionsList([...fieldOptionsList, { label: "", price: "", variantMapping: "" }])}>
+                      <Button onClick={() => setFieldOptionsList([...fieldOptionsList, { label: "", price: "", variantMapping: "", swatchColor: "#000000" }])}>
                         Add Option
                       </Button>
                     </InlineStack>
@@ -1881,9 +1868,47 @@ export default function TemplateDetail() {
             )}
             {fieldModalTab === 2 && (
               <BlockStack gap="400">
-                <Banner tone="info">
-                  <Text as="p">Advanced display settings (Swatches, Button Pills) are coming soon.</Text>
-                </Banner>
+                <Select
+                  label="Display Style"
+                  options={[
+                    { label: "Default (Browser Input)", value: "default" },
+                    { label: "Button Pills", value: "button_pills" },
+                    { label: "Color Swatches", value: "swatches" },
+                  ]}
+                  value={fieldDisplayStyle}
+                  onChange={(val) => setFieldDisplayStyle(val)}
+                  helpText="Choose how these options appear on your storefront."
+                />
+
+                {fieldDisplayStyle === "swatches" && (
+                  <BlockStack gap="400">
+                    <Text as="h3" variant="headingSm">Swatch Colors</Text>
+                    <Text as="p" variant="bodyMd" tone="subdued">
+                      Pick a color for each of your options. These colors will render as clickable circle swatches.
+                    </Text>
+                    {fieldOptionsList.length === 0 ? (
+                      <Banner tone="info">Add options in the "Options & Values" tab first.</Banner>
+                    ) : (
+                      <BlockStack gap="300">
+                        {fieldOptionsList.map((opt, index) => (
+                          <InlineGrid columns="1fr auto" gap="400" alignItems="center" key={index}>
+                            <Text as="span">{opt.label || `Option ${index + 1}`}</Text>
+                            <input
+                              type="color"
+                              value={opt.swatchColor}
+                              onChange={(e) => {
+                                const newList = [...fieldOptionsList];
+                                newList[index].swatchColor = e.target.value;
+                                setFieldOptionsList(newList);
+                              }}
+                              style={{ width: "40px", height: "40px", padding: 0, cursor: "pointer", border: "1px solid #c9cccf", borderRadius: "4px" }}
+                            />
+                          </InlineGrid>
+                        ))}
+                      </BlockStack>
+                    )}
+                  </BlockStack>
+                )}
               </BlockStack>
             )}
           </Box>

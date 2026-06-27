@@ -102,6 +102,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
         hasOverrides: !!((link as any).customFieldsJson || (link as any).customRulesJson),
         initialFields: activeFields,
         initialRules: activeRules,
+        initialSsStyleId: (link as any).ssStyleId || "",
         datasets
     });
 }
@@ -119,6 +120,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
     if (intent === "saveOverrides") {
         const customFieldsStr = String(form.get("customFieldsJson") || "[]");
         const customRulesStr = String(form.get("customRulesJson") || "[]");
+        const ssStyleId = String(form.get("ssStyleId") || "").trim();
 
         let customFieldsJson, customRulesJson;
         try {
@@ -133,6 +135,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
             data: {
                 customFieldsJson: customFieldsJson as any,
                 customRulesJson: customRulesJson as any,
+                ssStyleId: ssStyleId || null,
             } as any,
         });
 
@@ -146,6 +149,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
             data: {
                 customFieldsJson: Prisma.DbNull as any,
                 customRulesJson: Prisma.DbNull as any,
+                ssStyleId: Prisma.DbNull as any,
             } as any,
         });
         return json({ success: true });
@@ -164,6 +168,7 @@ export default function ProductOverrideDetail() {
         hasOverrides,
         initialFields,
         initialRules,
+        initialSsStyleId,
         datasets
     } = useLoaderData<typeof loader>();
 
@@ -180,6 +185,7 @@ export default function ProductOverrideDetail() {
     // In-memory state for fields and rules being edited
     const [fields, setFields] = useState<any[]>(initialFields as any[]);
     const [rules, setRules] = useState<any[]>(initialRules as any[]);
+    const [ssStyleId, setSsStyleId] = useState(initialSsStyleId || "");
 
     // Field form state
     const [showFieldForm, setShowFieldForm] = useState(false);
@@ -188,7 +194,8 @@ export default function ProductOverrideDetail() {
     const [fieldName, setFieldName] = useState("");
     const [fieldLabel, setFieldLabel] = useState("");
     const [fieldRequired, setFieldRequired] = useState(false);
-    const [fieldOptionsList, setFieldOptionsList] = useState<Array<{ label: string, price: string, variantMapping: string }>>([]);
+    const [fieldDisplayStyle, setFieldDisplayStyle] = useState("default");
+    const [fieldOptionsList, setFieldOptionsList] = useState<Array<{ label: string, price: string, variantMapping: string, swatchColor: string }>>([]);
 
     const handleAddField = () => {
         if (!fieldType || !fieldName || !fieldLabel) return;
@@ -204,8 +211,10 @@ export default function ProductOverrideDetail() {
 
             let hasPrices = false;
             let hasMappings = false;
+            let hasSwatches = false;
             const priceMap: Record<string, number> = {};
             const mappingMap: Record<string, string> = {};
+            const swatchMap: Record<string, string> = {};
 
             validOptions.forEach(o => {
                 const price = parseFloat(o.price);
@@ -217,9 +226,14 @@ export default function ProductOverrideDetail() {
                     mappingMap[o.label.trim()] = o.variantMapping.trim();
                     hasMappings = true;
                 }
+                if (o.swatchColor && o.swatchColor.trim() !== "") {
+                    swatchMap[o.label.trim()] = o.swatchColor.trim();
+                    hasSwatches = true;
+                }
             });
             if (hasPrices) priceAdjustmentsJson = priceMap;
             if (hasMappings) variantMappingJson = mappingMap;
+            if (hasSwatches) swatchesJson = swatchMap;
         }
 
         if (editingFieldId) {
@@ -229,9 +243,11 @@ export default function ProductOverrideDetail() {
                 name: fieldName,
                 label: fieldLabel,
                 required: fieldRequired,
+                displayStyle: fieldDisplayStyle,
                 optionsJson,
                 priceAdjustmentsJson,
                 variantMappingJson,
+                swatchesJson,
             } : f));
         } else {
             const newField = {
@@ -240,9 +256,11 @@ export default function ProductOverrideDetail() {
                 name: fieldName,
                 label: fieldLabel,
                 required: fieldRequired,
+                displayStyle: fieldDisplayStyle,
                 optionsJson,
                 priceAdjustmentsJson,
                 variantMappingJson,
+                swatchesJson,
                 sort: fields.length + 1
             };
             setFields([...fields, newField]);
@@ -256,6 +274,7 @@ export default function ProductOverrideDetail() {
         setFieldName("");
         setFieldLabel("");
         setFieldRequired(false);
+        setFieldDisplayStyle("default");
         setFieldOptionsList([]);
         setEditingFieldId(null);
         setShowFieldForm(false);
@@ -267,16 +286,19 @@ export default function ProductOverrideDetail() {
         setFieldName(field.name);
         setFieldLabel(field.label);
         setFieldRequired(field.required);
+        setFieldDisplayStyle(field.displayStyle || "default");
 
-        const list: Array<{ label: string, price: string, variantMapping: string }> = [];
+        const list: Array<{ label: string, price: string, variantMapping: string, swatchColor: string }> = [];
         if (field.optionsJson && Array.isArray(field.optionsJson)) {
             field.optionsJson.forEach((opt: string) => {
                 const price = field.priceAdjustmentsJson?.[opt];
                 const mapping = field.variantMappingJson?.[opt];
+                const swatch = field.swatchesJson?.[opt];
                 list.push({
                     label: opt,
                     price: price ? price.toString() : "",
-                    variantMapping: mapping ? mapping.toString() : ""
+                    variantMapping: mapping ? mapping.toString() : "",
+                    swatchColor: swatch ? swatch.toString() : "#000000"
                 });
             });
         }
@@ -314,6 +336,7 @@ export default function ProductOverrideDetail() {
         formData.append("linkId", linkId);
         formData.append("customFieldsJson", JSON.stringify(fields));
         formData.append("customRulesJson", JSON.stringify(rules));
+        formData.append("ssStyleId", ssStyleId);
         submit(formData, { method: "post" });
     };
 
@@ -443,6 +466,52 @@ export default function ProductOverrideDetail() {
                                 />
 
                                 {["select", "radio", "checkbox"].includes(fieldType) && (
+                                    <BlockStack gap="400">
+                                        <Select
+                                            label="Display Style"
+                                            options={[
+                                                { label: "Default (Browser Input)", value: "default" },
+                                                { label: "Button Pills", value: "button_pills" },
+                                                { label: "Color Swatches", value: "swatches" },
+                                            ]}
+                                            value={fieldDisplayStyle}
+                                            onChange={(val) => setFieldDisplayStyle(val)}
+                                            helpText="Choose how these options appear on your storefront."
+                                        />
+
+                                        {fieldDisplayStyle === "swatches" && (
+                                            <BlockStack gap="400">
+                                                <Text as="h3" variant="headingSm">Swatch Colors</Text>
+                                                <Text as="p" variant="bodyMd" tone="subdued">
+                                                    Pick a color for each of your options. These colors will render as clickable circle swatches.
+                                                </Text>
+                                                {fieldOptionsList.length === 0 ? (
+                                                    <Banner tone="info">Add options in the list below first.</Banner>
+                                                ) : (
+                                                    <BlockStack gap="300">
+                                                        {fieldOptionsList.map((opt, index) => (
+                                                            <InlineGrid columns="1fr auto" gap="400" alignItems="center" key={index}>
+                                                                <Text as="span">{opt.label || `Option ${index + 1}`}</Text>
+                                                                <input
+                                                                    type="color"
+                                                                    value={opt.swatchColor}
+                                                                    onChange={(e) => {
+                                                                        const newList = [...fieldOptionsList];
+                                                                        newList[index].swatchColor = e.target.value;
+                                                                        setFieldOptionsList(newList);
+                                                                    }}
+                                                                    style={{ width: "40px", height: "40px", padding: 0, cursor: "pointer", border: "1px solid #c9cccf", borderRadius: "4px" }}
+                                                                />
+                                                            </InlineGrid>
+                                                        ))}
+                                                    </BlockStack>
+                                                )}
+                                            </BlockStack>
+                                        )}
+                                    </BlockStack>
+                                )}
+
+                                {["select", "radio", "checkbox"].includes(fieldType) && (
                                     <BlockStack gap="300">
                                         <Text as="h5" variant="headingSm">Options, Pricing & Shopify Variant Sync</Text>
                                         {fieldOptionsList.map((opt, index) => (
@@ -522,7 +591,7 @@ export default function ProductOverrideDetail() {
                                             </InlineGrid>
                                         ))}
                                         <InlineStack>
-                                            <Button onClick={() => setFieldOptionsList([...fieldOptionsList, { label: "", price: "", variantMapping: "" }])}>
+                                            <Button onClick={() => setFieldOptionsList([...fieldOptionsList, { label: "", price: "", variantMapping: "", swatchColor: "#000000" }])}>
                                                 Add Option
                                             </Button>
                                         </InlineStack>
@@ -591,6 +660,40 @@ export default function ProductOverrideDetail() {
                                 setRules([...nonShowRules, ...newShowRules]);
                             }}
                         />
+                    </Card>
+                </BlockStack>
+            ),
+        },
+        // --- INTEGRATIONS TAB ---
+        {
+            id: "integrations",
+            content: "Integrations",
+            panelID: "panel-integrations",
+            render: () => (
+                <BlockStack gap="400">
+                    <Card>
+                        <BlockStack gap="400">
+                            <Text as="h3" variant="headingMd">S&S Activewear Sync</Text>
+                            <Divider />
+                            <InlineGrid columns="1fr auto" gap="400" alignItems="center">
+                                <BlockStack gap="100">
+                                    <Text as="h4" variant="headingSm">S&S Style ID Mapping</Text>
+                                    <Text as="p" tone="subdued">Map this product to an S&S Style (e.g. 00606 for Bella+Canvas 3001) to automatically sync live stock levels.</Text>
+                                </BlockStack>
+                                <div style={{ width: "200px" }}>
+                                    <TextField
+                                        label="S&S Style ID"
+                                        labelHidden
+                                        name="ssStyleId"
+                                        value={ssStyleId}
+                                        onChange={setSsStyleId}
+                                        placeholder="e.g. 00606"
+                                        autoComplete="off"
+                                    />
+                                </div>
+                            </InlineGrid>
+                            <Button variant="primary" onClick={handleSaveOverrides}>Save Changes</Button>
+                        </BlockStack>
                     </Card>
                 </BlockStack>
             ),

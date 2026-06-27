@@ -30,6 +30,17 @@ model Session {
   @@index([shop])
 }
 
+model StoreSettings {
+  id            String   @id @default(cuid())
+  shop          String   @unique
+  ssApiUsername String?
+  ssApiKey      String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([shop])
+}
+
 
 model Template {
   id        String   @id @default(cuid())
@@ -67,6 +78,8 @@ model Field {
   optionsJson Json?
   priceAdjustmentsJson Json?
   variantMappingJson Json?
+  swatchesJson       Json?
+  displayStyle       String   @default("default")
   required    Boolean  @default(false)
   sort        Int      @default(0)
   template    Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
@@ -110,6 +123,7 @@ model ProductTemplateLink {
 
   customFieldsJson Json?
   customRulesJson  Json?
+  ssStyleId        String?
 
   @@index([shop])
   @@index([productGid])

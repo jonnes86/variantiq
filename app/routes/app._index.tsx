@@ -42,14 +42,18 @@ export async function loader({ request }: LoaderFunctionArgs) {
       orderBy: { updatedAt: "desc" },
     }),
     detectPlan(session.shop, admin),
+    prisma.storeSettings.findUnique({
+      where: { shop: session.shop }
+    })
   ]);
 
   const limits = getLimits(planInfo.tier);
   const url = new URL(request.url);
   const upgraded = url.searchParams.get("upgraded") === "1";
   const atTemplateLimit = !limits.maxTemplates || templates.length >= limits.maxTemplates;
+  const storeSettings = planInfo[3] || null; // The 4th item in Promise.all is storeSettings
 
-  return json({ templates, datasets, planInfo, limits, upgraded, atTemplateLimit });
+  return json({ templates, datasets, planInfo, limits, upgraded, atTemplateLimit, storeSettings });
 }
 
 async function ensureDummyProductExists(admin: any) {
@@ -217,17 +221,29 @@ export async function action({ request }: ActionFunctionArgs) {
     return null;
   }
 
+  if (intent === "saveIntegrations") {
+    const ssApiUsername = String(form.get("ssApiUsername") || "").trim();
+    const ssApiKey = String(form.get("ssApiKey") || "").trim();
+    await prisma.storeSettings.upsert({
+      where: { shop: session.shop },
+      create: { shop: session.shop, ssApiUsername, ssApiKey },
+      update: { ssApiUsername, ssApiKey }
+    });
+    return null;
+  }
+
   return null;
 }
 
 export default function Index() {
-  const { templates, datasets, planInfo, limits, upgraded, atTemplateLimit } = useLoaderData<typeof loader>();
+  const { templates, datasets, planInfo, limits, upgraded, atTemplateLimit, storeSettings } = useLoaderData<typeof loader>();
   const [searchParams] = useSearchParams();
 
   const getInitialTab = () => {
     switch (searchParams.get("tab")) {
       case "templates": return 1;
       case "datasets": return 2;
+      case "integrations": return 3;
       default: return 0;
     }
   };
@@ -235,6 +251,8 @@ export default function Index() {
   const [selectedTab, setSelectedTab] = useState(getInitialTab());
   const [newTemplateName, setNewTemplateName] = useState("");
   const [newDatasetName, setNewDatasetName] = useState("");
+  const [ssApiUsername, setSsApiUsername] = useState(storeSettings?.ssApiUsername || "");
+  const [ssApiKey, setSsApiKey] = useState(storeSettings?.ssApiKey || "");
   const [isDismissed, setIsDismissed] = useState(true);
 
   useEffect(() => {
@@ -253,6 +271,7 @@ export default function Index() {
     { id: 'dashboard-tab', content: 'Dashboard' },
     { id: 'templates-tab', content: 'Templates' },
     { id: 'datasets-tab', content: 'Datasets' },
+    { id: 'help-tab', content: 'Help & Setup' },
   ];
 
   // --- VIEWS ---
@@ -325,33 +344,7 @@ export default function Index() {
         </Card>
       </InlineGrid>
 
-      {!isDismissed && (
-        <Banner
-          title="🚀 Step 1: Activate VariantIQ on your Storefront"
-          tone="info"
-          onDismiss={handleDismiss}
-        >
-          <Text as="p" variant="bodyMd">
-            Before your custom fields will appear to customers and function properly, you must enable the VariantIQ App Embed and App Block in your theme.
-          </Text>
-          <div style={{ paddingLeft: "16px", marginTop: "12px", paddingBottom: "8px" }}>
-            <BlockStack gap="200">
-              <Text as="p"><Text as="strong">Part 1: Enable the Cart Sync (App Embed)</Text></Text>
-              <Text as="p">1. Go to your Shopify Admin and click <Text as="strong">Online Store {">"} Themes</Text>.</Text>
-              <Text as="p">2. Click <Text as="strong">Customize</Text> on your current theme.</Text>
-              <Text as="p">3. On the far left panel, click the <Text as="strong">App Embeds</Text> icon.</Text>
-              <Text as="p">4. Find <Text as="strong">VariantIQ Cart Sync</Text> and toggle it <Text as="strong">ON</Text>.</Text>
-              
-              <br />
-              <Text as="p"><Text as="strong">Part 2: Add the Custom Fields Block (App Block)</Text></Text>
-              <Text as="p">5. Navigate to your <Text as="strong">Default Product</Text> template using the top center dropdown.</Text>
-              <Text as="p">6. On the left sidebar, under the <Text as="strong">Product Information</Text> section, click <Text as="strong">+ Add block</Text>.</Text>
-              <Text as="p">7. Select <Text as="strong">VariantIQ Custom Fields</Text> from the Apps section and drag it above your Add to Cart button.</Text>
-              <Text as="p">8. Click <Text as="strong">Save</Text> in the top right corner.</Text>
-            </BlockStack>
-          </div>
-        </Banner>
-      )}
+
 
       <InlineGrid columns={{ xs: 1, md: 2 }} gap="400">
         <Card>
@@ -549,6 +542,100 @@ export default function Index() {
     </Card>
   );
 
+  const HelpView = (
+    <BlockStack gap="500">
+      <Card>
+        <BlockStack gap="400">
+          <Text as="h2" variant="headingMd">🚀 Activate VariantIQ on your Storefront</Text>
+          <Text as="p" variant="bodyMd">
+            Before your custom fields will appear to customers and function properly, you must enable the VariantIQ App Embed and App Block in your theme.
+          </Text>
+          <div style={{ paddingLeft: "16px", marginTop: "12px", paddingBottom: "8px" }}>
+            <BlockStack gap="200">
+              <Text as="p"><Text as="strong">Part 1: Enable the Cart Sync (App Embed)</Text></Text>
+              <Text as="p">1. Go to your Shopify Admin and click <Text as="strong">Online Store {">"} Themes</Text>.</Text>
+              <Text as="p">2. Click <Text as="strong">Customize</Text> on your current theme.</Text>
+              <Text as="p">3. On the far left panel, click the <Text as="strong">App Embeds</Text> icon.</Text>
+              <Text as="p">4. Find <Text as="strong">VariantIQ Cart Sync</Text> and toggle it <Text as="strong">ON</Text>.</Text>
+              
+              <br />
+              <Text as="p"><Text as="strong">Part 2: Add the Custom Fields Block (App Block)</Text></Text>
+              <Text as="p">5. Navigate to your <Text as="strong">Default Product</Text> template using the top center dropdown.</Text>
+              <Text as="p">6. On the left sidebar, under the <Text as="strong">Product Information</Text> section, click <Text as="strong">+ Add block</Text>.</Text>
+              <Text as="p">7. Select <Text as="strong">VariantIQ Custom Fields</Text> from the Apps section and drag it above your Add to Cart button.</Text>
+              <Text as="p">8. Click <Text as="strong">Save</Text> in the top right corner.</Text>
+
+              <br />
+              <Text as="p"><Text as="strong">Part 3: Show Custom Fields in Order Emails</Text></Text>
+              <Text as="p">By default, Shopify does not show custom line item properties in customer order emails. To fix this:</Text>
+              <Text as="p">1. Go to <Text as="strong">Settings {">"} Notifications {">"} Customer notifications</Text> in your Shopify Admin.</Text>
+              <Text as="p">2. Click <Text as="strong">Order confirmation</Text> and click <Text as="strong">Edit code</Text>.</Text>
+              <Text as="p">3. Search for <Text as="strong">{"{{ line.variant.title }}"}</Text> (usually around line 150).</Text>
+              <Text as="p">4. Paste the following code <Text as="strong">directly underneath</Text> that line, then Save:</Text>
+              <Card background="bg-surface-secondary">
+                <Text as="p" style={{ fontFamily: "monospace", fontSize: "12px", whiteSpace: "pre-wrap", color: "#1a1a1a" }}>
+                  {`{% for property in line.properties %}
+  {% assign property_first_char = property.first | slice: 0 %}
+  {% if property.last != blank and property_first_char != '_' %}
+    <div class="order-list__item-property">
+      <strong>{{ property.first }}:</strong> {{ property.last }}
+    </div>
+  {% endif %}
+{% endfor %}`}
+                </Text>
+              </Card>
+            </BlockStack>
+          </div>
+        </BlockStack>
+      </Card>
+    </BlockStack>
+  );
+
+  const IntegrationsView = (
+    <BlockStack gap="500">
+      <Card>
+        <BlockStack gap="400">
+          <Text as="h2" variant="headingMd">🔌 Integrations & APIs</Text>
+          <Text as="p" variant="bodyMd">
+            Connect VariantIQ to external services to sync live inventory and dataset information dynamically.
+          </Text>
+          
+          <Divider />
+          
+          <BlockStack gap="300">
+            <Text as="h3" variant="headingSm">S&S Activewear</Text>
+            <Text as="p" tone="subdued">
+              Sync real-time stock levels and automatically disable out-of-stock color and size swatches on your product pages. 
+              Map your products to their S&S equivalent using the "S&S Style ID" field inside the Product Override settings.
+            </Text>
+            <Form method="post">
+              <input type="hidden" name="_intent" value="saveIntegrations" />
+              <FormLayout>
+                <TextField
+                  label="API Username"
+                  name="ssApiUsername"
+                  value={ssApiUsername}
+                  onChange={setSsApiUsername}
+                  autoComplete="off"
+                  placeholder="e.g. 91621"
+                />
+                <TextField
+                  label="API Key"
+                  name="ssApiKey"
+                  value={ssApiKey}
+                  onChange={setSsApiKey}
+                  autoComplete="off"
+                  type="password"
+                />
+                <Button submit variant="primary">Save Credentials</Button>
+              </FormLayout>
+            </Form>
+          </BlockStack>
+        </BlockStack>
+      </Card>
+    </BlockStack>
+  );
+
   return (
     <Page
       title="VariantIQ Manager"
@@ -561,6 +648,8 @@ export default function Index() {
           {selectedTab === 0 && DashboardView}
           {selectedTab === 1 && TemplatesView}
           {selectedTab === 2 && DatasetsView}
+          {selectedTab === 3 && IntegrationsView}
+          {selectedTab === 4 && HelpView}
         </div>
       </Tabs>
     </Page>
