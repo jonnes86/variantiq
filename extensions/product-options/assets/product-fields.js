@@ -78,6 +78,24 @@ class VariantIQFields {
     }
   }
 
+  async fetchSSInventoryForStyle(styleId) {
+    try {
+      const response = await fetch(`${this.apiUrl}/api/ss-inventory?shop=${encodeURIComponent(this.shop)}&styleId=${encodeURIComponent(styleId)}`);
+      if (response.ok) {
+        const data = await response.json();
+        this.ssInventory = data.items || [];
+        this.applySSInventoryRules();
+      }
+    } catch (e) {
+      console.warn('VariantIQ S&S Inventory style fetch failed:', e);
+    }
+  }
+
+  findSSTriggerFields() {
+    if (!this.templateData || !this.templateData.template) return [];
+    return this.templateData.template.fields.filter(f => f.ssStyleMappingJson && Object.keys(f.ssStyleMappingJson).length > 0);
+  }
+
   async trackAnalytics(event) {
     if (!this.templateData || !this.templateData.template) return;
     try {
@@ -378,6 +396,14 @@ class VariantIQFields {
       // Store value and re-evaluate
       this.fieldValues[fieldId] = value;
       this.evaluateRules();
+
+      // Check if this field has S&S style mapping — if so, fetch inventory for the selected style
+      const swatchTriggerFields = this.findSSTriggerFields();
+      const swatchTriggerField = swatchTriggerFields.find(f => f.id === fieldId);
+      if (swatchTriggerField && swatchTriggerField.ssStyleMappingJson[value]) {
+        this.fetchSSInventoryForStyle(swatchTriggerField.ssStyleMappingJson[value]);
+      }
+      this.applySSInventoryRules();
       this.updateProgressBar();
     });
 
@@ -404,6 +430,14 @@ class VariantIQFields {
       // Store value and re-evaluate
       this.fieldValues[fieldId] = value;
       this.evaluateRules();
+
+      // Check if this field has S&S style mapping — if so, fetch inventory for the selected style
+      const pillTriggerFields = this.findSSTriggerFields();
+      const pillTriggerField = pillTriggerFields.find(f => f.id === fieldId);
+      if (pillTriggerField && pillTriggerField.ssStyleMappingJson[value]) {
+        this.fetchSSInventoryForStyle(pillTriggerField.ssStyleMappingJson[value]);
+      }
+      this.applySSInventoryRules();
       this.updateProgressBar();
     });
 
@@ -434,6 +468,13 @@ class VariantIQFields {
 
     // Re-evaluate rules globally every time a generic field changes
     this.evaluateRules();
+
+    // Check if this field has S&S style mapping — if so, fetch inventory for the selected style
+    const triggerFields = this.findSSTriggerFields();
+    const triggerField = triggerFields.find(f => f.id === fieldId);
+    if (triggerField && triggerField.ssStyleMappingJson[value]) {
+      this.fetchSSInventoryForStyle(triggerField.ssStyleMappingJson[value]);
+    }
     this.applySSInventoryRules();
     this.updateProgressBar();
   }
@@ -1118,59 +1159,126 @@ class VariantIQFields {
     const selectedColor = this.fieldValues[colorField.id];
     const selectedSize = this.fieldValues[sizeField.id];
 
-    // Check Color availability based on Size
-    const colorFieldEl = this.container.querySelector(`.variantiq-field[data-field-id="${colorField.id}"]`);
-    if (colorFieldEl) {
-      const colorButtons = colorFieldEl.querySelectorAll('button');
-      colorButtons.forEach(btn => {
-        const colorName = btn.dataset.value;
-        let hasStock = false;
-        if (selectedSize) {
-          const stock = this.ssInventory.find(item => item.color === colorName && item.size === selectedSize);
-          hasStock = stock && stock.qty > 0;
+    // Build color alias map: myOptionName -> ssColorName
+    const colorAliases = colorField.ssColorAliasJson || {};
+
+    // Helper: resolve a local color option name to an S&S color name
+    const resolveColorName = (localName) => {
+      // 1. Manual alias takes priority
+      if (colorAliases[localName]) return { ssName: colorAliases[localName], matchType: 'alias' };
+      // 2. Exact match
+      const exactMatch = this.ssInventory.find(item => item.color === localName);
+      if (exactMatch) return { ssName: localName, matchType: 'exact' };
+      // 3. Fuzzy match (case-insensitive contains)
+      const lowerLocal = localName.toLowerCase();
+      const fuzzyMatch = this.ssInventory.find(item => {
+        const lowerSS = item.color.toLowerCase();
+        return lowerSS.includes(lowerLocal) || lowerLocal.includes(lowerSS);
+      });
+      if (fuzzyMatch) return { ssName: fuzzyMatch.color, matchType: 'fuzzy' };
+      return { ssName: null, matchType: 'none' };
+    };
+
+    // Helper: resolve size name (simpler — exact then fuzzy)
+    const resolveSizeName = (localName) => {
+      const exactMatch = this.ssInventory.find(item => item.size === localName);
+      if (exactMatch) return localName;
+      const lowerLocal = localName.toLowerCase();
+      const fuzzyMatch = this.ssInventory.find(item => item.size.toLowerCase() === lowerLocal);
+      if (fuzzyMatch) return fuzzyMatch.size;
+      return null;
+    };
+
+    // Resolve the selected values to S&S names
+    const resolvedSelectedColor = selectedColor ? resolveColorName(selectedColor).ssName : null;
+    const resolvedSelectedSize = selectedSize ? resolveSizeName(selectedSize) : null;
+
+    // Apply to color buttons
+    const colorEl = this.container.querySelector(`[data-field-id="${colorField.id}"]`);
+    if (colorEl) {
+      const buttons = colorEl.querySelectorAll('button[data-value], input[type="radio"]');
+      buttons.forEach(btn => {
+        const colorName = btn.dataset?.value || btn.value;
+        if (!colorName) return;
+
+        const resolved = resolveColorName(colorName);
+        let inStock = true;
+
+        if (resolved.ssName) {
+          if (resolvedSelectedSize) {
+            const stock = this.ssInventory.find(item => item.color === resolved.ssName && item.size === resolvedSelectedSize);
+            inStock = stock ? stock.qty > 0 : false;
+          } else {
+            const totalQty = this.ssInventory
+              .filter(item => item.color === resolved.ssName)
+              .reduce((a, b) => a + b.qty, 0);
+            inStock = totalQty > 0;
+          }
         } else {
-          const totalStock = this.ssInventory.filter(item => item.color === colorName).reduce((a, b) => a + b.qty, 0);
-          hasStock = totalStock > 0;
+          // No match found — can't verify stock, leave enabled
+          inStock = true;
         }
-        
-        btn.disabled = !hasStock;
-        btn.style.opacity = hasStock ? '1' : '0.3';
-        btn.style.cursor = hasStock ? 'pointer' : 'not-allowed';
-        
-        // Visual crossed out effect for swatches
-        if (!hasStock && btn.classList.contains('variantiq-swatch-btn') && !btn.querySelector('.variantiq-out-of-stock')) {
+
+        btn.disabled = !inStock;
+        btn.style.opacity = inStock ? '1' : '0.3';
+        btn.style.cursor = inStock ? 'pointer' : 'not-allowed';
+
+        // Add/remove fuzzy match indicator
+        const existingIndicator = btn.parentElement?.querySelector('.viq-fuzzy-indicator');
+        if (existingIndicator) existingIndicator.remove();
+
+        if (resolved.matchType === 'fuzzy' && resolved.ssName) {
+          const indicator = document.createElement('span');
+          indicator.className = 'viq-fuzzy-indicator';
+          indicator.title = `Matched to S&S color: ${resolved.ssName}`;
+          indicator.textContent = '⚡';
+          indicator.style.cssText = 'font-size:10px;position:absolute;top:-2px;right:-2px;z-index:2;';
+          if (btn.parentElement) {
+            btn.parentElement.style.position = 'relative';
+            btn.parentElement.appendChild(indicator);
+          }
+        }
+
+        // Out-of-stock cross for swatches
+        const existingCross = btn.querySelector('.viq-oos-cross');
+        if (existingCross) existingCross.remove();
+        if (!inStock && (btn.classList.contains('variantiq-swatch-btn') || btn.dataset.swatch)) {
           const cross = document.createElement('div');
-          cross.className = 'variantiq-out-of-stock';
-          cross.style.cssText = 'position:absolute;top:50%;left:50%;width:100%;height:2px;background:#ef4444;transform:translate(-50%,-50%) rotate(-45deg);';
+          cross.className = 'viq-oos-cross';
+          cross.style.cssText = 'position:absolute;top:50%;left:50%;width:100%;height:2px;background:#ef4444;transform:translate(-50%,-50%) rotate(-45deg);pointer-events:none;';
           btn.style.position = 'relative';
-          btn.style.overflow = 'hidden';
           btn.appendChild(cross);
-        } else if (hasStock) {
-          const cross = btn.querySelector('.variantiq-out-of-stock');
-          if (cross) cross.remove();
         }
       });
     }
 
-    // Check Size availability based on Color
-    const sizeFieldEl = this.container.querySelector(`.variantiq-field[data-field-id="${sizeField.id}"]`);
-    if (sizeFieldEl) {
-      const sizeButtons = sizeFieldEl.querySelectorAll('button');
-      sizeButtons.forEach(btn => {
-        const sizeName = btn.dataset.value;
-        let hasStock = false;
-        if (selectedColor) {
-          const stock = this.ssInventory.find(item => item.size === sizeName && item.color === selectedColor);
-          hasStock = stock && stock.qty > 0;
-        } else {
-          const totalStock = this.ssInventory.filter(item => item.size === sizeName).reduce((a, b) => a + b.qty, 0);
-          hasStock = totalStock > 0;
+    // Apply to size buttons
+    const sizeEl = this.container.querySelector(`[data-field-id="${sizeField.id}"]`);
+    if (sizeEl) {
+      const buttons = sizeEl.querySelectorAll('button[data-value], input[type="radio"]');
+      buttons.forEach(btn => {
+        const sizeName = btn.dataset?.value || btn.value;
+        if (!sizeName) return;
+
+        const resolvedSize = resolveSizeName(sizeName);
+        let inStock = true;
+
+        if (resolvedSize) {
+          if (resolvedSelectedColor) {
+            const stock = this.ssInventory.find(item => item.size === resolvedSize && item.color === resolvedSelectedColor);
+            inStock = stock ? stock.qty > 0 : false;
+          } else {
+            const totalQty = this.ssInventory
+              .filter(item => item.size === resolvedSize)
+              .reduce((a, b) => a + b.qty, 0);
+            inStock = totalQty > 0;
+          }
         }
 
-        btn.disabled = !hasStock;
-        btn.style.opacity = hasStock ? '1' : '0.3';
-        btn.style.cursor = hasStock ? 'pointer' : 'not-allowed';
-        btn.style.textDecoration = hasStock ? 'none' : 'line-through';
+        btn.disabled = !inStock;
+        btn.style.opacity = inStock ? '1' : '0.3';
+        btn.style.cursor = inStock ? 'pointer' : 'not-allowed';
+        btn.style.textDecoration = inStock ? 'none' : 'line-through';
       });
     }
   }

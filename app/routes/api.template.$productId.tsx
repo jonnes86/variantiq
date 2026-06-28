@@ -91,7 +91,11 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
                 type: true,
                 optionsJson: true,
                 priceAdjustmentsJson: true,
-                variantMappingJson: true, // Include variantMappingJson
+                variantMappingJson: true,
+                swatchesJson: true,
+                displayStyle: true,
+                ssStyleMappingJson: true,
+                ssColorAliasJson: true,
                 required: true,
                 sort: true,
               },

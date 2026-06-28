@@ -257,6 +257,10 @@ export async function action({ request, params }: ActionFunctionArgs) {
           optionsJson: f.optionsJson,
           priceAdjustmentsJson: f.priceAdjustmentsJson,
           variantMappingJson: f.variantMappingJson,
+          swatchesJson: f.swatchesJson,
+          displayStyle: f.displayStyle,
+          ssStyleMappingJson: f.ssStyleMappingJson,
+          ssColorAliasJson: f.ssColorAliasJson,
         } as any,
       });
       fieldIdMap[f.id] = newField.id;
@@ -303,6 +307,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
     let priceAdjustmentsJson: any = null;
     let variantMappingJson: any = null;
     let swatchesJson: any = null;
+    let ssStyleMappingJson: any = null;
+    let ssColorAliasJson: any = null;
 
     if (["select", "radio", "checkbox"].includes(type) && optionsDataStr) {
       try {
@@ -313,9 +319,13 @@ export async function action({ request, params }: ActionFunctionArgs) {
           const priceMap: Record<string, number> = {};
           const mappingMap: Record<string, string> = {};
           const swatchMap: Record<string, string> = {};
+          const ssStyleMap: Record<string, string> = {};
+          const ssColorAliasMap: Record<string, string> = {};
           let hasPrices = false;
           let hasMappings = false;
           let hasSwatches = false;
+          let hasSsStyles = false;
+          let hasSsColorAliases = false;
 
           parsedOptions.forEach(o => {
             const price = parseFloat(o.price);
@@ -331,11 +341,21 @@ export async function action({ request, params }: ActionFunctionArgs) {
               swatchMap[o.label.trim()] = o.swatchColor.trim();
               hasSwatches = true;
             }
+            if (o.ssStyleId && o.ssStyleId.trim() !== "") {
+              ssStyleMap[o.label.trim()] = o.ssStyleId.trim();
+              hasSsStyles = true;
+            }
+            if (o.ssColorAlias && o.ssColorAlias.trim() !== "") {
+              ssColorAliasMap[o.label.trim()] = o.ssColorAlias.trim();
+              hasSsColorAliases = true;
+            }
           });
 
           if (hasPrices) priceAdjustmentsJson = priceMap;
           if (hasMappings) variantMappingJson = mappingMap;
           if (hasSwatches) swatchesJson = swatchMap;
+          if (hasSsStyles) ssStyleMappingJson = ssStyleMap;
+          if (hasSsColorAliases) ssColorAliasJson = ssColorAliasMap;
         }
       } catch (e) {
         console.error("Failed to parse optionsData", e);
@@ -368,6 +388,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
           priceAdjustmentsJson: priceAdjustmentsJson as any,
           variantMappingJson: variantMappingJson as any,
           swatchesJson: swatchesJson as any,
+          ssStyleMappingJson: ssStyleMappingJson as any,
+          ssColorAliasJson: ssColorAliasJson as any,
           displayStyle
         }
       });
@@ -383,6 +405,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
           priceAdjustmentsJson: priceAdjustmentsJson as any,
           variantMappingJson: variantMappingJson as any,
           swatchesJson: swatchesJson as any,
+          ssStyleMappingJson: ssStyleMappingJson as any,
+          ssColorAliasJson: ssColorAliasJson as any,
           displayStyle,
           sort: sortOrder,
         },
@@ -1022,7 +1046,7 @@ export default function TemplateDetail() {
   const [fieldLabel, setFieldLabel] = useState("");
   const [fieldRequired, setFieldRequired] = useState(false);
   const [fieldDisplayStyle, setFieldDisplayStyle] = useState("default");
-  const [fieldOptionsList, setFieldOptionsList] = useState<Array<{ label: string, price: string, variantMapping: string, swatchColor: string }>>([]);
+  const [fieldOptionsList, setFieldOptionsList] = useState<Array<{ label: string, price: string, variantMapping: string, swatchColor: string, ssStyleId: string, ssColorAlias: string }>>([]);
   const [fieldModalTab, setFieldModalTab] = useState(0);
 
   useEffect(() => {
@@ -1172,7 +1196,9 @@ export default function TemplateDetail() {
         label: opt,
         price: field.priceAdjustmentsJson?.[opt] ? String(field.priceAdjustmentsJson[opt]) : "",
         variantMapping: field.variantMappingJson?.[opt] ? String(field.variantMappingJson[opt]) : "",
-        swatchColor: field.swatchesJson?.[opt] ? String(field.swatchesJson[opt]) : "#000000"
+        swatchColor: field.swatchesJson?.[opt] ? String(field.swatchesJson[opt]) : "#000000",
+        ssStyleId: field.ssStyleMappingJson?.[opt] ? String(field.ssStyleMappingJson[opt]) : "",
+        ssColorAlias: field.ssColorAliasJson?.[opt] ? String(field.ssColorAliasJson[opt]) : ""
       }))
       : [];
     setFieldOptionsList(initialOptions);
@@ -1815,81 +1841,114 @@ export default function TemplateDetail() {
                       </Text>
                     </Banner>
                     {fieldOptionsList.map((opt, index) => (
-                      <InlineGrid columns="1fr 100px 170px auto" gap="200" key={index} alignItems="center">
-                        <TextField
-                          labelHidden
-                          label={`Option ${index + 1}`}
-                          value={opt.label}
-                          onChange={(val) => {
-                            const newList = [...fieldOptionsList];
-                            newList[index].label = val;
-                            setFieldOptionsList(newList);
-                          }}
-                          placeholder="e.g., Small"
-                          autoComplete="off"
-                        />
-                        <TextField
-                          labelHidden
-                          label={`Price Adjustment ${index + 1}`}
-                          value={opt.price}
-                          onChange={(val) => {
-                            const newList = [...fieldOptionsList];
-                            newList[index].price = val;
-                            setFieldOptionsList(newList);
-                          }}
-                          prefix="$"
-                          type="number"
-                          placeholder="0.00"
-                          autoComplete="off"
-                        />
-                        <TextField
-                          labelHidden
-                          label={`Variant Mapping (Shopify ID)`}
-                          value={opt.variantMapping}
-                          onChange={(val) => {
-                            const newList = [...fieldOptionsList];
-                            newList[index].variantMapping = val;
-                            setFieldOptionsList(newList);
-                          }}
-                          placeholder="Variant ID"
-                          autoComplete="off"
-                          connectedRight={
-                            <Button
-                              onClick={async () => {
-                                const selected = await shopify.resourcePicker({
-                                  type: "product",
-                                  multiple: false,
-                                  action: "select",
-                                });
-                                if (selected && selected.length > 0 && selected[0].variants && selected[0].variants.length > 0) {
-                                  let variantIdStr = selected[0].variants[0]?.id;
-                                  if (variantIdStr) {
-                                    const matches = variantIdStr.match(/\d+$/);
-                                    if (matches) {
-                                      const newList = [...fieldOptionsList];
-                                      newList[index].variantMapping = matches[0];
-                                      setFieldOptionsList(newList);
+                      <div key={index} style={{ border: '1px solid var(--p-color-border-subdued)', borderRadius: '8px', padding: '8px', marginBottom: '4px' }}>
+                        <InlineGrid columns="1fr 100px 170px auto" gap="200" alignItems="center">
+                          <TextField
+                            labelHidden
+                            label={`Option ${index + 1}`}
+                            value={opt.label}
+                            onChange={(val) => {
+                              const newList = [...fieldOptionsList];
+                              newList[index].label = val;
+                              setFieldOptionsList(newList);
+                            }}
+                            placeholder="e.g., Small"
+                            autoComplete="off"
+                          />
+                          <TextField
+                            labelHidden
+                            label={`Price Adjustment ${index + 1}`}
+                            value={opt.price}
+                            onChange={(val) => {
+                              const newList = [...fieldOptionsList];
+                              newList[index].price = val;
+                              setFieldOptionsList(newList);
+                            }}
+                            prefix="$"
+                            type="number"
+                            placeholder="0.00"
+                            autoComplete="off"
+                          />
+                          <TextField
+                            labelHidden
+                            label={`Variant Mapping (Shopify ID)`}
+                            value={opt.variantMapping}
+                            onChange={(val) => {
+                              const newList = [...fieldOptionsList];
+                              newList[index].variantMapping = val;
+                              setFieldOptionsList(newList);
+                            }}
+                            placeholder="Variant ID"
+                            autoComplete="off"
+                            connectedRight={
+                              <Button
+                                onClick={async () => {
+                                  const selected = await shopify.resourcePicker({
+                                    type: "product",
+                                    multiple: false,
+                                    action: "select",
+                                  });
+                                  if (selected && selected.length > 0 && selected[0].variants && selected[0].variants.length > 0) {
+                                    let variantIdStr = selected[0].variants[0]?.id;
+                                    if (variantIdStr) {
+                                      const matches = variantIdStr.match(/\d+$/);
+                                      if (matches) {
+                                        const newList = [...fieldOptionsList];
+                                        newList[index].variantMapping = matches[0];
+                                        setFieldOptionsList(newList);
+                                      }
                                     }
                                   }
-                                }
+                                }}
+                              >
+                                Browse
+                              </Button>
+                            }
+                          />
+                          <Button
+                            tone="critical"
+                            variant="plain"
+                            accessibilityLabel="Remove option"
+                            onClick={() => setFieldOptionsList(fieldOptionsList.filter((_, i) => i !== index))}
+                          >
+                            Remove
+                          </Button>
+                        </InlineGrid>
+                        <div style={{ marginTop: '4px', paddingLeft: '4px' }}>
+                          <InlineGrid columns="1fr 1fr" gap="200">
+                            <TextField
+                              labelHidden
+                              label={`S&S Style # for ${opt.label || 'option'}`}
+                              value={opt.ssStyleId}
+                              onChange={(val) => {
+                                const newList = [...fieldOptionsList];
+                                newList[index].ssStyleId = val;
+                                setFieldOptionsList(newList);
                               }}
-                            >
-                              Browse
-                            </Button>
-                          }
-                        />
-                        <Button
-                          tone="critical"
-                          variant="plain"
-                          accessibilityLabel="Remove option"
-                          onClick={() => setFieldOptionsList(fieldOptionsList.filter((_, i) => i !== index))}
-                        >
-                          Remove
-                        </Button>
-                      </InlineGrid>
+                              placeholder="S&S Style # (e.g., 00606)"
+                              autoComplete="off"
+                              prefix="🏷️"
+                            />
+                            <TextField
+                              labelHidden
+                              label={`S&S Color Alias for ${opt.label || 'option'}`}
+                              value={opt.ssColorAlias}
+                              onChange={(val) => {
+                                const newList = [...fieldOptionsList];
+                                newList[index].ssColorAlias = val;
+                                setFieldOptionsList(newList);
+                              }}
+                              placeholder="S&S Color Name (override)"
+                              autoComplete="off"
+                              prefix="🎨"
+                            />
+                          </InlineGrid>
+                        </div>
+                      </div>
+
                     ))}
                     <InlineStack>
-                      <Button onClick={() => setFieldOptionsList([...fieldOptionsList, { label: "", price: "", variantMapping: "", swatchColor: "#000000" }])}>
+                      <Button onClick={() => setFieldOptionsList([...fieldOptionsList, { label: "", price: "", variantMapping: "", swatchColor: "#000000", ssStyleId: "", ssColorAlias: "" }])}>
                         Add Option
                       </Button>
                     </InlineStack>
