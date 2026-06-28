@@ -70,6 +70,10 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       throw new Response("Template not found.", { status: 404 });
     }
     const linkedProductIds = template.links.map((link: any) => link.productGid);
+    const ssStyleIdMap: Record<string, string> = {};
+    template.links.forEach((link: any) => {
+      if (link.ssStyleId) ssStyleIdMap[link.productGid] = link.ssStyleId;
+    });
 
     // 2. Determine pagination direction based on query params
     const url = new URL(request.url);
@@ -121,6 +125,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       template: { id: template.id, name: template.name },
       products,
       linkedProductIds,
+      ssStyleIdMap,
       searchQuery: search || "",
       // Include pagination cursors for UI navigation
       nextPageCursor: pageInfo.hasNextPage ? pageInfo.endCursor : null,
@@ -168,6 +173,12 @@ export async function action({ request, params }: ActionFunctionArgs) {
       await prisma.productTemplateLink.deleteMany({
         where: { shop, templateId, productGid }
       });
+    } else if (intent === "saveSsStyleId") {
+      const ssStyleId = (formData.get("ssStyleId") as string || "").trim();
+      await prisma.productTemplateLink.updateMany({
+        where: { shop, templateId, productGid },
+        data: { ssStyleId: ssStyleId || null },
+      });
     }
 
     // Returning null triggers a loader reload (refreshing the product list)
@@ -181,7 +192,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
 // --- Component ---
 export default function TemplateProductsPage() {
-  const { template, products, linkedProductIds, searchQuery, nextPageCursor, previousPageCursor, error } = useLoaderData<typeof loader>();
+  const { template, products, linkedProductIds, ssStyleIdMap, searchQuery, nextPageCursor, previousPageCursor, error } = useLoaderData<typeof loader>();
   const submit = useSubmit();
   const navigation = useNavigation();
   const [searchValue, setSearchValue] = useState(searchQuery);
@@ -290,25 +301,47 @@ export default function TemplateProductsPage() {
                           {isLinked && <Badge tone="success">Linked</Badge>}
                         </LegacyStack.Item>
                         <LegacyStack.Item>
-                          <InlineStack gap="200" align="end">
+                          <BlockStack gap="200">
+                            <InlineStack gap="200" align="end">
+                              {isLinked && (
+                                <Button
+                                  url={`/app/templates/${template.id}/products/${numericProductId}`}
+                                >
+                                  Customize
+                                </Button>
+                              )}
+                              <Form method="post">
+                                <input type="hidden" name="productGid" value={product.id} />
+                                <input type="hidden" name="_intent" value={isLinked ? "unlink" : "link"} />
+                                <Button
+                                  submit
+                                  variant={isLinked ? undefined : "primary"}
+                                >
+                                  {actionVerb}
+                                </Button>
+                              </Form>
+                            </InlineStack>
                             {isLinked && (
-                              <Button
-                                url={`/app/templates/${template.id}/products/${numericProductId}`}
-                              >
-                                Customize
-                              </Button>
+                              <Form method="post">
+                                <input type="hidden" name="productGid" value={product.id} />
+                                <input type="hidden" name="_intent" value="saveSsStyleId" />
+                                <InlineStack gap="200" blockAlign="end">
+                                  <div style={{ width: "140px" }}>
+                                    <TextField
+                                      label="S&S Style ID"
+                                      labelHidden
+                                      name="ssStyleId"
+                                      defaultValue={(ssStyleIdMap as any)[product.id] || ""}
+                                      placeholder="S&S Style ID"
+                                      autoComplete="off"
+                                      size="slim"
+                                    />
+                                  </div>
+                                  <Button submit size="slim">Save</Button>
+                                </InlineStack>
+                              </Form>
                             )}
-                            <Form method="post">
-                              <input type="hidden" name="productGid" value={product.id} />
-                              <input type="hidden" name="_intent" value={isLinked ? "unlink" : "link"} />
-                              <Button
-                                submit
-                                variant={isLinked ? undefined : "primary"}
-                              >
-                                {actionVerb}
-                              </Button>
-                            </Form>
-                          </InlineStack>
+                          </BlockStack>
                         </LegacyStack.Item>
                       </LegacyStack>
                     </ResourceItem>
