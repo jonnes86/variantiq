@@ -37,8 +37,7 @@ function generateId() {
 }
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
-    const { session } = await authenticate.admin(request);
-    if (!session) return redirect("/auth/login");
+    const { admin, session } = await authenticate.admin(request);
 
     const templateId = params.id;
     const productId = params.productId;
@@ -69,8 +68,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
         orderBy: { name: "asc" }
     });
 
-    // Fetch product info from Shopify Graphql to show title in UI
-    const { admin } = await authenticate.admin(request);
+    // Fetch product info from Shopify GraphQL to show title in UI
     const response = await admin.graphql(
         `#graphql
       query getProduct($id: ID!) {
