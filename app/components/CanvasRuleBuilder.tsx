@@ -16,6 +16,7 @@ import {
     OnConnect,
     useReactFlow,
     ReactFlowProvider,
+    MarkerType,
 } from '@xyflow/react';
 import dagre from 'dagre';
 import '@xyflow/react/dist/style.css';
@@ -160,10 +161,24 @@ function CanvasRuleBuilderInner({ fields, rules, datasets = [], onSaveRules, onA
     const onConnect: OnConnect = useCallback(
         (connection) => {
             saveHistory();
-            setEdges((eds) => addEdge({ ...connection, type: 'smoothstep', animated: true, style: { stroke: '#f59e0b', strokeWidth: 2 }, zIndex: 1000 }, eds));
+            setEdges((eds) => addEdge({
+                ...connection,
+                type: 'smoothstep',
+                animated: true,
+                style: { stroke: '#f59e0b', strokeWidth: 2 },
+                markerEnd: { type: MarkerType.ArrowClosed, color: '#f59e0b' },
+                zIndex: 1000,
+            }, eds));
         },
         [saveHistory]
     );
+
+    const handleEdgeClick = useCallback((_event: React.MouseEvent, edge: Edge) => {
+        if (confirm('Delete this connection?')) {
+            saveHistory();
+            setEdges((eds) => eds.filter((e) => e.id !== edge.id));
+        }
+    }, [saveHistory]);
 
     const handleDeleteNode = useCallback((nodeId: string) => {
         saveHistory();
@@ -439,9 +454,12 @@ function CanvasRuleBuilderInner({ fields, rules, datasets = [], onSaveRules, onA
                     onNodesChange={onNodesChange}
                     onEdgesChange={onEdgesChange}
                     onConnect={onConnect}
+                    onEdgeClick={handleEdgeClick}
                     nodeTypes={nodeTypes}
                     fitView
+                    deleteKeyCode={['Backspace', 'Delete']}
                     defaultEdgeOptions={{ type: 'smoothstep', animated: true }}
+                    edgesFocusable={true}
                 >
                     <Background color="#ccc" gap={16} />
                     <Controls />
