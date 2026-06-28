@@ -638,7 +638,7 @@ export default function Index() {
 
   return (
     <Page
-      title="VariantIQ Manager"
+      title="VariantIQ Manager [v2.1]"
       titleMetadata={
         <Badge tone={planInfo.tone}>{planInfo.tier}</Badge>
       }
