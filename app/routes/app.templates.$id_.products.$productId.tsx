@@ -37,6 +37,7 @@ function generateId() {
 }
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
+  try {
     const { admin, session } = await authenticate.admin(request);
 
     const templateId = params.id;
@@ -103,6 +104,10 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
         initialSsStyleId: (link as any).ssStyleId || "",
         datasets
     });
+  } catch (error: any) {
+    console.error("[ProductOverride Loader] Error:", error);
+    throw new Response(error?.message || String(error), { status: 500 });
+  }
 }
 
 export async function action({ request, params }: ActionFunctionArgs) {
