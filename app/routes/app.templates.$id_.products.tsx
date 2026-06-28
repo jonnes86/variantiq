@@ -325,18 +325,22 @@ export default function TemplateProductsPage() {
                               <Form method="post">
                                 <input type="hidden" name="productGid" value={product.id} />
                                 <input type="hidden" name="_intent" value="saveSsStyleId" />
-                                <InlineStack gap="200" blockAlign="end">
-                                  <div style={{ width: "140px" }}>
-                                    <TextField
-                                      label="S&S Style ID"
-                                      labelHidden
-                                      name="ssStyleId"
-                                      defaultValue={(ssStyleIdMap as any)[product.id] || ""}
-                                      placeholder="S&S Style ID"
-                                      autoComplete="off"
-                                      size="slim"
-                                    />
-                                  </div>
+                                <InlineStack gap="200" blockAlign="center">
+                                  <input
+                                    type="text"
+                                    name="ssStyleId"
+                                    defaultValue={(ssStyleIdMap as any)[product.id] || ""}
+                                    placeholder="S&S Style #"
+                                    autoComplete="off"
+                                    style={{
+                                      width: "120px",
+                                      padding: "4px 8px",
+                                      fontSize: "13px",
+                                      border: "1px solid #c9cccf",
+                                      borderRadius: "4px",
+                                      lineHeight: "24px",
+                                    }}
+                                  />
                                   <Button submit size="slim">Save</Button>
                                 </InlineStack>
                               </Form>
