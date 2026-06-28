@@ -1054,6 +1054,41 @@ export default function TemplateDetail() {
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const saveRulesRef = React.useRef<(() => void) | null>(null);
 
+  // Dataset modal state
+  const [showDatasetForm, setShowDatasetForm] = useState(false);
+  const [editingDatasetId, setEditingDatasetId] = useState<string | null>(null);
+  const [datasetName, setDatasetName] = useState("");
+  const [datasetLabel, setDatasetLabel] = useState("");
+  const [datasetType, setDatasetType] = useState("select");
+  const [datasetOptionsStr, setDatasetOptionsStr] = useState("");
+
+  const resetDatasetForm = () => {
+    setShowDatasetForm(false);
+    setEditingDatasetId(null);
+    setDatasetName("");
+    setDatasetLabel("");
+    setDatasetType("select");
+    setDatasetOptionsStr("");
+  };
+
+  const handleSaveDataset = async () => {
+    // Save dataset via form submission
+    const formData = new FormData();
+    formData.append("_intent", "saveDataset");
+    formData.append("datasetName", datasetName);
+    formData.append("datasetLabel", datasetLabel);
+    formData.append("datasetType", datasetType);
+    formData.append("datasetOptions", datasetOptionsStr);
+    if (editingDatasetId) formData.append("datasetId", editingDatasetId);
+    
+    await fetch(window.location.href, {
+      method: "POST",
+      body: formData,
+    });
+    resetDatasetForm();
+    window.location.reload();
+  };
+
   useEffect(() => {
     setIsClient(true);
   }, []);
