@@ -32,7 +32,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   // Auto-generate the Dummy Product required for Cart-syncing Dynamic Prices
   await ensureDummyProductExists(admin);
 
-  const [templates, datasets, planInfo] = await Promise.all([
+  const [templates, datasets, planInfo, storeSettings] = await Promise.all([
     prisma.template.findMany({
       where: { shop: session.shop },
       orderBy: { updatedAt: "desc" },
@@ -44,14 +44,13 @@ export async function loader({ request }: LoaderFunctionArgs) {
     detectPlan(session.shop, admin),
     prisma.storeSettings.findUnique({
       where: { shop: session.shop }
-    })
+    }).catch(() => null)
   ]);
 
   const limits = getLimits(planInfo.tier);
   const url = new URL(request.url);
   const upgraded = url.searchParams.get("upgraded") === "1";
   const atTemplateLimit = !limits.maxTemplates || templates.length >= limits.maxTemplates;
-  const storeSettings = planInfo[3] || null; // The 4th item in Promise.all is storeSettings
 
   return json({ templates, datasets, planInfo, limits, upgraded, atTemplateLimit, storeSettings });
 }
