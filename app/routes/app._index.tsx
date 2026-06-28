@@ -567,23 +567,38 @@ export default function Index() {
 
               <br />
               <Text as="p"><Text as="strong">Part 3: Show Custom Fields in Order Emails</Text></Text>
-              <Text as="p">By default, Shopify does not show custom line item properties in customer order emails. To fix this:</Text>
-              <Text as="p">1. Go to <Text as="strong">Settings {">"} Notifications {">"} Customer notifications</Text> in your Shopify Admin.</Text>
+              <Text as="p">By default, Shopify does not show custom line item properties in order notification emails. Follow these steps to add them:</Text>
+              <br />
+              <Text as="p"><Text as="strong">For Staff Notifications (emails YOU receive):</Text></Text>
+              <Text as="p">1. Go to <Text as="strong">Settings {">"} Notifications {">"} Staff order notifications</Text>.</Text>
+              <Text as="p">2. Click <Text as="strong">New order</Text> and click <Text as="strong">Edit code</Text>.</Text>
+              <br />
+              <Text as="p"><Text as="strong">For Customer Notifications (emails your CUSTOMERS receive):</Text></Text>
+              <Text as="p">1. Go to <Text as="strong">Settings {">"} Notifications {">"} Customer notifications</Text>.</Text>
               <Text as="p">2. Click <Text as="strong">Order confirmation</Text> and click <Text as="strong">Edit code</Text>.</Text>
-              <Text as="p">3. Search for <Text as="strong">{"{{ line.variant.title }}"}</Text> (usually around line 150).</Text>
-              <Text as="p">4. Paste the following code <Text as="strong">directly underneath</Text> that line, then Save:</Text>
+              <br />
+              <Text as="p"><Text as="strong">In both templates:</Text></Text>
+              <Text as="p">3. Search for this code (it appears <Text as="strong">twice</Text> in each template):</Text>
+              <Card background="bg-surface-secondary">
+                <Text as="p" style={{ fontFamily: "monospace", fontSize: "12px", whiteSpace: "pre-wrap", color: "#1a1a1a" }}>
+                  {`{% if line.sku != blank %}
+  <span class="order-list__item-variant">SKU: {{ line.sku }}</span>
+{% endif %}
+
+{% if line.selling_plan_allocation != nil %}`}
+                </Text>
+              </Card>
+              <Text as="p">4. Paste the following code <Text as="strong">between</Text> those two blocks (after the SKU endif, before the selling_plan if). Do this in <Text as="strong">both places</Text> it appears:</Text>
               <Card background="bg-surface-secondary">
                 <Text as="p" style={{ fontFamily: "monospace", fontSize: "12px", whiteSpace: "pre-wrap", color: "#1a1a1a" }}>
                   {`{% for property in line.properties %}
-  {% assign property_first_char = property.first | slice: 0 %}
-  {% if property.last != blank and property_first_char != '_' %}
-    <div class="order-list__item-property">
-      <strong>{{ property.first }}:</strong> {{ property.last }}
-    </div>
-  {% endif %}
+  {% unless property.last == blank or property.first contains '_' %}
+    <br/><span class="order-list__item-variant">{{ property.first }}: {{ property.last }}</span>
+  {% endunless %}
 {% endfor %}`}
                 </Text>
               </Card>
+              <Text as="p">5. Click <Text as="strong">Save</Text>. Your next order emails will include the selected VariantIQ options (Color, Size, etc.) under each line item.</Text>
             </BlockStack>
           </div>
         </BlockStack>
