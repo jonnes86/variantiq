@@ -124,6 +124,7 @@ model ProductTemplateLink {
   customFieldsJson Json?
   customRulesJson  Json?
   ssStyleId        String?
+  ssColorsJson     Json?
 
   @@index([shop])
   @@index([productGid])

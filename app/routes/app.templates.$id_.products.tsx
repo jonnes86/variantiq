@@ -16,6 +16,10 @@ import {
   Thumbnail,
   TextField,
   BlockStack,
+  Modal,
+  Checkbox,
+  Spinner,
+  Divider,
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 import { prisma } from "../db.server";
@@ -71,8 +75,10 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     }
     const linkedProductIds = template.links.map((link: any) => link.productGid);
     const ssStyleIdMap: Record<string, string> = {};
+    const ssColorsMap: Record<string, string[]> = {};
     template.links.forEach((link: any) => {
       if (link.ssStyleId) ssStyleIdMap[link.productGid] = link.ssStyleId;
+      if (link.ssColorsJson) ssColorsMap[link.productGid] = link.ssColorsJson as string[];
     });
 
     // 2. Determine pagination direction based on query params
@@ -126,6 +132,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       products,
       linkedProductIds,
       ssStyleIdMap,
+      ssColorsMap,
       searchQuery: search || "",
       // Include pagination cursors for UI navigation
       nextPageCursor: pageInfo.hasNextPage ? pageInfo.endCursor : null,
@@ -139,6 +146,8 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       template: { id: "", name: "Error" },
       products: [],
       linkedProductIds: [],
+      ssStyleIdMap: {},
+      ssColorsMap: {},
       searchQuery: "",
       nextPageCursor: null,
       previousPageCursor: null,
@@ -179,6 +188,17 @@ export async function action({ request, params }: ActionFunctionArgs) {
         where: { shop, templateId, productGid },
         data: { ssStyleId: ssStyleId || null },
       });
+    } else if (intent === "saveSsColors") {
+      const colorsStr = formData.get("ssColors") as string || "[]";
+      let ssColorsJson: string[] | null = null;
+      try {
+        const parsed = JSON.parse(colorsStr);
+        ssColorsJson = Array.isArray(parsed) && parsed.length > 0 ? parsed : null;
+      } catch { ssColorsJson = null; }
+      await prisma.productTemplateLink.updateMany({
+        where: { shop, templateId, productGid },
+        data: { ssColorsJson: ssColorsJson ?? undefined },
+      });
     }
 
     // Returning null triggers a loader reload (refreshing the product list)
@@ -190,12 +210,178 @@ export async function action({ request, params }: ActionFunctionArgs) {
   }
 }
 
+// --- Color Selection Modal Component ---
+function ColorSelectionModal({
+  open,
+  onClose,
+  productGid,
+  ssStyleId,
+  savedColors,
+  apiUrl,
+}: {
+  open: boolean;
+  onClose: () => void;
+  productGid: string;
+  ssStyleId: string;
+  savedColors: string[] | null;
+  apiUrl: string;
+}) {
+  const [availableColors, setAvailableColors] = useState<{ name: string; totalQty: number }[]>([]);
+  const [selectedColors, setSelectedColors] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const submit = useSubmit();
+
+  useEffect(() => {
+    if (!open || !ssStyleId) return;
+
+    setLoading(true);
+    setError("");
+
+    fetch(`${apiUrl}?shop=__internal__&styleId=${encodeURIComponent(ssStyleId)}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) {
+          setError(data.error);
+          setLoading(false);
+          return;
+        }
+        // Group items by color and sum quantities
+        const colorMap = new Map<string, number>();
+        (data.items || []).forEach((item: any) => {
+          const existing = colorMap.get(item.color) || 0;
+          colorMap.set(item.color, existing + item.qty);
+        });
+
+        const colors = Array.from(colorMap.entries())
+          .map(([name, totalQty]) => ({ name, totalQty }))
+          .sort((a, b) => a.name.localeCompare(b.name));
+
+        setAvailableColors(colors);
+
+        // If we have saved colors, use those. Otherwise select all.
+        if (savedColors && savedColors.length > 0) {
+          setSelectedColors(new Set(savedColors));
+        } else {
+          setSelectedColors(new Set(colors.map(c => c.name)));
+        }
+        setLoading(false);
+      })
+      .catch(err => {
+        setError("Failed to fetch colors from S&S");
+        console.error(err);
+        setLoading(false);
+      });
+  }, [open, ssStyleId]);
+
+  const handleToggle = (colorName: string) => {
+    setSelectedColors(prev => {
+      const next = new Set(prev);
+      if (next.has(colorName)) {
+        next.delete(colorName);
+      } else {
+        next.add(colorName);
+      }
+      return next;
+    });
+  };
+
+  const handleSelectAll = () => {
+    setSelectedColors(new Set(availableColors.map(c => c.name)));
+  };
+
+  const handleSelectNone = () => {
+    setSelectedColors(new Set());
+  };
+
+  const handleSave = () => {
+    const formData = new FormData();
+    formData.append("_intent", "saveSsColors");
+    formData.append("productGid", productGid);
+    formData.append("ssColors", JSON.stringify(Array.from(selectedColors)));
+    submit(formData, { method: "post" });
+    onClose();
+  };
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={`Select Colors — Style ${ssStyleId}`}
+      primaryAction={{
+        content: `Save (${selectedColors.size} selected)`,
+        onAction: handleSave,
+        disabled: loading,
+      }}
+      secondaryActions={[{ content: "Cancel", onAction: onClose }]}
+    >
+      <Modal.Section>
+        {loading && (
+          <div style={{ textAlign: "center", padding: "2rem" }}>
+            <Spinner size="large" />
+            <br />
+            <Text as="p" tone="subdued">Fetching colors from S&S Activewear…</Text>
+          </div>
+        )}
+        {error && (
+          <Banner tone="critical" title="Error">
+            <p>{error}</p>
+          </Banner>
+        )}
+        {!loading && !error && availableColors.length === 0 && (
+          <Banner tone="warning">
+            <p>No colors found for this style. Check the Style ID.</p>
+          </Banner>
+        )}
+        {!loading && !error && availableColors.length > 0 && (
+          <BlockStack gap="300">
+            <InlineStack gap="200">
+              <Button onClick={handleSelectAll} size="slim">Select All</Button>
+              <Button onClick={handleSelectNone} size="slim">Select None</Button>
+              <Text as="span" tone="subdued" variant="bodySm">
+                {availableColors.length} colors available
+              </Text>
+            </InlineStack>
+            <Divider />
+            <div style={{ maxHeight: "400px", overflowY: "auto" }}>
+              <BlockStack gap="100">
+                {availableColors.map(color => (
+                  <div
+                    key={color.name}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      padding: "6px 4px",
+                      borderBottom: "1px solid #f1f1f1",
+                    }}
+                  >
+                    <Checkbox
+                      label={color.name}
+                      checked={selectedColors.has(color.name)}
+                      onChange={() => handleToggle(color.name)}
+                    />
+                    <Badge tone={color.totalQty > 0 ? "success" : "critical"}>
+                      {color.totalQty > 0 ? `${color.totalQty} in stock` : "Out of stock"}
+                    </Badge>
+                  </div>
+                ))}
+              </BlockStack>
+            </div>
+          </BlockStack>
+        )}
+      </Modal.Section>
+    </Modal>
+  );
+}
+
 // --- Component ---
 export default function TemplateProductsPage() {
-  const { template, products, linkedProductIds, ssStyleIdMap, searchQuery, nextPageCursor, previousPageCursor, error } = useLoaderData<typeof loader>();
+  const { template, products, linkedProductIds, ssStyleIdMap, ssColorsMap, searchQuery, nextPageCursor, previousPageCursor, error } = useLoaderData<typeof loader>();
   const submit = useSubmit();
   const navigation = useNavigation();
   const [searchValue, setSearchValue] = useState(searchQuery);
+  const [colorModalProduct, setColorModalProduct] = useState<{ gid: string; styleId: string } | null>(null);
 
   const handleSearchChange = useCallback(
     (value: string) => {
@@ -236,6 +422,9 @@ export default function TemplateProductsPage() {
     plural: "products",
   };
 
+  // Build the API URL for the color modal
+  const apiUrl = `/api/ss-inventory`;
+
   return (
     <Page
       title={`Link Products to: ${template.name}`}
@@ -271,8 +460,9 @@ export default function TemplateProductsPage() {
                 renderItem={(product: any) => {
                   const isLinked = linkedProductIds.includes(product.id);
                   const actionVerb = isLinked ? "Unlink" : "Link";
-                  // product.id is a gid, we only want the numeric ID for the URL route
                   const numericProductId = product.id.split('/').pop();
+                  const styleId = (ssStyleIdMap as any)[product.id] || "";
+                  const savedColors = (ssColorsMap as any)[product.id] || null;
 
                   const media = (
                     <Thumbnail
@@ -322,28 +512,38 @@ export default function TemplateProductsPage() {
                               </Form>
                             </InlineStack>
                             {isLinked && (
-                              <Form method="post">
-                                <input type="hidden" name="productGid" value={product.id} />
-                                <input type="hidden" name="_intent" value="saveSsStyleId" />
-                                <InlineStack gap="200" blockAlign="center">
-                                  <input
-                                    type="text"
-                                    name="ssStyleId"
-                                    defaultValue={(ssStyleIdMap as any)[product.id] || ""}
-                                    placeholder="S&S Style #"
-                                    autoComplete="off"
-                                    style={{
-                                      width: "120px",
-                                      padding: "4px 8px",
-                                      fontSize: "13px",
-                                      border: "1px solid #c9cccf",
-                                      borderRadius: "4px",
-                                      lineHeight: "24px",
-                                    }}
-                                  />
-                                  <Button submit size="slim">Save</Button>
-                                </InlineStack>
-                              </Form>
+                              <InlineStack gap="200" blockAlign="center">
+                                <Form method="post">
+                                  <input type="hidden" name="productGid" value={product.id} />
+                                  <input type="hidden" name="_intent" value="saveSsStyleId" />
+                                  <InlineStack gap="200" blockAlign="center">
+                                    <input
+                                      type="text"
+                                      name="ssStyleId"
+                                      defaultValue={styleId}
+                                      placeholder="S&S Style #"
+                                      autoComplete="off"
+                                      style={{
+                                        width: "120px",
+                                        padding: "4px 8px",
+                                        fontSize: "13px",
+                                        border: "1px solid #c9cccf",
+                                        borderRadius: "4px",
+                                        lineHeight: "24px",
+                                      }}
+                                    />
+                                    <Button submit size="slim">Save</Button>
+                                  </InlineStack>
+                                </Form>
+                                {styleId && (
+                                  <Button
+                                    size="slim"
+                                    onClick={() => setColorModalProduct({ gid: product.id, styleId })}
+                                  >
+                                    Colors{savedColors ? ` (${savedColors.length})` : ""}
+                                  </Button>
+                                )}
+                              </InlineStack>
                             )}
                           </BlockStack>
                         </LegacyStack.Item>
@@ -379,6 +579,18 @@ export default function TemplateProductsPage() {
           </Card>
         </Layout.Section>
       </Layout>
+
+      {/* Color Selection Modal */}
+      {colorModalProduct && (
+        <ColorSelectionModal
+          open={!!colorModalProduct}
+          onClose={() => setColorModalProduct(null)}
+          productGid={colorModalProduct.gid}
+          ssStyleId={colorModalProduct.styleId}
+          savedColors={(ssColorsMap as any)[colorModalProduct.gid] || null}
+          apiUrl={apiUrl}
+        />
+      )}
     </Page>
   );
 }
