@@ -103,14 +103,22 @@ export async function loader({ request }: LoaderFunctionArgs) {
     
     // Sanitize and format data
     // The S&S API returns an array of variants for the style
-    let items = data.map((item: any) => ({
-      sku: item.sku,
-      color: item.colorName,
-      size: item.sizeName,
-      qty: (item.qty || [])
-        .map((wh: any) => parseInt(wh.qty || 0, 10))
-        .reduce((a: number, b: number) => a + b, 0)
-    }));
+    let items = data.map((item: any) => {
+      let totalQty = 0;
+      if (typeof item.qty === 'number') {
+        totalQty = item.qty;
+      } else if (Array.isArray(item.qty)) {
+        totalQty = item.qty
+          .map((wh: any) => parseInt(wh.qty || 0, 10))
+          .reduce((a: number, b: number) => a + b, 0);
+      }
+      return {
+        sku: item.sku,
+        color: item.colorName,
+        size: item.sizeName,
+        qty: totalQty,
+      };
+    });
 
     // Filter by selected colors if a filter is set (storefront only)
     if (ssColorsFilter && ssColorsFilter.length > 0) {
