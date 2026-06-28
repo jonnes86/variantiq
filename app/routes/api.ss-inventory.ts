@@ -81,10 +81,25 @@ export async function loader({ request }: LoaderFunctionArgs) {
     });
 
     if (!response.ok) {
-      throw new Error(`S&S API responded with ${response.status}`);
+      const errorBody = await response.text().catch(() => "(no body)");
+      console.error(`[S&S API] HTTP ${response.status}: ${errorBody.substring(0, 500)}`);
+      return json({ error: `S&S API error: HTTP ${response.status}`, detail: errorBody.substring(0, 200) }, { status: 502, headers: corsHeaders });
     }
 
-    const data = await response.json();
+    const responseText = await response.text();
+    let data: any;
+    try {
+      data = JSON.parse(responseText);
+    } catch {
+      console.error(`[S&S API] Non-JSON response: ${responseText.substring(0, 500)}`);
+      return json({ error: "S&S API returned invalid response", detail: responseText.substring(0, 200) }, { status: 502, headers: corsHeaders });
+    }
+
+    // Handle case where S&S returns an error object instead of an array
+    if (!Array.isArray(data)) {
+      console.error("[S&S API] Unexpected response format:", JSON.stringify(data).substring(0, 500));
+      return json({ error: "S&S API returned unexpected format", detail: JSON.stringify(data).substring(0, 200) }, { status: 502, headers: corsHeaders });
+    }
     
     // Sanitize and format data
     // The S&S API returns an array of variants for the style
@@ -107,6 +122,6 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   } catch (error: any) {
     console.error("[S&S Inventory API] Error:", error);
-    return json({ error: "Failed to fetch inventory" }, { status: 500, headers: corsHeaders });
+    return json({ error: `Failed to fetch inventory: ${error?.message || String(error)}` }, { status: 500, headers: corsHeaders });
   }
 }

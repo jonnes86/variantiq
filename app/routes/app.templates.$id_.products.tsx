@@ -217,14 +217,12 @@ function ColorSelectionModal({
   productGid,
   ssStyleId,
   savedColors,
-  apiUrl,
 }: {
   open: boolean;
   onClose: () => void;
   productGid: string;
   ssStyleId: string;
   savedColors: string[] | null;
-  apiUrl: string;
 }) {
   const [availableColors, setAvailableColors] = useState<{ name: string; totalQty: number }[]>([]);
   const [selectedColors, setSelectedColors] = useState<Set<string>>(new Set());
@@ -238,11 +236,11 @@ function ColorSelectionModal({
     setLoading(true);
     setError("");
 
-    fetch(`${apiUrl}?shop=__internal__&styleId=${encodeURIComponent(ssStyleId)}`)
+    fetch(`/api/ss-inventory?shop=__internal__&styleId=${encodeURIComponent(ssStyleId)}`)
       .then(r => r.json())
       .then(data => {
         if (data.error) {
-          setError(data.error);
+          setError(data.detail ? `${data.error}: ${data.detail}` : data.error);
           setLoading(false);
           return;
         }
@@ -423,7 +421,6 @@ export default function TemplateProductsPage() {
   };
 
   // Build the API URL for the color modal
-  const apiUrl = `/api/ss-inventory`;
 
   return (
     <Page
@@ -588,7 +585,6 @@ export default function TemplateProductsPage() {
           productGid={colorModalProduct.gid}
           ssStyleId={colorModalProduct.styleId}
           savedColors={(ssColorsMap as any)[colorModalProduct.gid] || null}
-          apiUrl={apiUrl}
         />
       )}
     </Page>
