@@ -190,15 +190,98 @@ export async function action({ request, params }: ActionFunctionArgs) {
       });
     } else if (intent === "saveSsColors") {
       const colorsStr = formData.get("ssColors") as string || "[]";
+      const sizesStr = formData.get("ssSizes") as string || "[]";
       let ssColorsJson: string[] | null = null;
+      let ssSizes: string[] = [];
       try {
         const parsed = JSON.parse(colorsStr);
         ssColorsJson = Array.isArray(parsed) && parsed.length > 0 ? parsed : null;
       } catch { ssColorsJson = null; }
+      try {
+        const parsedSizes = JSON.parse(sizesStr);
+        ssSizes = Array.isArray(parsedSizes) ? parsedSizes : [];
+      } catch { ssSizes = []; }
+
+      // Save the color selections to the product link
       await prisma.productTemplateLink.updateMany({
         where: { shop, templateId, productGid },
         data: { ssColorsJson: ssColorsJson ?? undefined },
       });
+
+      // Auto-create or update Color and Size fields in the template
+      if (ssColorsJson && ssColorsJson.length > 0) {
+        const existingFields = await prisma.field.findMany({
+          where: { templateId },
+          orderBy: { sort: "asc" },
+        });
+
+        const colorField = existingFields.find(f =>
+          (f.label || f.name || '').toLowerCase().includes('color')
+        );
+        const sizeField = existingFields.find(f =>
+          (f.label || f.name || '').toLowerCase().includes('size')
+        );
+
+        const maxSort = existingFields.length > 0
+          ? Math.max(...existingFields.map(f => f.sort))
+          : -1;
+
+        if (!colorField) {
+          // Create a new Color field with the selected colors
+          await prisma.field.create({
+            data: {
+              templateId,
+              type: 'radio',
+              name: 'color',
+              label: 'Color',
+              optionsJson: ssColorsJson,
+              displayStyle: 'swatches',
+              required: true,
+              sort: maxSort + 1,
+            },
+          });
+        } else {
+          // Merge: add any new colors not already present
+          const existingOptions = (colorField.optionsJson as string[]) || [];
+          const merged = [...existingOptions];
+          ssColorsJson.forEach(c => {
+            if (!merged.includes(c)) merged.push(c);
+          });
+          await prisma.field.update({
+            where: { id: colorField.id },
+            data: { optionsJson: merged },
+          });
+        }
+
+        if (ssSizes.length > 0) {
+          if (!sizeField) {
+            // Create a new Size field
+            await prisma.field.create({
+              data: {
+                templateId,
+                type: 'radio',
+                name: 'size',
+                label: 'Size',
+                optionsJson: ssSizes,
+                displayStyle: 'button_pills',
+                required: true,
+                sort: maxSort + 2,
+              },
+            });
+          } else {
+            // Merge: add any new sizes not already present
+            const existingOptions = (sizeField.optionsJson as string[]) || [];
+            const merged = [...existingOptions];
+            ssSizes.forEach(s => {
+              if (!merged.includes(s)) merged.push(s);
+            });
+            await prisma.field.update({
+              where: { id: sizeField.id },
+              data: { optionsJson: merged },
+            });
+          }
+        }
+      }
     }
 
     // Returning null triggers a loader reload (refreshing the product list)
@@ -226,6 +309,7 @@ function ColorSelectionModal({
 }) {
   const [availableColors, setAvailableColors] = useState<{ name: string; totalQty: number }[]>([]);
   const [selectedColors, setSelectedColors] = useState<Set<string>>(new Set());
+  const [rawItems, setRawItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const submit = useSubmit();
@@ -244,9 +328,12 @@ function ColorSelectionModal({
           setLoading(false);
           return;
         }
+        const items = data.items || [];
+        setRawItems(items);
+
         // Group items by color and sum quantities
         const colorMap = new Map<string, number>();
-        (data.items || []).forEach((item: any) => {
+        items.forEach((item: any) => {
           const existing = colorMap.get(item.color) || 0;
           colorMap.set(item.color, existing + item.qty);
         });
@@ -293,10 +380,28 @@ function ColorSelectionModal({
   };
 
   const handleSave = () => {
+    // Extract unique sizes for the selected colors, maintaining a sensible order
+    const sizeOrder = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', '6XL'];
+    const sizesForSelected = new Set<string>();
+    rawItems.forEach((item: any) => {
+      if (selectedColors.has(item.color) && item.size && item.qty > 0) {
+        sizesForSelected.add(item.size);
+      }
+    });
+    const sortedSizes = Array.from(sizesForSelected).sort((a, b) => {
+      const ai = sizeOrder.indexOf(a);
+      const bi = sizeOrder.indexOf(b);
+      if (ai !== -1 && bi !== -1) return ai - bi;
+      if (ai !== -1) return -1;
+      if (bi !== -1) return 1;
+      return a.localeCompare(b);
+    });
+
     const formData = new FormData();
     formData.append("_intent", "saveSsColors");
     formData.append("productGid", productGid);
     formData.append("ssColors", JSON.stringify(Array.from(selectedColors)));
+    formData.append("ssSizes", JSON.stringify(sortedSizes));
     submit(formData, { method: "post" });
     onClose();
   };
