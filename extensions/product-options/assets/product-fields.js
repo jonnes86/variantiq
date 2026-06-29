@@ -19,11 +19,18 @@ class VariantIQFields {
 
   async init() {
     try {
+      console.log('[VariantIQ] init() starting for product:', this.productId, 'shop:', this.shop, 'apiUrl:', this.apiUrl);
       this.findBasePrice();
       await Promise.all([
         this.fetchTemplate(),
         this.fetchSSInventory()
       ]);
+      console.log('[VariantIQ] Template data received:', JSON.stringify({
+        hasTemplate: !!this.templateData?.template,
+        templateName: this.templateData?.template?.name,
+        fieldCount: this.templateData?.template?.fields?.length,
+        ruleCount: this.templateData?.template?.rules?.length,
+      }));
       this.render();
       this.attachEventListeners();
     } catch (error) {
