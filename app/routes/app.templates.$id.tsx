@@ -1048,6 +1048,8 @@ export default function TemplateDetail() {
   const [fieldDisplayStyle, setFieldDisplayStyle] = useState("default");
   const [fieldOptionsList, setFieldOptionsList] = useState<Array<{ label: string, price: string, variantMapping: string, swatchColor: string, ssStyleId: string, ssColorAlias: string }>>([]);
   const [fieldModalTab, setFieldModalTab] = useState(0);
+  const [ssImportStyleId, setSsImportStyleId] = useState("");
+  const [ssImportLoading, setSsImportLoading] = useState(false);
 
   useEffect(() => {
     setTemplateName(template.name);
@@ -1174,6 +1176,7 @@ export default function TemplateDetail() {
     setFieldDisplayStyle("default");
     setFieldOptionsList([]);
     setFieldModalTab(0);
+    setSsImportStyleId("");
   };
 
   const handleAddFieldClick = (type = "select") => {
@@ -1947,11 +1950,127 @@ export default function TemplateDetail() {
                       </div>
 
                     ))}
-                    <InlineStack>
+                    <InlineStack gap="200">
                       <Button onClick={() => setFieldOptionsList([...fieldOptionsList, { label: "", price: "", variantMapping: "", swatchColor: "#000000", ssStyleId: "", ssColorAlias: "" }])}>
                         Add Option
                       </Button>
                     </InlineStack>
+
+                    {/* Import from S&S */}
+                    <div style={{ border: '1px solid var(--p-color-border-info)', borderRadius: '8px', padding: '12px', background: 'var(--p-color-bg-surface-info-hover, #f0f6ff)' }}>
+                      <BlockStack gap="200">
+                        <Text as="h6" variant="headingSm">🔗 Import from S&S Activewear</Text>
+                        <Text as="p" variant="bodySm" tone="subdued">Enter an S&S Style # to auto-import colors or sizes as options. You can import from multiple styles — duplicates are skipped.</Text>
+                        <InlineStack gap="200" blockAlign="center">
+                          <div style={{ width: '140px' }}>
+                            <TextField
+                              label="S&S Style #"
+                              labelHidden
+                              value={ssImportStyleId}
+                              onChange={setSsImportStyleId}
+                              placeholder="e.g., 00606"
+                              autoComplete="off"
+                            />
+                          </div>
+                          <Button
+                            size="slim"
+                            disabled={!ssImportStyleId.trim() || ssImportLoading}
+                            loading={ssImportLoading}
+                            onClick={async () => {
+                              setSsImportLoading(true);
+                              try {
+                                const resp = await fetch(`/api/ss-inventory?shop=__internal__&styleId=${encodeURIComponent(ssImportStyleId.trim())}`);
+                                const data = await resp.json();
+                                if (data.error) {
+                                  alert(`S&S Error: ${data.error}`);
+                                  setSsImportLoading(false);
+                                  return;
+                                }
+                                const items = data.items || [];
+                                const existingLabels = new Set(fieldOptionsList.map(o => o.label.trim().toLowerCase()));
+                                const colorSet = new Set<string>();
+                                items.forEach((item: any) => {
+                                  if (item.color && !colorSet.has(item.color)) {
+                                    colorSet.add(item.color);
+                                  }
+                                });
+                                const newOptions = Array.from(colorSet)
+                                  .filter(c => !existingLabels.has(c.toLowerCase()))
+                                  .sort()
+                                  .map(c => ({ label: c, price: "", variantMapping: "", swatchColor: "#000000", ssStyleId: "", ssColorAlias: "" }));
+                                if (newOptions.length > 0) {
+                                  setFieldOptionsList(prev => [...prev.filter(o => o.label.trim() !== ''), ...newOptions]);
+                                  if (typeof shopify !== 'undefined' && shopify.toast) {
+                                    shopify.toast.show(`Imported ${newOptions.length} colors`);
+                                  }
+                                } else {
+                                  if (typeof shopify !== 'undefined' && shopify.toast) {
+                                    shopify.toast.show('No new colors to import');
+                                  }
+                                }
+                              } catch (e) {
+                                alert(`Import failed: ${e}`);
+                              }
+                              setSsImportLoading(false);
+                            }}
+                          >
+                            🎨 Import Colors
+                          </Button>
+                          <Button
+                            size="slim"
+                            disabled={!ssImportStyleId.trim() || ssImportLoading}
+                            loading={ssImportLoading}
+                            onClick={async () => {
+                              setSsImportLoading(true);
+                              try {
+                                const resp = await fetch(`/api/ss-inventory?shop=__internal__&styleId=${encodeURIComponent(ssImportStyleId.trim())}`);
+                                const data = await resp.json();
+                                if (data.error) {
+                                  alert(`S&S Error: ${data.error}`);
+                                  setSsImportLoading(false);
+                                  return;
+                                }
+                                const items = data.items || [];
+                                const existingLabels = new Set(fieldOptionsList.map(o => o.label.trim().toLowerCase()));
+                                const sizeOrder = ['YXS','YS','YM','YL','YXL','XS','S','M','L','XL','2XL','3XL','4XL','5XL','6XL'];
+                                const sizeSet = new Set<string>();
+                                items.forEach((item: any) => {
+                                  if (item.size && !sizeSet.has(item.size)) {
+                                    sizeSet.add(item.size);
+                                  }
+                                });
+                                const newOptions = Array.from(sizeSet)
+                                  .filter(s => !existingLabels.has(s.toLowerCase()))
+                                  .sort((a, b) => {
+                                    const ai = sizeOrder.indexOf(a);
+                                    const bi = sizeOrder.indexOf(b);
+                                    if (ai !== -1 && bi !== -1) return ai - bi;
+                                    if (ai !== -1) return -1;
+                                    if (bi !== -1) return 1;
+                                    return a.localeCompare(b);
+                                  })
+                                  .map(s => ({ label: s, price: "", variantMapping: "", swatchColor: "#000000", ssStyleId: "", ssColorAlias: "" }));
+                                if (newOptions.length > 0) {
+                                  setFieldOptionsList(prev => [...prev.filter(o => o.label.trim() !== ''), ...newOptions]);
+                                  if (typeof shopify !== 'undefined' && shopify.toast) {
+                                    shopify.toast.show(`Imported ${newOptions.length} sizes`);
+                                  }
+                                } else {
+                                  if (typeof shopify !== 'undefined' && shopify.toast) {
+                                    shopify.toast.show('No new sizes to import');
+                                  }
+                                }
+                              } catch (e) {
+                                alert(`Import failed: ${e}`);
+                              }
+                              setSsImportLoading(false);
+                            }}
+                          >
+                            📏 Import Sizes
+                          </Button>
+                        </InlineStack>
+                      </BlockStack>
+                    </div>
                   </BlockStack>
                 ) : (
                   <Banner tone="info">
