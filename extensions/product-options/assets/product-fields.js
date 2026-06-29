@@ -116,9 +116,10 @@ class VariantIQFields {
 
   render() {
     const fieldsContainer = this.container.querySelector('.variantiq-fields-container');
-    if (!fieldsContainer) return;
+    if (!fieldsContainer) { console.warn('[VariantIQ] No fields container found'); return; }
 
     if (!this.templateData || !this.templateData.template) {
+      console.warn('[VariantIQ] No template data loaded:', this.templateData);
       fieldsContainer.innerHTML = '';
       fieldsContainer.style.display = 'none';
       return;
@@ -127,10 +128,14 @@ class VariantIQFields {
     const { fields } = this.templateData.template;
 
     if (!fields || fields.length === 0) {
+      console.warn('[VariantIQ] Template has no fields:', this.templateData.template.name);
       fieldsContainer.innerHTML = '';
       fieldsContainer.style.display = 'none';
       return;
     }
+
+    console.log(`[VariantIQ] Rendering ${fields.length} fields for template "${this.templateData.template.name}"`);
+    fields.forEach(f => console.log(`  → Field: "${f.label}" (type=${f.type}, displayStyle=${f.displayStyle}, options=${(f.optionsJson||[]).length})`));
 
     const sortedFields = [...fields].sort((a, b) => a.sort - b.sort);
 
