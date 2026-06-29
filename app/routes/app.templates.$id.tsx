@@ -820,6 +820,96 @@ export async function action({ request, params }: ActionFunctionArgs) {
     return json({ success: true });
   }
 
+  // S&S Import: auto-create Color + Size fields
+  if (intent === "ssImportFields") {
+    const colors: string[] = JSON.parse(String(form.get("colors") || "[]"));
+    const sizes: string[] = JSON.parse(String(form.get("sizes") || "[]"));
+    const priceAdjustments: Record<string, string> = JSON.parse(String(form.get("priceAdjustments") || "{}"));
+
+    if (colors.length === 0) return json({ error: "No colors selected" }, { status: 400 });
+
+    const existingFields = await prisma.field.findMany({
+      where: { templateId },
+      orderBy: { sort: "asc" },
+    });
+
+    const colorField = existingFields.find(f =>
+      (f.label || f.name || '').toLowerCase().includes('color')
+    );
+    const sizeField = existingFields.find(f =>
+      (f.label || f.name || '').toLowerCase().includes('size')
+    );
+
+    const maxSort = existingFields.length > 0
+      ? Math.max(...existingFields.map(f => f.sort))
+      : -1;
+
+    // Build price adjustments JSON
+    const priceAdj: Record<string, number> = {};
+    Object.entries(priceAdjustments).forEach(([color, amt]) => {
+      const num = parseFloat(amt);
+      if (!isNaN(num) && num !== 0) priceAdj[color] = num;
+    });
+
+    if (!colorField) {
+      await prisma.field.create({
+        data: {
+          templateId,
+          type: 'radio',
+          name: 'color',
+          label: 'Color',
+          optionsJson: colors,
+          priceAdjustmentsJson: Object.keys(priceAdj).length > 0 ? priceAdj : undefined,
+          displayStyle: 'swatches',
+          required: true,
+          sort: maxSort + 1,
+        },
+      });
+    } else {
+      // Merge new colors into existing
+      const existing = (colorField.optionsJson as string[]) || [];
+      const merged = [...existing];
+      colors.forEach(c => { if (!merged.includes(c)) merged.push(c); });
+      // Merge price adjustments
+      const existingPrices = (colorField.priceAdjustmentsJson as Record<string, number>) || {};
+      const mergedPrices = { ...existingPrices, ...priceAdj };
+      await prisma.field.update({
+        where: { id: colorField.id },
+        data: {
+          optionsJson: merged,
+          priceAdjustmentsJson: Object.keys(mergedPrices).length > 0 ? mergedPrices : undefined,
+        },
+      });
+    }
+
+    if (sizes.length > 0) {
+      if (!sizeField) {
+        await prisma.field.create({
+          data: {
+            templateId,
+            type: 'radio',
+            name: 'size',
+            label: 'Size',
+            optionsJson: sizes,
+            displayStyle: 'button_pills',
+            required: true,
+            sort: maxSort + 2,
+          },
+        });
+      } else {
+        const existing = (sizeField.optionsJson as string[]) || [];
+        const merged = [...existing];
+        sizes.forEach(s => { if (!merged.includes(s)) merged.push(s); });
+        await prisma.field.update({
+          where: { id: sizeField.id },
+          data: { optionsJson: merged },
+        });
+      }
+    }
+
+    return json({ success: true });
+  }
+
   return null;
 }
 
@@ -1050,6 +1140,8 @@ export default function TemplateDetail() {
   const [fieldModalTab, setFieldModalTab] = useState(0);
   const [ssImportStyleId, setSsImportStyleId] = useState("");
   const [ssImportLoading, setSsImportLoading] = useState(false);
+  const [ssImportPreview, setSsImportPreview] = useState<any>(null);
+  const [ssTemplateImportOpen, setSsTemplateImportOpen] = useState(false);
 
   useEffect(() => {
     setTemplateName(template.name);
@@ -1177,6 +1269,7 @@ export default function TemplateDetail() {
     setFieldOptionsList([]);
     setFieldModalTab(0);
     setSsImportStyleId("");
+    setSsImportPreview(null);
   };
 
   const handleAddFieldClick = (type = "select") => {
@@ -1294,7 +1387,10 @@ export default function TemplateDetail() {
                   <Text as="p">Upgrade to Pro for unlimited fields, conditional rules, datasets, and more.</Text>
                 </Banner>
               ) : (
-                <Button onClick={handleAddFieldClick}>Add Option Set</Button>
+                <InlineStack gap="200">
+                  <Button onClick={handleAddFieldClick}>Add Option Set</Button>
+                  <Button variant="tertiary" onClick={() => setSsTemplateImportOpen(true)}>🔗 Import from S&S</Button>
+                </InlineStack>
               )
             )}
           </InlineGrid>
@@ -1955,29 +2051,30 @@ export default function TemplateDetail() {
                         Add Option
                       </Button>
                     </InlineStack>
-
-                    {/* Import from S&S */}
+                    {/* Import from S&S - Preview Wizard */}
                     <div style={{ border: '1px solid var(--p-color-border-info)', borderRadius: '8px', padding: '12px', background: 'var(--p-color-bg-surface-info-hover, #f0f6ff)' }}>
-                      <BlockStack gap="200">
+                      <BlockStack gap="300">
                         <Text as="h6" variant="headingSm">🔗 Import from S&S Activewear</Text>
-                        <Text as="p" variant="bodySm" tone="subdued">Enter an S&S Style # to auto-import colors or sizes as options. You can import from multiple styles — duplicates are skipped.</Text>
+                        <Text as="p" variant="bodySm" tone="subdued">Enter a Style # to preview available colors and sizes. Import from multiple styles — duplicates are skipped.</Text>
                         <InlineStack gap="200" blockAlign="center">
                           <div style={{ width: '140px' }}>
                             <TextField
                               label="S&S Style #"
                               labelHidden
                               value={ssImportStyleId}
-                              onChange={setSsImportStyleId}
+                              onChange={(val) => { setSsImportStyleId(val); setSsImportPreview(null); }}
                               placeholder="e.g., 00606"
                               autoComplete="off"
                             />
                           </div>
                           <Button
                             size="slim"
+                            variant="primary"
                             disabled={!ssImportStyleId.trim() || ssImportLoading}
                             loading={ssImportLoading}
                             onClick={async () => {
                               setSsImportLoading(true);
+                              setSsImportPreview(null);
                               try {
                                 const resp = await fetch(`/api/ss-inventory?shop=__internal__&styleId=${encodeURIComponent(ssImportStyleId.trim())}`);
                                 const data = await resp.json();
@@ -1987,88 +2084,102 @@ export default function TemplateDetail() {
                                   return;
                                 }
                                 const items = data.items || [];
-                                const existingLabels = new Set(fieldOptionsList.map(o => o.label.trim().toLowerCase()));
-                                const colorSet = new Set<string>();
+                                const colorSizeMap: Record<string, { sizes: Record<string, number>, totalQty: number }> = {};
                                 items.forEach((item: any) => {
-                                  if (item.color && !colorSet.has(item.color)) {
-                                    colorSet.add(item.color);
-                                  }
+                                  if (!item.color || !item.size) return;
+                                  if (!colorSizeMap[item.color]) colorSizeMap[item.color] = { sizes: {}, totalQty: 0 };
+                                  colorSizeMap[item.color].sizes[item.size] = (colorSizeMap[item.color].sizes[item.size] || 0) + item.qty;
+                                  colorSizeMap[item.color].totalQty += item.qty;
                                 });
-                                const newOptions = Array.from(colorSet)
-                                  .filter(c => !existingLabels.has(c.toLowerCase()))
-                                  .sort()
-                                  .map(c => ({ label: c, price: "", variantMapping: "", swatchColor: "#000000", ssStyleId: "", ssColorAlias: "" }));
-                                if (newOptions.length > 0) {
-                                  setFieldOptionsList(prev => [...prev.filter(o => o.label.trim() !== ''), ...newOptions]);
-                                  if (typeof shopify !== 'undefined' && shopify.toast) {
-                                    shopify.toast.show(`Imported ${newOptions.length} colors`);
-                                  }
-                                } else {
-                                  if (typeof shopify !== 'undefined' && shopify.toast) {
-                                    shopify.toast.show('No new colors to import');
-                                  }
-                                }
-                              } catch (e) {
-                                alert(`Import failed: ${e}`);
-                              }
-                              setSsImportLoading(false);
-                            }}
-                          >
-                            🎨 Import Colors
-                          </Button>
-                          <Button
-                            size="slim"
-                            disabled={!ssImportStyleId.trim() || ssImportLoading}
-                            loading={ssImportLoading}
-                            onClick={async () => {
-                              setSsImportLoading(true);
-                              try {
-                                const resp = await fetch(`/api/ss-inventory?shop=__internal__&styleId=${encodeURIComponent(ssImportStyleId.trim())}`);
-                                const data = await resp.json();
-                                if (data.error) {
-                                  alert(`S&S Error: ${data.error}`);
-                                  setSsImportLoading(false);
-                                  return;
-                                }
-                                const items = data.items || [];
-                                const existingLabels = new Set(fieldOptionsList.map(o => o.label.trim().toLowerCase()));
                                 const sizeOrder = ['YXS','YS','YM','YL','YXL','XS','S','M','L','XL','2XL','3XL','4XL','5XL','6XL'];
-                                const sizeSet = new Set<string>();
-                                items.forEach((item: any) => {
-                                  if (item.size && !sizeSet.has(item.size)) {
-                                    sizeSet.add(item.size);
-                                  }
+                                const allSizes = [...new Set(items.map((i: any) => i.size).filter(Boolean))].sort((a: string, b: string) => {
+                                  const ai = sizeOrder.indexOf(a); const bi = sizeOrder.indexOf(b);
+                                  if (ai !== -1 && bi !== -1) return ai - bi;
+                                  if (ai !== -1) return -1; if (bi !== -1) return 1;
+                                  return a.localeCompare(b);
                                 });
-                                const newOptions = Array.from(sizeSet)
-                                  .filter(s => !existingLabels.has(s.toLowerCase()))
-                                  .sort((a, b) => {
-                                    const ai = sizeOrder.indexOf(a);
-                                    const bi = sizeOrder.indexOf(b);
-                                    if (ai !== -1 && bi !== -1) return ai - bi;
-                                    if (ai !== -1) return -1;
-                                    if (bi !== -1) return 1;
-                                    return a.localeCompare(b);
-                                  })
-                                  .map(s => ({ label: s, price: "", variantMapping: "", swatchColor: "#000000", ssStyleId: "", ssColorAlias: "" }));
-                                if (newOptions.length > 0) {
-                                  setFieldOptionsList(prev => [...prev.filter(o => o.label.trim() !== ''), ...newOptions]);
-                                  if (typeof shopify !== 'undefined' && shopify.toast) {
-                                    shopify.toast.show(`Imported ${newOptions.length} sizes`);
-                                  }
-                                } else {
-                                  if (typeof shopify !== 'undefined' && shopify.toast) {
-                                    shopify.toast.show('No new sizes to import');
-                                  }
-                                }
-                              } catch (e) {
-                                alert(`Import failed: ${e}`);
-                              }
+                                setSsImportPreview({ colorSizeMap, allSizes, selectedColors: new Set(Object.keys(colorSizeMap)) });
+                              } catch (e) { alert(`Fetch failed: ${e}`); }
                               setSsImportLoading(false);
                             }}
                           >
-                            📏 Import Sizes
+                            🔍 Preview
                           </Button>
                         </InlineStack>
+
+                        {ssImportPreview && (
+                          <BlockStack gap="200">
+                            <InlineStack align="space-between" blockAlign="center">
+                              <Text as="span" variant="headingSm">{Object.keys(ssImportPreview.colorSizeMap).length} colors · {ssImportPreview.allSizes.length} sizes</Text>
+                              <InlineStack gap="100">
+                                <Button size="slim" onClick={() => setSsImportPreview({...ssImportPreview, selectedColors: new Set(Object.keys(ssImportPreview.colorSizeMap))})}>All</Button>
+                                <Button size="slim" onClick={() => setSsImportPreview({...ssImportPreview, selectedColors: new Set()})}>None</Button>
+                              </InlineStack>
+                            </InlineStack>
+                            <div style={{ overflowX: 'auto', maxHeight: '300px', overflowY: 'auto' }}>
+                              <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse' }}>
+                                <thead>
+                                  <tr style={{ borderBottom: '2px solid #ddd' }}>
+                                    <th style={{ textAlign: 'left', padding: '4px 6px', minWidth: '150px', position: 'sticky', top: 0, left: 0, background: '#e8f0fe', zIndex: 2 }}>Color</th>
+                                    {ssImportPreview.allSizes.map((size: string) => (
+                                      <th key={size} style={{ padding: '4px 3px', textAlign: 'center', minWidth: '30px', fontWeight: 600, position: 'sticky', top: 0, background: '#e8f0fe', zIndex: 1 }}>{size}</th>
+                                    ))}
+                                    <th style={{ padding: '4px 6px', textAlign: 'right', minWidth: '45px', position: 'sticky', top: 0, background: '#e8f0fe', zIndex: 1 }}>Qty</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {Object.entries(ssImportPreview.colorSizeMap).sort(([a], [b]) => a.localeCompare(b)).map(([color, data]: [string, any]) => {
+                                    const sel = ssImportPreview.selectedColors.has(color);
+                                    return (
+                                      <tr key={color} onClick={() => {
+                                        const next = new Set(ssImportPreview.selectedColors);
+                                        if (next.has(color)) next.delete(color); else next.add(color);
+                                        setSsImportPreview({...ssImportPreview, selectedColors: next});
+                                      }} style={{ cursor: 'pointer', borderBottom: '1px solid #eee', opacity: sel ? 1 : 0.35, background: sel ? 'transparent' : '#f8f8f8' }}>
+                                        <td style={{ padding: '3px 6px', fontWeight: 500, position: 'sticky', left: 0, background: sel ? '#f0f6ff' : '#f8f8f8' }}>{sel ? '☑' : '☐'} {color}</td>
+                                        {ssImportPreview.allSizes.map((size: string) => {
+                                          const qty = data.sizes[size] || 0;
+                                          return (<td key={size} style={{ padding: '3px', textAlign: 'center', color: qty > 0 ? '#16a34a' : '#ddd', fontWeight: qty > 0 ? 700 : 400, fontSize: '10px' }}>{qty > 0 ? '●' : '·'}</td>);
+                                        })}
+                                        <td style={{ padding: '3px 6px', textAlign: 'right', fontSize: '10px', color: '#666' }}>{data.totalQty.toLocaleString()}</td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                            <Text as="p" variant="bodySm" tone="subdued">● = in stock · = out of stock. Click rows to select/deselect. Only sizes with stock are imported.</Text>
+                            <InlineStack gap="200">
+                              <Button variant="primary" size="slim" disabled={ssImportPreview.selectedColors.size === 0}
+                                onClick={() => {
+                                  const existing = new Set(fieldOptionsList.map(o => o.label.trim().toLowerCase()));
+                                  const newOpts = Array.from(ssImportPreview.selectedColors as Set<string>).filter((c: string) => !existing.has(c.toLowerCase())).sort()
+                                    .map((c: string) => ({ label: c, price: "", variantMapping: "", swatchColor: "#000000", ssStyleId: "", ssColorAlias: "" }));
+                                  if (newOpts.length > 0) {
+                                    setFieldOptionsList(prev => [...prev.filter(o => o.label.trim() !== ''), ...newOpts]);
+                                    shopify?.toast?.show(`Imported ${newOpts.length} colors`);
+                                  } else { shopify?.toast?.show('All selected colors already exist'); }
+                                }}>🎨 Import {ssImportPreview.selectedColors.size} Colors</Button>
+                              <Button size="slim" disabled={ssImportPreview.selectedColors.size === 0}
+                                onClick={() => {
+                                  const existing = new Set(fieldOptionsList.map(o => o.label.trim().toLowerCase()));
+                                  const sizeOrder = ['YXS','YS','YM','YL','YXL','XS','S','M','L','XL','2XL','3XL','4XL','5XL','6XL'];
+                                  const validSizes = new Set<string>();
+                                  (ssImportPreview.selectedColors as Set<string>).forEach((color: string) => {
+                                    const d = ssImportPreview.colorSizeMap[color];
+                                    if (d) Object.entries(d.sizes).forEach(([s, q]) => { if ((q as number) > 0) validSizes.add(s); });
+                                  });
+                                  const newOpts = Array.from(validSizes).filter(s => !existing.has(s.toLowerCase()))
+                                    .sort((a, b) => { const ai = sizeOrder.indexOf(a); const bi = sizeOrder.indexOf(b); if (ai !== -1 && bi !== -1) return ai - bi; if (ai !== -1) return -1; if (bi !== -1) return 1; return a.localeCompare(b); })
+                                    .map(s => ({ label: s, price: "", variantMapping: "", swatchColor: "#000000", ssStyleId: "", ssColorAlias: "" }));
+                                  if (newOpts.length > 0) {
+                                    setFieldOptionsList(prev => [...prev.filter(o => o.label.trim() !== ''), ...newOpts]);
+                                    shopify?.toast?.show(`Imported ${newOpts.length} sizes`);
+                                  } else { shopify?.toast?.show('All sizes already exist'); }
+                                }}>📏 Import Sizes (in-stock only)</Button>
+                            </InlineStack>
+                          </BlockStack>
+                        )}
                       </BlockStack>
                     </div>
                   </BlockStack>
@@ -2175,6 +2286,179 @@ export default function TemplateDetail() {
                 placeholder="Red&#10;Blue&#10;Green"
                 helpText="Enter each option on a new line. Empty lines and exact duplicates will be automatically ignored upon saving."
             />
+          </BlockStack>
+        </Modal.Section>
+      </Modal>
+
+      {/* S&S Template Import Modal — creates Color + Size fields from S&S Style # */}
+      <Modal
+        open={ssTemplateImportOpen}
+        onClose={() => { setSsTemplateImportOpen(false); setSsImportPreview(null); setSsImportStyleId(""); }}
+        title="🔗 Import Options from S&S Activewear"
+        primaryAction={ssImportPreview ? {
+          content: `Import ${ssImportPreview.selectedColors.size} Colors + Sizes`,
+          disabled: ssImportPreview.selectedColors.size === 0,
+          onAction: () => {
+            const selectedColors = Array.from(ssImportPreview.selectedColors as Set<string>).sort();
+            const sizeOrder = ['YXS','YS','YM','YL','YXL','XS','S','M','L','XL','2XL','3XL','4XL','5XL','6XL'];
+            // Collect sizes that have stock for selected colors
+            const validSizes = new Set<string>();
+            selectedColors.forEach((color: string) => {
+              const d = ssImportPreview.colorSizeMap[color];
+              if (d) Object.entries(d.sizes).forEach(([s, q]) => { if ((q as number) > 0) validSizes.add(s); });
+            });
+            const sortedSizes = Array.from(validSizes).sort((a, b) => {
+              const ai = sizeOrder.indexOf(a); const bi = sizeOrder.indexOf(b);
+              if (ai !== -1 && bi !== -1) return ai - bi;
+              if (ai !== -1) return -1; if (bi !== -1) return 1;
+              return a.localeCompare(b);
+            });
+
+            // Build hidden form data to create both fields via action
+            const formData = new FormData();
+            formData.append("_intent", "ssImportFields");
+            formData.append("colors", JSON.stringify(selectedColors));
+            formData.append("sizes", JSON.stringify(sortedSizes));
+            // Collect price adjustments
+            const priceAdj: Record<string, string> = {};
+            selectedColors.forEach((c: string) => {
+              const adj = ssImportPreview.priceAdjustments?.[c];
+              if (adj && parseFloat(adj) !== 0) priceAdj[c] = adj;
+            });
+            formData.append("priceAdjustments", JSON.stringify(priceAdj));
+            submit(formData, { method: "post" });
+            setSsTemplateImportOpen(false);
+            setSsImportPreview(null);
+            setSsImportStyleId("");
+            shopify?.toast?.show(`Importing ${selectedColors.length} colors and ${sortedSizes.length} sizes`);
+          },
+        } : undefined}
+        secondaryActions={[{ content: "Cancel", onAction: () => { setSsTemplateImportOpen(false); setSsImportPreview(null); setSsImportStyleId(""); } }]}
+      >
+        <Modal.Section>
+          <BlockStack gap="400">
+            <Text as="p" tone="subdued">Enter a Style # to preview available colors and sizes. This will create (or update) Color and Size option sets automatically.</Text>
+            <InlineStack gap="200" blockAlign="center">
+              <div style={{ width: '160px' }}>
+                <TextField
+                  label="S&S Style #"
+                  labelHidden
+                  value={ssImportStyleId}
+                  onChange={(val) => { setSsImportStyleId(val); setSsImportPreview(null); }}
+                  placeholder="e.g., 00606"
+                  autoComplete="off"
+                />
+              </div>
+              <Button
+                variant="primary"
+                disabled={!ssImportStyleId.trim() || ssImportLoading}
+                loading={ssImportLoading}
+                onClick={async () => {
+                  setSsImportLoading(true);
+                  setSsImportPreview(null);
+                  try {
+                    const resp = await fetch(`/api/ss-inventory?shop=__internal__&styleId=${encodeURIComponent(ssImportStyleId.trim())}`);
+                    const data = await resp.json();
+                    if (data.error) { alert(`S&S Error: ${data.error}`); setSsImportLoading(false); return; }
+                    const items = data.items || [];
+                    const colorSizeMap: Record<string, { sizes: Record<string, number>, totalQty: number }> = {};
+                    items.forEach((item: any) => {
+                      if (!item.color || !item.size) return;
+                      if (!colorSizeMap[item.color]) colorSizeMap[item.color] = { sizes: {}, totalQty: 0 };
+                      colorSizeMap[item.color].sizes[item.size] = (colorSizeMap[item.color].sizes[item.size] || 0) + item.qty;
+                      colorSizeMap[item.color].totalQty += item.qty;
+                    });
+                    const sizeOrder = ['YXS','YS','YM','YL','YXL','XS','S','M','L','XL','2XL','3XL','4XL','5XL','6XL'];
+                    const allSizes = [...new Set(items.map((i: any) => i.size).filter(Boolean))].sort((a: string, b: string) => {
+                      const ai = sizeOrder.indexOf(a); const bi = sizeOrder.indexOf(b);
+                      if (ai !== -1 && bi !== -1) return ai - bi;
+                      if (ai !== -1) return -1; if (bi !== -1) return 1;
+                      return a.localeCompare(b);
+                    });
+                    setSsImportPreview({ colorSizeMap, allSizes, selectedColors: new Set(Object.keys(colorSizeMap)), priceAdjustments: {} });
+                  } catch (e) { alert(`Fetch failed: ${e}`); }
+                  setSsImportLoading(false);
+                }}
+              >
+                🔍 Preview
+              </Button>
+            </InlineStack>
+
+            {ssImportPreview && (
+              <BlockStack gap="300">
+                <InlineStack align="space-between" blockAlign="center">
+                  <Text as="span" variant="headingSm">
+                    {Object.keys(ssImportPreview.colorSizeMap).length} colors · {ssImportPreview.allSizes.length} sizes
+                  </Text>
+                  <InlineStack gap="100">
+                    <Button size="slim" onClick={() => setSsImportPreview({...ssImportPreview, selectedColors: new Set(Object.keys(ssImportPreview.colorSizeMap))})}>All</Button>
+                    <Button size="slim" onClick={() => setSsImportPreview({...ssImportPreview, selectedColors: new Set()})}>None</Button>
+                  </InlineStack>
+                </InlineStack>
+
+                <div style={{ overflowX: 'auto', maxHeight: '350px', overflowY: 'auto', border: '1px solid #ddd', borderRadius: '6px' }}>
+                  <table style={{ width: '100%', fontSize: '12px', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '2px solid #ccc' }}>
+                        <th style={{ textAlign: 'left', padding: '6px 8px', minWidth: '180px', position: 'sticky', top: 0, left: 0, background: '#f3f4f6', zIndex: 2 }}>Color</th>
+                        {ssImportPreview.allSizes.map((size: string) => (
+                          <th key={size} style={{ padding: '6px 4px', textAlign: 'center', minWidth: '34px', fontWeight: 600, position: 'sticky', top: 0, background: '#f3f4f6', zIndex: 1 }}>{size}</th>
+                        ))}
+                        <th style={{ padding: '6px 8px', textAlign: 'center', minWidth: '60px', position: 'sticky', top: 0, background: '#f3f4f6', zIndex: 1 }}>+$</th>
+                        <th style={{ padding: '6px 8px', textAlign: 'right', minWidth: '50px', position: 'sticky', top: 0, background: '#f3f4f6', zIndex: 1 }}>Stock</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.entries(ssImportPreview.colorSizeMap).sort(([a], [b]) => a.localeCompare(b)).map(([color, data]: [string, any]) => {
+                        const sel = ssImportPreview.selectedColors.has(color);
+                        return (
+                          <tr key={color} style={{ borderBottom: '1px solid #eee', opacity: sel ? 1 : 0.3, background: sel ? 'transparent' : '#fafafa', transition: 'opacity 0.15s' }}>
+                            <td
+                              onClick={() => {
+                                const next = new Set(ssImportPreview.selectedColors);
+                                if (next.has(color)) next.delete(color); else next.add(color);
+                                setSsImportPreview({...ssImportPreview, selectedColors: next});
+                              }}
+                              style={{ padding: '4px 8px', fontWeight: 500, cursor: 'pointer', position: 'sticky', left: 0, background: sel ? '#fff' : '#fafafa', userSelect: 'none' }}
+                            >
+                              {sel ? '☑' : '☐'} {color}
+                            </td>
+                            {ssImportPreview.allSizes.map((size: string) => {
+                              const qty = data.sizes[size] || 0;
+                              return (
+                                <td key={size} style={{ padding: '4px', textAlign: 'center', color: qty > 0 ? '#16a34a' : '#e5e5e5', fontWeight: qty > 0 ? 700 : 400 }}>
+                                  {qty > 0 ? '●' : '·'}
+                                </td>
+                              );
+                            })}
+                            <td style={{ padding: '2px 4px', textAlign: 'center' }}>
+                              {sel && (
+                                <input
+                                  type="text"
+                                  value={ssImportPreview.priceAdjustments?.[color] || ""}
+                                  onChange={(e) => {
+                                    const newAdj = {...(ssImportPreview.priceAdjustments || {})};
+                                    newAdj[color] = e.target.value;
+                                    setSsImportPreview({...ssImportPreview, priceAdjustments: newAdj});
+                                  }}
+                                  placeholder="0"
+                                  onClick={(e) => e.stopPropagation()}
+                                  style={{ width: '50px', padding: '2px 4px', fontSize: '11px', border: '1px solid #ccc', borderRadius: '3px', textAlign: 'center' }}
+                                />
+                              )}
+                            </td>
+                            <td style={{ padding: '4px 8px', textAlign: 'right', fontSize: '11px', color: '#888' }}>{data.totalQty.toLocaleString()}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  ● = in stock &nbsp; · = out of stock &nbsp; Click colors to select/deselect &nbsp; Use +$ column to set extra cost per color
+                </Text>
+              </BlockStack>
+            )}
           </BlockStack>
         </Modal.Section>
       </Modal>
