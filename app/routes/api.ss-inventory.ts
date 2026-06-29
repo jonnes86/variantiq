@@ -117,6 +117,16 @@ export async function loader({ request }: LoaderFunctionArgs) {
     
     // Sanitize and format data
     // The S&S API returns an array of variants for the style
+    // Log first item keys for debugging
+    if (data.length > 0) {
+      console.log("[S&S API] Sample item keys:", Object.keys(data[0]).join(', '));
+      console.log("[S&S API] Sample brand/style:", JSON.stringify({
+        brandName: data[0].brandName, styleName: data[0].styleName,
+        brand: data[0].brand, style: data[0].style,
+        styleNumber: data[0].styleNumber, title: data[0].title,
+        brandId: data[0].brandId, styleId: data[0].styleId,
+      }));
+    }
     let items = data
       // Filter out drop-ship only items
       .filter((item: any) => !item.dropShip)
