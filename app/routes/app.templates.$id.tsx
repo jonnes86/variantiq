@@ -821,7 +821,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
     return json({ success: true });
   }
 
-  // S&S Import: auto-create Brand + Color + Size fields as a bundled tree
+  // S&S Import: create a single field per S&S product (colors as options, sizes embedded)
   if (intent === "ssImportFields") {
     const colors: string[] = JSON.parse(String(form.get("colors") || "[]"));
     const sizes: string[] = JSON.parse(String(form.get("sizes") || "[]"));
@@ -829,7 +829,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
     const productName = String(form.get("productName") || "");
     const styleId = String(form.get("styleId") || "");
 
-    if (!productName || !styleId) return json({ error: "Product name and Style # required" }, { status: 400 });
+    if (!productName) return json({ error: "Product name required" }, { status: 400 });
+    if (colors.length === 0) return json({ error: "No colors selected" }, { status: 400 });
 
     const existingFields = await prisma.field.findMany({
       where: { templateId },
@@ -840,113 +841,50 @@ export async function action({ request, params }: ActionFunctionArgs) {
       ? Math.max(...existingFields.map(f => f.sort))
       : -1;
 
-    // 1. Find or create Brand/Style field
-    let brandField = existingFields.find(f =>
-      ['brand','style','product','item type','item'].includes((f.label || f.name || '').toLowerCase())
-    );
-
-    if (!brandField) {
-      brandField = await prisma.field.create({
-        data: {
-          templateId,
-          type: 'radio',
-          name: 'brand',
-          label: 'Brand',
-          optionsJson: [productName],
-          displayStyle: 'button_pills',
-          required: true,
-          sort: maxSort + 1,
-          ssStyleMappingJson: { [productName]: styleId },
-        },
-      });
-    } else {
-      // Merge: add the new product as an option if not already there
-      const existingOpts = (brandField.optionsJson as string[]) || [];
-      if (!existingOpts.includes(productName)) {
-        existingOpts.push(productName);
-      }
-      // Merge S&S style mapping
-      const existingMapping = (brandField.ssStyleMappingJson as Record<string, string>) || {};
-      existingMapping[productName] = styleId;
-      await prisma.field.update({
-        where: { id: brandField.id },
-        data: {
-          optionsJson: existingOpts,
-          ssStyleMappingJson: existingMapping,
-        },
-      });
-    }
-
-    // 2. Find or create Color field (merge colors)
-    let colorField = existingFields.find(f =>
-      (f.label || f.name || '').toLowerCase().includes('color')
-    );
-
-    // Build price adjustments
+    // Build price adjustments JSON
     const priceAdj: Record<string, number> = {};
     Object.entries(priceAdjustments).forEach(([color, amt]) => {
       const num = parseFloat(amt);
       if (!isNaN(num) && num !== 0) priceAdj[color] = num;
     });
 
-    if (colors.length > 0) {
-      if (!colorField) {
-        await prisma.field.create({
-          data: {
-            templateId,
-            type: 'radio',
-            name: 'color',
-            label: 'Color',
-            optionsJson: colors,
-            priceAdjustmentsJson: Object.keys(priceAdj).length > 0 ? priceAdj : undefined,
-            displayStyle: 'swatches',
-            required: true,
-            sort: maxSort + 2,
-          },
-        });
-      } else {
-        const existing = (colorField.optionsJson as string[]) || [];
-        const merged = [...existing];
-        colors.forEach(c => { if (!merged.includes(c)) merged.push(c); });
-        const existingPrices = (colorField.priceAdjustmentsJson as Record<string, number>) || {};
-        const mergedPrices = { ...existingPrices, ...priceAdj };
-        await prisma.field.update({
-          where: { id: colorField.id },
-          data: {
-            optionsJson: merged,
-            priceAdjustmentsJson: Object.keys(mergedPrices).length > 0 ? mergedPrices : undefined,
-          },
-        });
-      }
-    }
+    // Check if a field with this exact product name already exists
+    const existingProduct = existingFields.find(f =>
+      (f.label || '').toLowerCase() === productName.toLowerCase()
+    );
 
-    // 3. Find or create Size field (merge sizes)
-    if (sizes.length > 0) {
-      let sizeField = existingFields.find(f =>
-        (f.label || f.name || '').toLowerCase().includes('size')
-      );
-      if (!sizeField) {
-        await prisma.field.create({
-          data: {
-            templateId,
-            type: 'radio',
-            name: 'size',
-            label: 'Size',
-            optionsJson: sizes,
-            displayStyle: 'button_pills',
-            required: true,
-            sort: maxSort + 3,
-          },
-        });
-      } else {
-        const existing = (sizeField.optionsJson as string[]) || [];
-        const merged = [...existing];
-        sizes.forEach(s => { if (!merged.includes(s)) merged.push(s); });
-        await prisma.field.update({
-          where: { id: sizeField.id },
-          data: { optionsJson: merged },
-        });
-      }
+    if (existingProduct) {
+      // Update existing: merge new colors in
+      const existing = (existingProduct.optionsJson as string[]) || [];
+      const merged = [...existing];
+      colors.forEach(c => { if (!merged.includes(c)) merged.push(c); });
+      const existingPrices = (existingProduct.priceAdjustmentsJson as Record<string, number>) || {};
+      const mergedPrices = { ...existingPrices, ...priceAdj };
+      await prisma.field.update({
+        where: { id: existingProduct.id },
+        data: {
+          optionsJson: merged,
+          priceAdjustmentsJson: Object.keys(mergedPrices).length > 0 ? mergedPrices : undefined,
+          ssStyleMappingJson: { _styleId: styleId, _sizes: sizes },
+        },
+      });
+    } else {
+      // Create a single new field for this S&S product
+      await prisma.field.create({
+        data: {
+          templateId,
+          type: 'radio',
+          name: productName.toLowerCase().replace(/[^a-z0-9]+/g, '_').substring(0, 50),
+          label: productName,
+          optionsJson: colors,
+          priceAdjustmentsJson: Object.keys(priceAdj).length > 0 ? priceAdj : undefined,
+          displayStyle: 'swatches',
+          required: true,
+          sort: maxSort + 1,
+          // Store style ID + sizes in the mapping for inventory lookups
+          ssStyleMappingJson: { _styleId: styleId, _sizes: sizes },
+        },
+      });
     }
 
     return json({ success: true });
@@ -1090,21 +1028,27 @@ function StatefulLivePreview({ template, datasets, appearance }: { template: any
                    onChange={(checked) => handleFieldChange(f.id, checked ? (mappedOpts.length > 0 ? mappedOpts[0] : f.label) : "")} 
                  />
               ) : f.type === "radio" ? (
-                 <BlockStack gap="200">
+                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                    {mappedOpts.map(opt => (
-                     <div key={opt}>
-                       <input 
-                         type="radio" 
-                         id={`preview-${f.id}-${opt}`} 
-                         name={`preview-${f.id}`} 
-                         checked={value === opt} 
-                         onChange={() => handleFieldChange(f.id, opt)} 
-                         style={{ marginRight: '8px', cursor: 'pointer' }}
-                       />
-                       <label htmlFor={`preview-${f.id}-${opt}`} style={{ cursor: 'pointer' }}>{opt}</label>
-                     </div>
+                     <button
+                       key={opt}
+                       type="button"
+                       onClick={() => handleFieldChange(f.id, opt)}
+                       style={{
+                         padding: '8px 14px',
+                         border: value === opt ? '2px solid #121212' : '1px solid #ccc',
+                         borderRadius: '4px',
+                         background: value === opt ? '#121212' : '#fff',
+                         color: value === opt ? '#fff' : '#333',
+                         cursor: 'pointer',
+                         fontSize: '13px',
+                         fontWeight: value === opt ? 600 : 400,
+                         lineHeight: 1,
+                         transition: 'all 0.15s',
+                       }}
+                     >{opt}</button>
                    ))}
-                 </BlockStack>
+                 </div>
               ) : null}
             </BlockStack>
           );
