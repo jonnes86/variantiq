@@ -148,8 +148,14 @@ export async function loader({ request }: LoaderFunctionArgs) {
           color: item.colorName,
           size: item.sizeName,
           qty: totalQty,
+          styleName: item.styleName || '',
+          brandName: item.brandName || '',
         };
       });
+
+    // Extract style/brand name from first item for display
+    const styleName = items.length > 0 ? items[0].styleName : '';
+    const brandName = items.length > 0 ? items[0].brandName : '';
 
     // Add local inventory overrides
     if (localInventory) {
@@ -174,7 +180,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       items = items.filter((item: any) => allowed.has(item.color));
     }
 
-    return json({ items }, { headers: corsHeaders });
+    return json({ items, styleName, brandName }, { headers: corsHeaders });
 
   } catch (error: any) {
     console.error("[S&S Inventory API] Error:", error);

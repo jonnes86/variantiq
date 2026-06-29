@@ -553,10 +553,11 @@ export async function action({ request, params }: ActionFunctionArgs) {
       const created = await prisma.field.create({
         data: {
           templateId,
-          type: nf.type || "select",
+          type: nf.type || "radio",
           name: nf.name,
           label: nf.label || nf.name,
           optionsJson: safeOptionsJson,
+          displayStyle: nf.displayStyle || "button_pills",
           required: nf.required || false,
           sort: 999
         }
@@ -820,69 +821,110 @@ export async function action({ request, params }: ActionFunctionArgs) {
     return json({ success: true });
   }
 
-  // S&S Import: auto-create Color + Size fields
+  // S&S Import: auto-create Brand + Color + Size fields as a bundled tree
   if (intent === "ssImportFields") {
     const colors: string[] = JSON.parse(String(form.get("colors") || "[]"));
     const sizes: string[] = JSON.parse(String(form.get("sizes") || "[]"));
     const priceAdjustments: Record<string, string> = JSON.parse(String(form.get("priceAdjustments") || "{}"));
+    const productName = String(form.get("productName") || "");
+    const styleId = String(form.get("styleId") || "");
 
-    if (colors.length === 0) return json({ error: "No colors selected" }, { status: 400 });
+    if (!productName || !styleId) return json({ error: "Product name and Style # required" }, { status: 400 });
 
     const existingFields = await prisma.field.findMany({
       where: { templateId },
       orderBy: { sort: "asc" },
     });
 
-    const colorField = existingFields.find(f =>
-      (f.label || f.name || '').toLowerCase().includes('color')
-    );
-    const sizeField = existingFields.find(f =>
-      (f.label || f.name || '').toLowerCase().includes('size')
-    );
-
     const maxSort = existingFields.length > 0
       ? Math.max(...existingFields.map(f => f.sort))
       : -1;
 
-    // Build price adjustments JSON
+    // 1. Find or create Brand/Style field
+    let brandField = existingFields.find(f =>
+      ['brand','style','product','item type','item'].includes((f.label || f.name || '').toLowerCase())
+    );
+
+    if (!brandField) {
+      brandField = await prisma.field.create({
+        data: {
+          templateId,
+          type: 'radio',
+          name: 'brand',
+          label: 'Brand',
+          optionsJson: [productName],
+          displayStyle: 'button_pills',
+          required: true,
+          sort: maxSort + 1,
+          ssStyleMappingJson: { [productName]: styleId },
+        },
+      });
+    } else {
+      // Merge: add the new product as an option if not already there
+      const existingOpts = (brandField.optionsJson as string[]) || [];
+      if (!existingOpts.includes(productName)) {
+        existingOpts.push(productName);
+      }
+      // Merge S&S style mapping
+      const existingMapping = (brandField.ssStyleMappingJson as Record<string, string>) || {};
+      existingMapping[productName] = styleId;
+      await prisma.field.update({
+        where: { id: brandField.id },
+        data: {
+          optionsJson: existingOpts,
+          ssStyleMappingJson: existingMapping,
+        },
+      });
+    }
+
+    // 2. Find or create Color field (merge colors)
+    let colorField = existingFields.find(f =>
+      (f.label || f.name || '').toLowerCase().includes('color')
+    );
+
+    // Build price adjustments
     const priceAdj: Record<string, number> = {};
     Object.entries(priceAdjustments).forEach(([color, amt]) => {
       const num = parseFloat(amt);
       if (!isNaN(num) && num !== 0) priceAdj[color] = num;
     });
 
-    if (!colorField) {
-      await prisma.field.create({
-        data: {
-          templateId,
-          type: 'radio',
-          name: 'color',
-          label: 'Color',
-          optionsJson: colors,
-          priceAdjustmentsJson: Object.keys(priceAdj).length > 0 ? priceAdj : undefined,
-          displayStyle: 'swatches',
-          required: true,
-          sort: maxSort + 1,
-        },
-      });
-    } else {
-      // Merge new colors into existing
-      const existing = (colorField.optionsJson as string[]) || [];
-      const merged = [...existing];
-      colors.forEach(c => { if (!merged.includes(c)) merged.push(c); });
-      // Merge price adjustments
-      const existingPrices = (colorField.priceAdjustmentsJson as Record<string, number>) || {};
-      const mergedPrices = { ...existingPrices, ...priceAdj };
-      await prisma.field.update({
-        where: { id: colorField.id },
-        data: {
-          optionsJson: merged,
-          priceAdjustmentsJson: Object.keys(mergedPrices).length > 0 ? mergedPrices : undefined,
-        },
-      });
+    if (colors.length > 0) {
+      if (!colorField) {
+        await prisma.field.create({
+          data: {
+            templateId,
+            type: 'radio',
+            name: 'color',
+            label: 'Color',
+            optionsJson: colors,
+            priceAdjustmentsJson: Object.keys(priceAdj).length > 0 ? priceAdj : undefined,
+            displayStyle: 'swatches',
+            required: true,
+            sort: maxSort + 2,
+          },
+        });
+      } else {
+        const existing = (colorField.optionsJson as string[]) || [];
+        const merged = [...existing];
+        colors.forEach(c => { if (!merged.includes(c)) merged.push(c); });
+        const existingPrices = (colorField.priceAdjustmentsJson as Record<string, number>) || {};
+        const mergedPrices = { ...existingPrices, ...priceAdj };
+        await prisma.field.update({
+          where: { id: colorField.id },
+          data: {
+            optionsJson: merged,
+            priceAdjustmentsJson: Object.keys(mergedPrices).length > 0 ? mergedPrices : undefined,
+          },
+        });
+      }
     }
 
+    // 3. Find or create Size field (merge sizes)
     if (sizes.length > 0) {
+      let sizeField = existingFields.find(f =>
+        (f.label || f.name || '').toLowerCase().includes('size')
+      );
       if (!sizeField) {
         await prisma.field.create({
           data: {
@@ -893,7 +935,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
             optionsJson: sizes,
             displayStyle: 'button_pills',
             required: true,
-            sort: maxSort + 2,
+            sort: maxSort + 3,
           },
         });
       } else {
@@ -2296,7 +2338,7 @@ export default function TemplateDetail() {
         onClose={() => { setSsTemplateImportOpen(false); setSsImportPreview(null); setSsImportStyleId(""); }}
         title="🔗 Import Options from S&S Activewear"
         primaryAction={ssImportPreview ? {
-          content: `Import ${ssImportPreview.selectedColors.size} Colors + Sizes`,
+          content: `Import ${ssImportPreview.productName || 'S&S Product'}`,
           disabled: ssImportPreview.selectedColors.size === 0,
           onAction: () => {
             const selectedColors = Array.from(ssImportPreview.selectedColors as Set<string>).sort();
@@ -2326,18 +2368,20 @@ export default function TemplateDetail() {
               if (adj && parseFloat(adj) !== 0) priceAdj[c] = adj;
             });
             formData.append("priceAdjustments", JSON.stringify(priceAdj));
+            formData.append("productName", ssImportPreview.productName || `S&S Style ${ssImportStyleId}`);
+            formData.append("styleId", ssImportStyleId.trim());
             submit(formData, { method: "post" });
             setSsTemplateImportOpen(false);
             setSsImportPreview(null);
             setSsImportStyleId("");
-            shopify?.toast?.show(`Importing ${selectedColors.length} colors and ${sortedSizes.length} sizes`);
+            shopify?.toast?.show(`Importing ${ssImportPreview.productName} with ${selectedColors.length} colors`);
           },
         } : undefined}
         secondaryActions={[{ content: "Cancel", onAction: () => { setSsTemplateImportOpen(false); setSsImportPreview(null); setSsImportStyleId(""); } }]}
       >
         <Modal.Section>
           <BlockStack gap="400">
-            <Text as="p" tone="subdued">Enter a Style # to preview available colors and sizes. This will create (or update) Color and Size option sets automatically.</Text>
+            <Text as="p" tone="subdued">Enter a Style # to preview a product from S&S Activewear. This imports the product as a selectable brand option with its colors and sizes.</Text>
             <InlineStack gap="200" blockAlign="center">
               <div style={{ width: '160px' }}>
                 <TextField
@@ -2375,7 +2419,7 @@ export default function TemplateDetail() {
                       if (ai !== -1) return -1; if (bi !== -1) return 1;
                       return a.localeCompare(b);
                     });
-                    setSsImportPreview({ colorSizeMap, allSizes, selectedColors: new Set(Object.keys(colorSizeMap)), priceAdjustments: {} });
+                    setSsImportPreview({ colorSizeMap, allSizes, selectedColors: new Set(Object.keys(colorSizeMap)), priceAdjustments: {}, productName: `${data.brandName || ''} ${data.styleName || ''} - ${ssImportStyleId.trim()}`.trim() });
                   } catch (e) { alert(`Fetch failed: ${e}`); }
                   setSsImportLoading(false);
                 }}
@@ -2386,6 +2430,21 @@ export default function TemplateDetail() {
 
             {ssImportPreview && (
               <BlockStack gap="300">
+                <BlockStack gap="200">
+                  <Text as="p" variant="headingMd">📦 {ssImportPreview.productName}</Text>
+                  <InlineStack gap="200" blockAlign="center">
+                    <div style={{ flex: 1 }}>
+                      <TextField
+                        label="Product Label"
+                        labelHidden
+                        value={ssImportPreview.productName}
+                        onChange={(val) => setSsImportPreview({...ssImportPreview, productName: val})}
+                        autoComplete="off"
+                        helpText="This name will appear as a selectable option in the Brand field"
+                      />
+                    </div>
+                  </InlineStack>
+                </BlockStack>
                 <InlineStack align="space-between" blockAlign="center">
                   <Text as="span" variant="headingSm">
                     {Object.keys(ssImportPreview.colorSizeMap).length} colors · {ssImportPreview.allSizes.length} sizes
