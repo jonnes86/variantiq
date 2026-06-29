@@ -127,6 +127,7 @@ model ProductTemplateLink {
   customRulesJson  Json?
   ssStyleId        String?
   ssColorsJson     Json?
+  localInventoryJson Json?   // { "ColorName:SizeName": qty } for manual stock overrides
 
   @@index([shop])
   @@index([productGid])

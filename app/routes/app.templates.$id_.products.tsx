@@ -76,9 +76,11 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     const linkedProductIds = template.links.map((link: any) => link.productGid);
     const ssStyleIdMap: Record<string, string> = {};
     const ssColorsMap: Record<string, string[]> = {};
+    const localInventoryMap: Record<string, Record<string, number>> = {};
     template.links.forEach((link: any) => {
       if (link.ssStyleId) ssStyleIdMap[link.productGid] = link.ssStyleId;
       if (link.ssColorsJson) ssColorsMap[link.productGid] = link.ssColorsJson as string[];
+      if (link.localInventoryJson) localInventoryMap[link.productGid] = link.localInventoryJson as Record<string, number>;
     });
 
     // 2. Determine pagination direction based on query params
@@ -133,6 +135,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       linkedProductIds,
       ssStyleIdMap,
       ssColorsMap,
+      localInventoryMap,
       searchQuery: search || "",
       // Include pagination cursors for UI navigation
       nextPageCursor: pageInfo.hasNextPage ? pageInfo.endCursor : null,
@@ -148,6 +151,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       linkedProductIds: [],
       ssStyleIdMap: {},
       ssColorsMap: {},
+      localInventoryMap: {},
       searchQuery: "",
       nextPageCursor: null,
       previousPageCursor: null,
@@ -282,6 +286,23 @@ export async function action({ request, params }: ActionFunctionArgs) {
           }
         }
       }
+    } else if (intent === "saveLocalInventory") {
+      const inventoryStr = formData.get("localInventory") as string || "{}";
+      let localInventoryJson: Record<string, number> | null = null;
+      try {
+        const parsed = JSON.parse(inventoryStr);
+        // Filter out zero-qty entries
+        const filtered: Record<string, number> = {};
+        Object.entries(parsed).forEach(([key, val]) => {
+          const qty = parseInt(String(val), 10);
+          if (!isNaN(qty) && qty > 0) filtered[key] = qty;
+        });
+        localInventoryJson = Object.keys(filtered).length > 0 ? filtered : null;
+      } catch { localInventoryJson = null; }
+      await prisma.productTemplateLink.updateMany({
+        where: { shop, templateId, productGid },
+        data: { localInventoryJson: localInventoryJson ?? undefined },
+      });
     }
 
     // Returning null triggers a loader reload (refreshing the product list)
@@ -478,13 +499,155 @@ function ColorSelectionModal({
   );
 }
 
+// --- Local Stock Modal ---
+function LocalStockModal({
+  open,
+  onClose,
+  productGid,
+  ssColorsJson,
+  savedInventory,
+}: {
+  open: boolean;
+  onClose: () => void;
+  productGid: string;
+  ssColorsJson: string[] | null;
+  savedInventory: Record<string, number> | null;
+}) {
+  const [entries, setEntries] = useState<Array<{ color: string; size: string; qty: string }>>([
+    { color: "", size: "", qty: "" },
+  ]);
+  const submit = useSubmit();
+
+  useEffect(() => {
+    if (!open) return;
+    if (savedInventory && Object.keys(savedInventory).length > 0) {
+      const loaded = Object.entries(savedInventory).map(([key, qty]) => {
+        const [color, size] = key.split(':');
+        return { color: color || "", size: size || "", qty: String(qty) };
+      });
+      setEntries(loaded.length > 0 ? loaded : [{ color: "", size: "", qty: "" }]);
+    } else {
+      setEntries([{ color: "", size: "", qty: "" }]);
+    }
+  }, [open, savedInventory]);
+
+  const handleSave = () => {
+    const inventoryMap: Record<string, number> = {};
+    entries.forEach(e => {
+      if (e.color.trim() && e.size.trim() && parseInt(e.qty) > 0) {
+        inventoryMap[`${e.color.trim()}:${e.size.trim()}`] = parseInt(e.qty);
+      }
+    });
+    const formData = new FormData();
+    formData.append("_intent", "saveLocalInventory");
+    formData.append("productGid", productGid);
+    formData.append("localInventory", JSON.stringify(inventoryMap));
+    submit(formData, { method: "post" });
+    onClose();
+  };
+
+  const updateEntry = (index: number, field: string, val: string) => {
+    const newEntries = [...entries];
+    (newEntries[index] as any)[field] = val;
+    setEntries(newEntries);
+  };
+
+  // Build color suggestions from the linked S&S colors
+  const colorSuggestions = ssColorsJson || [];
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Manage Local Stock"
+      primaryAction={{ content: "Save", onAction: handleSave }}
+      secondaryActions={[{ content: "Cancel", onAction: onClose }]}
+    >
+      <Modal.Section>
+        <BlockStack gap="300">
+          <Banner tone="info">
+            <Text as="p">Add your own inventory for items you have in stock locally. This gets combined with S&S inventory — so even if S&S shows out-of-stock, your local stock keeps the option available.</Text>
+          </Banner>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 80px 60px', gap: '4px', alignItems: 'center', fontWeight: 600, fontSize: '13px', padding: '0 4px' }}>
+            <span>Color Name</span>
+            <span>Size</span>
+            <span>Qty</span>
+            <span></span>
+          </div>
+          {entries.map((entry, i) => (
+            <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 80px 60px', gap: '4px', alignItems: 'center' }}>
+              <input
+                type="text"
+                value={entry.color}
+                onChange={(e) => updateEntry(i, 'color', e.target.value)}
+                placeholder="e.g., White"
+                list="color-suggestions"
+                style={{
+                  padding: '6px 8px',
+                  fontSize: '13px',
+                  border: '1px solid #c9cccf',
+                  borderRadius: '4px',
+                }}
+              />
+              <input
+                type="text"
+                value={entry.size}
+                onChange={(e) => updateEntry(i, 'size', e.target.value)}
+                placeholder="e.g., L"
+                style={{
+                  padding: '6px 8px',
+                  fontSize: '13px',
+                  border: '1px solid #c9cccf',
+                  borderRadius: '4px',
+                }}
+              />
+              <input
+                type="number"
+                value={entry.qty}
+                onChange={(e) => updateEntry(i, 'qty', e.target.value)}
+                placeholder="0"
+                min="0"
+                style={{
+                  padding: '6px 8px',
+                  fontSize: '13px',
+                  border: '1px solid #c9cccf',
+                  borderRadius: '4px',
+                }}
+              />
+              <Button
+                tone="critical"
+                variant="plain"
+                onClick={() => setEntries(entries.filter((_, idx) => idx !== i))}
+                disabled={entries.length <= 1}
+              >
+                ×
+              </Button>
+            </div>
+          ))}
+          {colorSuggestions.length > 0 && (
+            <datalist id="color-suggestions">
+              {colorSuggestions.map(c => <option key={c} value={c} />)}
+            </datalist>
+          )}
+          <InlineStack>
+            <Button size="slim" onClick={() => setEntries([...entries, { color: "", size: "", qty: "" }])}>
+              Add Row
+            </Button>
+          </InlineStack>
+        </BlockStack>
+      </Modal.Section>
+    </Modal>
+  );
+}
+
 // --- Component ---
 export default function TemplateProductsPage() {
-  const { template, products, linkedProductIds, ssStyleIdMap, ssColorsMap, searchQuery, nextPageCursor, previousPageCursor, error } = useLoaderData<typeof loader>();
+  const { template, products, linkedProductIds, ssStyleIdMap, ssColorsMap, localInventoryMap, searchQuery, nextPageCursor, previousPageCursor, error } = useLoaderData<typeof loader>();
   const submit = useSubmit();
   const navigation = useNavigation();
   const [searchValue, setSearchValue] = useState(searchQuery);
   const [colorModalProduct, setColorModalProduct] = useState<{ gid: string; styleId: string } | null>(null);
+  const [localStockProduct, setLocalStockProduct] = useState<string | null>(null);
 
   const handleSearchChange = useCallback(
     (value: string) => {
@@ -645,6 +808,13 @@ export default function TemplateProductsPage() {
                                     Colors{savedColors ? ` (${savedColors.length})` : ""}
                                   </Button>
                                 )}
+                                <Button
+                                  size="slim"
+                                  variant="tertiary"
+                                  onClick={() => setLocalStockProduct(product.id)}
+                                >
+                                  📦 Local Stock{(localInventoryMap as any)[product.id] ? ` (${Object.keys((localInventoryMap as any)[product.id]).length})` : ""}
+                                </Button>
                               </InlineStack>
                             )}
                           </BlockStack>
@@ -690,6 +860,17 @@ export default function TemplateProductsPage() {
           productGid={colorModalProduct.gid}
           ssStyleId={colorModalProduct.styleId}
           savedColors={(ssColorsMap as any)[colorModalProduct.gid] || null}
+        />
+      )}
+
+      {/* Local Stock Modal */}
+      {localStockProduct && (
+        <LocalStockModal
+          open={!!localStockProduct}
+          onClose={() => setLocalStockProduct(null)}
+          productGid={localStockProduct}
+          ssColorsJson={(ssColorsMap as any)[localStockProduct] || null}
+          savedInventory={(localInventoryMap as any)[localStockProduct] || null}
         />
       )}
     </Page>
