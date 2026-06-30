@@ -2331,7 +2331,7 @@ export default function TemplateDetail() {
       >
         <Modal.Section>
           <BlockStack gap="400">
-            <Text as="p" tone="subdued">Enter a Style # to preview a product from S&S Activewear. This imports the product as a selectable brand option with its colors and sizes.</Text>
+            <Text as="p" tone="subdued">Enter the Style # from S&S (found in the product URL, e.g. <strong>1717</strong> from ssactivewear.com/p/comfort_colors/<strong>1717</strong>). You can also try the S&S item number (e.g. 00606).</Text>
             <InlineStack gap="200" blockAlign="center">
               <div style={{ width: '160px' }}>
                 <TextField
@@ -2339,7 +2339,7 @@ export default function TemplateDetail() {
                   labelHidden
                   value={ssImportStyleId}
                   onChange={(val) => { setSsImportStyleId(val); setSsImportPreview(null); }}
-                  placeholder="e.g., 00606"
+                  placeholder="e.g., 1717 or 3001"
                   autoComplete="off"
                 />
               </div>
@@ -2390,7 +2390,7 @@ export default function TemplateDetail() {
                         value={ssImportPreview.productName}
                         onChange={(val) => setSsImportPreview({...ssImportPreview, productName: val})}
                         autoComplete="off"
-                        helpText="This name will appear as a selectable option in the Brand field"
+                        helpText="Edit this name — it will be the option set label on your storefront"
                       />
                     </div>
                   </InlineStack>
