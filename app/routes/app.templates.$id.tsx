@@ -600,8 +600,14 @@ export async function action({ request, params }: ActionFunctionArgs) {
       return mappedRule;
     });
 
+    // Filter out ghost rules (empty conditions = canvas position markers, not real rules)
+    const validRulesToCreate = rulesToCreate.filter(r => {
+      const conds = r.conditionsJson;
+      return Array.isArray(conds) && conds.length > 0;
+    });
+
     await prisma.rule.createMany({
-      data: rulesToCreate,
+      data: validRulesToCreate,
     });
 
     // Apply tree-depth sort order to fields so the storefront renders them

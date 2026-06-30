@@ -521,10 +521,16 @@ class VariantIQFields {
       let shouldShow = true; // By default, everything is shown
       let limitOptionsSet = null;
 
-      const showRules = fieldRules.filter(r => r.actionType === 'SHOW');
-      const hideRules = fieldRules.filter(r => r.actionType === 'HIDE');
-      const limitRules = fieldRules.filter(r => r.actionType === 'LIMIT_OPTIONS');
-      const setPriceRules = fieldRules.filter(r => r.actionType === 'SET_PRICE');
+      // Filter out rules with empty conditions — these are canvas position markers, not real rules
+      const validRules = fieldRules.filter(r => {
+        const conds = r.conditionsJson || [];
+        return Array.isArray(conds) && conds.length > 0;
+      });
+
+      const showRules = validRules.filter(r => r.actionType === 'SHOW');
+      const hideRules = validRules.filter(r => r.actionType === 'HIDE');
+      const limitRules = validRules.filter(r => r.actionType === 'LIMIT_OPTIONS');
+      const setPriceRules = validRules.filter(r => r.actionType === 'SET_PRICE');
 
       const evaluateRuleConditions = (rule) => {
         const conditions = rule.conditionsJson || [];
