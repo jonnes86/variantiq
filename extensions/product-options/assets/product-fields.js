@@ -153,6 +153,7 @@ class VariantIQFields {
     html += '</div>';
 
     fieldsContainer.innerHTML = html;
+    fieldsContainer.style.display = 'block';
     this.evaluateRules();
     this.applySSInventoryRules();
     this.updateProgressBar();
@@ -599,6 +600,7 @@ class VariantIQFields {
       // Apply visibility outcome
       if (shouldShow) {
         fieldElement.style.display = 'block';
+        console.log(`[VariantIQ] evaluateRules: "${field.label}" → SHOW (showRules=${showRules.length}, hideRules=${hideRules.length}, waterfall=${missingRequiredEncountered})`);
 
         // Apply Limit Options to DOM choices
         if (limitOptionsSet !== null) {
@@ -612,6 +614,7 @@ class VariantIQFields {
 
       } else {
         fieldElement.style.display = 'none';
+        console.log(`[VariantIQ] evaluateRules: "${field.label}" → HIDE (showRules=${showRules.length}, hideRules=${hideRules.length}, waterfall=${missingRequiredEncountered})`);
         this.clearFieldValue(field, fieldElement);
       }
 
