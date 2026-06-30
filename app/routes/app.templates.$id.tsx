@@ -2331,7 +2331,7 @@ export default function TemplateDetail() {
       >
         <Modal.Section>
           <BlockStack gap="400">
-            <Text as="p" tone="subdued">Enter the Style # from S&S (found in the product URL, e.g. <strong>1717</strong> from ssactivewear.com/p/comfort_colors/<strong>1717</strong>). You can also try the S&S item number (e.g. 00606).</Text>
+            <Text as="p" tone="subdued">Enter the S&S catalog item number to preview available colors and sizes.</Text>
             <InlineStack gap="200" blockAlign="center">
               <div style={{ width: '160px' }}>
                 <TextField
@@ -2339,7 +2339,7 @@ export default function TemplateDetail() {
                   labelHidden
                   value={ssImportStyleId}
                   onChange={(val) => { setSsImportStyleId(val); setSsImportPreview(null); }}
-                  placeholder="e.g., 1717 or 3001"
+                  placeholder="e.g., 00606, 00708"
                   autoComplete="off"
                 />
               </div>

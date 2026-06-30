@@ -85,7 +85,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     }
 
     // Fetch from S&S Activewear
-    const ssUrl = `https://api.ssactivewear.com/v2/products/?style=${encodeURIComponent(ssStyleId)}`;
+    const ssUrl = `https://api.ssactivewear.com/v2/products/?partnumber=${encodeURIComponent(ssStyleId)}`;
     const auth = Buffer.from(`${ssApiUsername}:${ssApiKey}`).toString('base64');
 
     const response = await fetch(ssUrl, {
