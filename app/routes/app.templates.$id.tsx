@@ -884,7 +884,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
           label: productName,
           optionsJson: colors,
           priceAdjustmentsJson: Object.keys(priceAdj).length > 0 ? priceAdj : undefined,
-          displayStyle: 'button_pills',
+          displayStyle: 'default',
           required: true,
           sort: maxSort + 1,
           // Store style ID + sizes in the mapping for inventory lookups
