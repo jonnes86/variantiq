@@ -854,6 +854,10 @@ export async function action({ request, params }: ActionFunctionArgs) {
       if (!isNaN(num) && num !== 0) priceAdj[color] = num;
     });
 
+    // Parse color swatch image URLs from S&S
+    const colorSwatches: Record<string, string> = JSON.parse(String(form.get("colorSwatches") || "{}"));
+    const hasSwatches = Object.keys(colorSwatches).length > 0;
+
     // Check if a field with this exact product name already exists
     const existingProduct = existingFields.find(f =>
       (f.label || '').toLowerCase() === productName.toLowerCase()
@@ -866,12 +870,16 @@ export async function action({ request, params }: ActionFunctionArgs) {
       colors.forEach(c => { if (!merged.includes(c)) merged.push(c); });
       const existingPrices = (existingProduct.priceAdjustmentsJson as Record<string, number>) || {};
       const mergedPrices = { ...existingPrices, ...priceAdj };
+      const existingSwatches = (existingProduct.swatchesJson as Record<string, string>) || {};
+      const mergedSwatches = { ...existingSwatches, ...colorSwatches };
       await prisma.field.update({
         where: { id: existingProduct.id },
         data: {
           optionsJson: merged,
           priceAdjustmentsJson: Object.keys(mergedPrices).length > 0 ? mergedPrices : undefined,
           ssStyleMappingJson: { _styleId: styleId, _sizes: sizes },
+          swatchesJson: Object.keys(mergedSwatches).length > 0 ? mergedSwatches : undefined,
+          displayStyle: hasSwatches ? 'swatches' : existingProduct.displayStyle,
         },
       });
     } else {
@@ -884,7 +892,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
           label: productName,
           optionsJson: colors,
           priceAdjustmentsJson: Object.keys(priceAdj).length > 0 ? priceAdj : undefined,
-          displayStyle: 'default',
+          displayStyle: hasSwatches ? 'swatches' : 'default',
+          swatchesJson: hasSwatches ? colorSwatches : undefined,
           required: true,
           sort: maxSort + 1,
           // Store style ID + sizes in the mapping for inventory lookups
@@ -2320,6 +2329,12 @@ export default function TemplateDetail() {
             formData.append("priceAdjustments", JSON.stringify(priceAdj));
             formData.append("productName", ssImportPreview.productName || `S&S Style ${ssImportStyleId}`);
             formData.append("styleId", ssImportStyleId.trim());
+            // Include swatch image URLs from S&S
+            const swatchMap: Record<string, string> = {};
+            selectedColors.forEach((c: string) => {
+              if (ssImportPreview.colorSwatches?.[c]) swatchMap[c] = ssImportPreview.colorSwatches[c];
+            });
+            formData.append("colorSwatches", JSON.stringify(swatchMap));
             submit(formData, { method: "post" });
             setSsTemplateImportOpen(false);
             setSsImportPreview(null);
@@ -2356,11 +2371,16 @@ export default function TemplateDetail() {
                     if (data.error) { alert(`S&S Error: ${data.error}`); setSsImportLoading(false); return; }
                     const items = data.items || [];
                     const colorSizeMap: Record<string, { sizes: Record<string, number>, totalQty: number }> = {};
+                    const colorSwatches: Record<string, string> = {};
                     items.forEach((item: any) => {
                       if (!item.color || !item.size) return;
                       if (!colorSizeMap[item.color]) colorSizeMap[item.color] = { sizes: {}, totalQty: 0 };
                       colorSizeMap[item.color].sizes[item.size] = (colorSizeMap[item.color].sizes[item.size] || 0) + item.qty;
                       colorSizeMap[item.color].totalQty += item.qty;
+                      // Capture swatch image URL (same for all sizes of a color)
+                      if (item.colorSwatchImage && !colorSwatches[item.color]) {
+                        colorSwatches[item.color] = item.colorSwatchImage;
+                      }
                     });
                     const sizeOrder = ['YXS','YS','YM','YL','YXL','XS','S','M','L','XL','2XL','3XL','4XL','5XL','6XL'];
                     const allSizes = [...new Set(items.map((i: any) => i.size).filter(Boolean))].sort((a: string, b: string) => {
@@ -2369,7 +2389,7 @@ export default function TemplateDetail() {
                       if (ai !== -1) return -1; if (bi !== -1) return 1;
                       return a.localeCompare(b);
                     });
-                    setSsImportPreview({ colorSizeMap, allSizes, selectedColors: new Set(Object.keys(colorSizeMap)), priceAdjustments: {}, productName: `${data.brandName || ''} ${data.styleName || ''} - ${ssImportStyleId.trim()}`.trim() });
+                    setSsImportPreview({ colorSizeMap, allSizes, selectedColors: new Set(Object.keys(colorSizeMap)), priceAdjustments: {}, productName: `${data.brandName || ''} ${data.styleName || ''} - ${ssImportStyleId.trim()}`.trim(), colorSwatches });
                   } catch (e) { alert(`Fetch failed: ${e}`); }
                   setSsImportLoading(false);
                 }}
@@ -2430,7 +2450,7 @@ export default function TemplateDetail() {
                               }}
                               style={{ padding: '4px 8px', fontWeight: 500, cursor: 'pointer', position: 'sticky', left: 0, background: sel ? '#fff' : '#fafafa', userSelect: 'none' }}
                             >
-                              {sel ? '☑' : '☐'} {color}
+                              {sel ? '☑' : '☐'} {ssImportPreview.colorSwatches?.[color] && <img src={ssImportPreview.colorSwatches[color]} alt="" style={{ width: 16, height: 16, borderRadius: 3, verticalAlign: 'middle', marginRight: 4, border: '1px solid #ddd' }} />}{color}
                             </td>
                             {ssImportPreview.allSizes.map((size: string) => {
                               const qty = data.sizes[size] || 0;

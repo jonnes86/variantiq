@@ -160,6 +160,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
           qty: totalQty,
           styleName: item.styleName || '',
           brandName: item.brandName || '',
+          colorSwatchImage: item.colorSwatchImage || null,
+          colorSwatchTextColor: item.colorSwatchTextColor || null,
         };
       });
 

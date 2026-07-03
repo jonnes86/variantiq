@@ -189,7 +189,11 @@ class VariantIQFields {
         <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px;">
     `;
     fieldOptions.forEach(option => {
-      const bg = field.swatchesJson && field.swatchesJson[option] ? field.swatchesJson[option] : this.getSwatchBg(option) || '#dddddd';
+      const swatchVal = field.swatchesJson && field.swatchesJson[option] ? field.swatchesJson[option] : this.getSwatchBg(option) || '#dddddd';
+      const isImageUrl = swatchVal.startsWith('http');
+      const bgStyle = isImageUrl
+        ? `background:url('${swatchVal}') center/cover no-repeat;`
+        : `background:${swatchVal};`;
       const optionPrice = field.priceAdjustmentsJson && field.priceAdjustmentsJson[option]
           ? ` <span class="variantiq-price-label">(+$${parseFloat(field.priceAdjustmentsJson[option]).toFixed(2)})</span>`
           : ``;
@@ -198,8 +202,9 @@ class VariantIQFields {
           class="variantiq-swatch-btn"
           data-field-id="${field.id}"
           data-value="${option}"
+          data-swatch="true"
           title="${option}"
-          style="display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;cursor:pointer;border:2px solid #e5e7eb;background:${bg};outline:none;transition:transform 0.1s,box-shadow 0.1s,border-color 0.15s;flex-shrink:0;"
+          style="display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;cursor:pointer;border:2px solid #e5e7eb;${bgStyle}outline:none;transition:transform 0.1s,box-shadow 0.1s,border-color 0.15s;flex-shrink:0;"
           aria-label="${option}"
         ></button>
       `;
