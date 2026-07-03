@@ -2209,27 +2209,36 @@ export default function TemplateDetail() {
                   <BlockStack gap="400">
                     <Text as="h3" variant="headingSm">Swatch Colors</Text>
                     <Text as="p" variant="bodyMd" tone="subdued">
-                      Pick a color for each of your options. These colors will render as clickable circle swatches.
+                      {fieldOptionsList.some(o => o.swatchColor?.startsWith('http'))
+                        ? 'Swatch images were imported from S&S. You can override any with a custom hex color.'
+                        : 'Pick a color for each option. These render as clickable circle swatches.'}
                     </Text>
                     {fieldOptionsList.length === 0 ? (
                       <Banner tone="info">Add options in the "Options & Values" tab first.</Banner>
                     ) : (
                       <BlockStack gap="300">
-                        {fieldOptionsList.map((opt, index) => (
-                          <InlineGrid columns="1fr auto" gap="400" alignItems="center" key={index}>
-                            <Text as="span">{opt.label || `Option ${index + 1}`}</Text>
-                            <input
-                              type="color"
-                              value={opt.swatchColor}
-                              onChange={(e) => {
-                                const newList = [...fieldOptionsList];
-                                newList[index].swatchColor = e.target.value;
-                                setFieldOptionsList(newList);
-                              }}
-                              style={{ width: "40px", height: "40px", padding: 0, cursor: "pointer", border: "1px solid #c9cccf", borderRadius: "4px" }}
-                            />
-                          </InlineGrid>
-                        ))}
+                        {fieldOptionsList.map((opt, index) => {
+                          const isImageSwatch = opt.swatchColor?.startsWith('http');
+                          return (
+                            <InlineGrid columns="1fr auto auto" gap="400" alignItems="center" key={index}>
+                              <Text as="span">{opt.label || `Option ${index + 1}`}</Text>
+                              {isImageSwatch && (
+                                <div style={{ width: 40, height: 40, borderRadius: '50%', border: '2px solid #e5e7eb', backgroundImage: `url(${opt.swatchColor})`, backgroundSize: 'cover', backgroundPosition: 'center' }} title={`S&S swatch: ${opt.swatchColor}`} />
+                              )}
+                              <input
+                                type="color"
+                                value={isImageSwatch ? '#dddddd' : (opt.swatchColor || '#000000')}
+                                onChange={(e) => {
+                                  const newList = [...fieldOptionsList];
+                                  newList[index].swatchColor = e.target.value;
+                                  setFieldOptionsList(newList);
+                                }}
+                                style={{ width: "40px", height: "40px", padding: 0, cursor: "pointer", border: "1px solid #c9cccf", borderRadius: "4px" }}
+                                title={isImageSwatch ? "Override with custom color" : "Pick swatch color"}
+                              />
+                            </InlineGrid>
+                          );
+                        })}
                       </BlockStack>
                     )}
                   </BlockStack>
