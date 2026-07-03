@@ -160,7 +160,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
           qty: totalQty,
           styleName: item.styleName || '',
           brandName: item.brandName || '',
-          colorSwatchImage: item.colorSwatchImage || null,
+          colorSwatchImage: item.colorSwatchImage
+            ? (item.colorSwatchImage.startsWith('http') ? item.colorSwatchImage : `https://www.ssactivewear.com/${item.colorSwatchImage}`)
+            : null,
           colorSwatchTextColor: item.colorSwatchTextColor || null,
         };
       });
