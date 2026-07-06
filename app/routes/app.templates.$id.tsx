@@ -356,6 +356,13 @@ export async function action({ request, params }: ActionFunctionArgs) {
           if (hasSwatches) swatchesJson = swatchMap;
           if (hasSsStyles) ssStyleMappingJson = ssStyleMap;
           if (hasSsColorAliases) ssColorAliasJson = ssColorAliasMap;
+
+          // Persist swatch label preference
+          const showSwatchLabels = form.get("showSwatchLabels") === "true";
+          if (showSwatchLabels) {
+            if (!swatchesJson) swatchesJson = {};
+            swatchesJson._showLabels = true;
+          }
         }
       } catch (e) {
         console.error("Failed to parse optionsData", e);
@@ -1137,6 +1144,7 @@ export default function TemplateDetail() {
   const [fieldLabel, setFieldLabel] = useState("");
   const [fieldRequired, setFieldRequired] = useState(false);
   const [fieldDisplayStyle, setFieldDisplayStyle] = useState("default");
+  const [fieldShowSwatchLabels, setFieldShowSwatchLabels] = useState(false);
   const [fieldOptionsList, setFieldOptionsList] = useState<Array<{ label: string, price: string, variantMapping: string, swatchColor: string, ssStyleId: string, ssColorAlias: string }>>([]);
   const [fieldModalTab, setFieldModalTab] = useState(0);
   const [ssImportStyleId, setSsImportStyleId] = useState("");
@@ -1267,6 +1275,7 @@ export default function TemplateDetail() {
     setFieldLabel("");
     setFieldRequired(false);
     setFieldDisplayStyle("default");
+    setFieldShowSwatchLabels(false);
     setFieldOptionsList([]);
     setFieldModalTab(0);
     setSsImportStyleId("");
@@ -1286,6 +1295,7 @@ export default function TemplateDetail() {
     setFieldLabel(field.label);
     setFieldRequired(field.required);
     setFieldDisplayStyle(field.displayStyle || "default");
+    setFieldShowSwatchLabels(field.swatchesJson?._showLabels === true);
 
     // Map existing JSON options and pricing back to UI state
     const initialOptions = field.optionsJson
@@ -1316,6 +1326,7 @@ export default function TemplateDetail() {
         fieldRequired: String(fieldRequired),
         fieldDisplayStyle,
         optionsData: JSON.stringify(fieldOptionsList.filter(o => o.label.trim() !== "")),
+        showSwatchLabels: String(fieldShowSwatchLabels),
       },
       { method: "post" },
     );
@@ -2207,6 +2218,12 @@ export default function TemplateDetail() {
 
                 {fieldDisplayStyle === "swatches" && (
                   <BlockStack gap="400">
+                    <Checkbox
+                      label="Show color names below swatches"
+                      checked={fieldShowSwatchLabels}
+                      onChange={(val) => setFieldShowSwatchLabels(val)}
+                      helpText="Display the option name as a small label underneath each swatch circle."
+                    />
                     <Text as="h3" variant="headingSm">Swatch Colors</Text>
                     <Text as="p" variant="bodyMd" tone="subdued">
                       {fieldOptionsList.some(o => o.swatchColor?.startsWith('http'))

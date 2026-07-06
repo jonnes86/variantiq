@@ -188,6 +188,7 @@ class VariantIQFields {
         <legend class="form__label" style="width: 100%; margin-bottom: 0.8rem; text-align: left; display: block;">${field.label}${requiredMark}</legend>
         <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px;">
     `;
+    const showLabels = field.swatchesJson && field.swatchesJson._showLabels === true;
     fieldOptions.forEach(option => {
       const swatchVal = field.swatchesJson && field.swatchesJson[option] ? field.swatchesJson[option] : this.getSwatchBg(option) || '#dddddd';
       const isImageUrl = swatchVal.startsWith('http');
@@ -197,16 +198,22 @@ class VariantIQFields {
       const optionPrice = field.priceAdjustmentsJson && field.priceAdjustmentsJson[option]
           ? ` <span class="variantiq-price-label">(+$${parseFloat(field.priceAdjustmentsJson[option]).toFixed(2)})</span>`
           : ``;
+      const labelHtml = showLabels
+        ? `<span style="display:block;font-size:10px;line-height:1.2;margin-top:3px;text-align:center;max-width:48px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--color-base-text,#555);">${option}</span>`
+        : '';
       html += `
-        <button type="button"
-          class="variantiq-swatch-btn"
-          data-field-id="${field.id}"
-          data-value="${option}"
-          data-swatch="true"
-          title="${option}"
-          style="display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;cursor:pointer;border:2px solid #e5e7eb;${bgStyle}outline:none;transition:transform 0.1s,box-shadow 0.1s,border-color 0.15s;flex-shrink:0;"
-          aria-label="${option}"
-        ></button>
+        <div style="display:inline-flex;flex-direction:column;align-items:center;${showLabels ? 'width:52px;' : ''}">
+          <button type="button"
+            class="variantiq-swatch-btn"
+            data-field-id="${field.id}"
+            data-value="${option}"
+            data-swatch="true"
+            title="${option}"
+            style="display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;cursor:pointer;border:2px solid #e5e7eb;${bgStyle}outline:none;transition:transform 0.1s,box-shadow 0.1s,border-color 0.15s;flex-shrink:0;"
+            aria-label="${option}"
+          ></button>
+          ${labelHtml}
+        </div>
       `;
     });
     html += `
