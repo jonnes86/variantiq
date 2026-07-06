@@ -199,10 +199,10 @@ class VariantIQFields {
           ? ` <span class="variantiq-price-label">(+$${parseFloat(field.priceAdjustmentsJson[option]).toFixed(2)})</span>`
           : ``;
       const labelHtml = showLabels
-        ? `<span style="display:block;font-size:10px;line-height:1.2;margin-top:3px;text-align:center;max-width:48px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--color-base-text,#555);">${option}</span>`
+        ? `<span style="display:block;font-size:10px;line-height:1.2;margin-top:3px;text-align:center;max-width:60px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word;color:var(--color-base-text,#555);">${option}</span>`
         : '';
       html += `
-        <div style="display:inline-flex;flex-direction:column;align-items:center;${showLabels ? 'width:52px;' : ''}">
+        <div style="display:inline-flex;flex-direction:column;align-items:center;${showLabels ? 'width:64px;' : ''}">
           <button type="button"
             class="variantiq-swatch-btn"
             data-field-id="${field.id}"
