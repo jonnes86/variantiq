@@ -2482,7 +2482,10 @@ export default function TemplateDetail() {
                       if (ai !== -1) return -1; if (bi !== -1) return 1;
                       return a.localeCompare(b);
                     });
-                    setSsImportPreview({ colorSizeMap, allSizes, selectedColors: new Set(Object.keys(colorSizeMap)), priceAdjustments: {}, productName: `${data.brandName || ''} ${data.styleName || ''} - ${ssImportStyleId.trim()}`.trim(), colorSwatches });
+                    // Use the full title from S&S if available (e.g. "Youth Garment-Dyed Heavyweight T-Shirt")
+                    const fullTitle = data.styleTitle || data.styleName || '';
+                    const displayName = `${data.brandName || ''} ${fullTitle} - ${ssImportStyleId.trim()}`.trim();
+                    setSsImportPreview({ colorSizeMap, allSizes, selectedColors: new Set(Object.keys(colorSizeMap)), priceAdjustments: {}, productName: displayName, colorSwatches });
                   } catch (e) { alert(`Fetch failed: ${e}`); }
                   setSsImportLoading(false);
                 }}
