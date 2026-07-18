@@ -909,6 +909,63 @@ export async function action({ request, params }: ActionFunctionArgs) {
       });
     }
 
+    // Auto-create or update a Size field with sizes from this S&S import
+    if (sizes.length > 0) {
+      const sizeOrder = ['XS','S','M','L','XL','2XL','3XL','4XL','5XL','6XL','YXS','YS','YM','YL','YXL'];
+      const sortSize = (a: string, b: string) => {
+        const ai = sizeOrder.indexOf(a); const bi = sizeOrder.indexOf(b);
+        if (ai !== -1 && bi !== -1) return ai - bi;
+        if (ai !== -1) return -1; if (bi !== -1) return 1;
+        return a.localeCompare(b);
+      };
+
+      // Re-fetch fields to get the updated max sort (color field may have been created)
+      const updatedFields = await prisma.field.findMany({
+        where: { templateId },
+        orderBy: { sort: "asc" },
+      });
+      const updatedMaxSort = updatedFields.length > 0
+        ? Math.max(...updatedFields.map(f => f.sort))
+        : 0;
+
+      // Find existing Size field (by label or _autoSize marker)
+      const existingSizeField = updatedFields.find(f =>
+        (f.ssStyleMappingJson as any)?._autoSize === true ||
+        (f.label || '').toLowerCase() === 'size'
+      );
+
+      if (existingSizeField) {
+        // Merge new sizes into existing
+        const existingOptions = (existingSizeField.optionsJson as string[]) || [];
+        const merged = [...existingOptions];
+        sizes.forEach((s: string) => { if (!merged.includes(s)) merged.push(s); });
+        merged.sort(sortSize);
+        await prisma.field.update({
+          where: { id: existingSizeField.id },
+          data: {
+            optionsJson: merged,
+            ssStyleMappingJson: { _autoSize: true },
+          },
+        });
+      } else {
+        // Create new Size field
+        const sortedSizes = [...sizes].sort(sortSize);
+        await prisma.field.create({
+          data: {
+            templateId,
+            type: 'radio',
+            name: 'size',
+            label: 'Size',
+            optionsJson: sortedSizes,
+            displayStyle: 'default',
+            required: true,
+            sort: updatedMaxSort + 1,
+            ssStyleMappingJson: { _autoSize: true },
+          },
+        });
+      }
+    }
+
     return json({ success: true });
   }
 

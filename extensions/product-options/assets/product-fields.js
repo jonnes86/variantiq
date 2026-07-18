@@ -103,6 +103,37 @@ class VariantIQFields {
     return this.templateData.template.fields.filter(f => f.ssStyleMappingJson && Object.keys(f.ssStyleMappingJson).length > 0);
   }
 
+  // Get the _styleId for an S&S field when any option is selected
+  // Handles both formats: { _styleId: "00708" } (import) and { "OptionA": "00708" } (manual)
+  getSSStyleIdForSelection(field, selectedValue) {
+    if (!field.ssStyleMappingJson) return null;
+    // Import format: _styleId applies to ALL options on this field
+    if (field.ssStyleMappingJson._styleId) return field.ssStyleMappingJson._styleId;
+    // Manual format: each option maps to a different style
+    if (field.ssStyleMappingJson[selectedValue]) return field.ssStyleMappingJson[selectedValue];
+    return null;
+  }
+
+  // Find the auto-managed Size field
+  findAutoSizeField() {
+    if (!this.templateData || !this.templateData.template) return null;
+    return this.templateData.template.fields.find(f =>
+      f.ssStyleMappingJson && f.ssStyleMappingJson._autoSize === true
+    );
+  }
+
+  // Find whichever S&S color field currently has a selection
+  getActiveSSColorField() {
+    if (!this.templateData || !this.templateData.template) return null;
+    const fields = this.templateData.template.fields;
+    // Look for visible S&S color fields that have a value selected
+    return fields.find(f =>
+      f.ssStyleMappingJson && f.ssStyleMappingJson._styleId &&
+      !f.ssStyleMappingJson._autoSize &&
+      this.fieldValues[f.id]
+    );
+  }
+
   async trackAnalytics(event) {
     if (!this.templateData || !this.templateData.template) return;
     try {
@@ -423,10 +454,10 @@ class VariantIQFields {
       this.evaluateRules();
 
       // Check if this field has S&S style mapping — if so, fetch inventory for the selected style
-      const swatchTriggerFields = this.findSSTriggerFields();
-      const swatchTriggerField = swatchTriggerFields.find(f => f.id === fieldId);
-      if (swatchTriggerField && swatchTriggerField.ssStyleMappingJson[value]) {
-        this.fetchSSInventoryForStyle(swatchTriggerField.ssStyleMappingJson[value]);
+      const swatchField = this.templateData.template.fields.find(f => f.id === fieldId);
+      const swatchStyleId = swatchField ? this.getSSStyleIdForSelection(swatchField, value) : null;
+      if (swatchStyleId) {
+        this.fetchSSInventoryForStyle(swatchStyleId);
       }
       this.applySSInventoryRules();
       this.updateProgressBar();
@@ -457,10 +488,10 @@ class VariantIQFields {
       this.evaluateRules();
 
       // Check if this field has S&S style mapping — if so, fetch inventory for the selected style
-      const pillTriggerFields = this.findSSTriggerFields();
-      const pillTriggerField = pillTriggerFields.find(f => f.id === fieldId);
-      if (pillTriggerField && pillTriggerField.ssStyleMappingJson[value]) {
-        this.fetchSSInventoryForStyle(pillTriggerField.ssStyleMappingJson[value]);
+      const pillField = this.templateData.template.fields.find(f => f.id === fieldId);
+      const pillStyleId = pillField ? this.getSSStyleIdForSelection(pillField, value) : null;
+      if (pillStyleId) {
+        this.fetchSSInventoryForStyle(pillStyleId);
       }
       this.applySSInventoryRules();
       this.updateProgressBar();
@@ -495,10 +526,10 @@ class VariantIQFields {
     this.evaluateRules();
 
     // Check if this field has S&S style mapping — if so, fetch inventory for the selected style
-    const triggerFields = this.findSSTriggerFields();
-    const triggerField = triggerFields.find(f => f.id === fieldId);
-    if (triggerField && triggerField.ssStyleMappingJson[value]) {
-      this.fetchSSInventoryForStyle(triggerField.ssStyleMappingJson[value]);
+    const changedField = this.templateData.template.fields.find(f => f.id === fieldId);
+    const changedStyleId = changedField ? this.getSSStyleIdForSelection(changedField, value) : null;
+    if (changedStyleId) {
+      this.fetchSSInventoryForStyle(changedStyleId);
     }
     this.applySSInventoryRules();
     this.updateProgressBar();
@@ -1285,34 +1316,129 @@ class VariantIQFields {
       });
     }
 
-    // Apply to size buttons
-    const sizeEl = this.container.querySelector(`[data-field-id="${sizeField.id}"]`);
-    if (sizeEl) {
-      const buttons = sizeEl.querySelectorAll('button[data-value], input[type="radio"]');
-      buttons.forEach(btn => {
-        const sizeName = btn.dataset?.value || btn.value;
-        if (!sizeName) return;
-
-        const resolvedSize = resolveSizeName(sizeName);
-        let inStock = true;
-
-        if (resolvedSize) {
-          if (resolvedSelectedColor) {
-            const stock = this.ssInventory.find(item => item.size === resolvedSize && item.color === resolvedSelectedColor);
-            inStock = stock ? stock.qty > 0 : false;
-          } else {
-            const totalQty = this.ssInventory
-              .filter(item => item.size === resolvedSize)
-              .reduce((a, b) => a + b.qty, 0);
-            inStock = totalQty > 0;
+    // Apply to size buttons — for auto-size fields, dynamically show/hide with Adult/Youth groups
+    const autoSizeField = this.findAutoSizeField();
+    if (autoSizeField) {
+      this.renderAutoSizeField(autoSizeField, resolvedSelectedColor, resolveColorName, resolveSizeName);
+    } else if (sizeField) {
+      // Legacy: static size field — just enable/disable buttons
+      const sizeEl = this.container.querySelector(`[data-field-id="${sizeField.id}"]`);
+      if (sizeEl) {
+        const buttons = sizeEl.querySelectorAll('button[data-value], input[type="radio"]');
+        buttons.forEach(btn => {
+          const sizeName = btn.dataset?.value || btn.value;
+          if (!sizeName) return;
+          const resolvedSize = resolveSizeName(sizeName);
+          let inStock = true;
+          if (resolvedSize) {
+            if (resolvedSelectedColor) {
+              const stock = this.ssInventory.find(item => item.size === resolvedSize && item.color === resolvedSelectedColor);
+              inStock = stock ? stock.qty > 0 : false;
+            } else {
+              const totalQty = this.ssInventory
+                .filter(item => item.size === resolvedSize)
+                .reduce((a, b) => a + b.qty, 0);
+              inStock = totalQty > 0;
+            }
           }
-        }
+          btn.disabled = !inStock;
+          btn.style.opacity = inStock ? '1' : '0.3';
+          btn.style.cursor = inStock ? 'pointer' : 'not-allowed';
+          btn.style.textDecoration = inStock ? 'none' : 'line-through';
+        });
+      }
+    }
+  }
 
-        btn.disabled = !inStock;
-        btn.style.opacity = inStock ? '1' : '0.3';
-        btn.style.cursor = inStock ? 'pointer' : 'not-allowed';
-        btn.style.textDecoration = inStock ? 'none' : 'line-through';
+  renderAutoSizeField(sizeField, selectedColor, resolveColorName, resolveSizeName) {
+    const sizeEl = this.container.querySelector(`[data-field-id="${sizeField.id}"]`);
+    if (!sizeEl) return;
+
+    const allSizes = sizeField.optionsJson || [];
+    if (allSizes.length === 0) return;
+
+    // Determine which sizes are available/in-stock
+    const sizeOrder = ['XS','S','M','L','XL','2XL','3XL','4XL','5XL','6XL','YXS','YS','YM','YL','YXL'];
+    const isYouthSize = (s) => s.startsWith('Y') && s !== 'Yellow';
+    const availableSizes = [];
+
+    allSizes.forEach(size => {
+      const resolvedSize = resolveSizeName ? resolveSizeName(size) : size;
+      let inStock = false;
+      let qty = 0;
+
+      if (this.ssInventory && this.ssInventory.length > 0 && resolvedSize) {
+        if (selectedColor) {
+          const stock = this.ssInventory.find(item => item.size === resolvedSize && item.color === selectedColor);
+          inStock = stock ? stock.qty > 0 : false;
+          qty = stock ? stock.qty : 0;
+        } else {
+          qty = this.ssInventory
+            .filter(item => item.size === resolvedSize)
+            .reduce((a, b) => a + b.qty, 0);
+          inStock = qty > 0;
+        }
+      } else if (!this.ssInventory || this.ssInventory.length === 0) {
+        // No inventory loaded yet — show all sizes as available
+        inStock = true;
+      }
+
+      availableSizes.push({ size, inStock, qty });
+    });
+
+    // Split into Adult and Youth
+    const adultSizes = availableSizes.filter(s => !isYouthSize(s.size));
+    const youthSizes = availableSizes.filter(s => isYouthSize(s.size));
+    const currentValue = this.fieldValues[sizeField.id] || '';
+    const isRequired = sizeField.required ? 'required' : '';
+
+    // Build HTML
+    let html = '';
+    const renderSizeGroup = (label, sizes) => {
+      if (sizes.length === 0) return '';
+      let groupHtml = `<div style="margin-bottom:8px;">`;
+      if (label) {
+        groupHtml += `<div style="font-size:11px;font-weight:600;color:var(--color-base-text,#888);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">${label}</div>`;
+      }
+      groupHtml += `<div style="display:flex;flex-wrap:wrap;gap:6px;">`;
+      sizes.forEach(({ size, inStock }) => {
+        const isActive = currentValue === size;
+        const activeStyle = isActive
+          ? 'border-color:#1a1a1a;background:#f3f4f6;font-weight:600;'
+          : 'border-color:#e5e7eb;background:#fff;font-weight:normal;';
+        const stockStyle = inStock
+          ? `opacity:1;cursor:pointer;`
+          : `opacity:0.3;cursor:not-allowed;text-decoration:line-through;`;
+        groupHtml += `
+          <button type="button"
+            class="variantiq-pill-btn variantiq-autosize-btn"
+            data-field-id="${sizeField.id}"
+            data-value="${size}"
+            ${!inStock ? 'disabled' : ''}
+            style="padding:6px 14px;border:2px solid;border-radius:6px;font-size:13px;outline:none;transition:border-color 0.15s,background 0.15s;${activeStyle}${stockStyle}"
+          >${size}</button>`;
       });
+      groupHtml += `</div></div>`;
+      return groupHtml;
+    };
+
+    const requiredMark = sizeField.required ? '<span class="required">*</span>' : '';
+    html = `
+      <legend class="form__label" style="width:100%;margin-bottom:0.8rem;text-align:left;display:block;">${sizeField.label}${requiredMark}</legend>
+      ${renderSizeGroup(youthSizes.length > 0 ? 'Adult Sizes' : '', adultSizes)}
+      ${renderSizeGroup('Youth Sizes', youthSizes)}
+      <input type="hidden" name="_vq_${this.instanceId}_${sizeField.id}" value="${currentValue}" id="vq-${this.instanceId}-${sizeField.id}" ${isRequired} class="variantiq-pill-input" />
+    `;
+
+    sizeEl.innerHTML = html;
+
+    // Show the field if a color is selected and inventory is loaded
+    if (selectedColor && this.ssInventory && this.ssInventory.length > 0) {
+      sizeEl.style.display = '';
+    } else if (!selectedColor) {
+      sizeEl.style.display = 'none';
+      // Clear the size value if no color selected
+      this.fieldValues[sizeField.id] = '';
     }
   }
 
