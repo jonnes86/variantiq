@@ -456,6 +456,7 @@ class VariantIQFields {
       // Check if this field has S&S style mapping — if so, fetch inventory for the selected style
       const swatchField = this.templateData.template.fields.find(f => f.id === fieldId);
       const swatchStyleId = swatchField ? this.getSSStyleIdForSelection(swatchField, value) : null;
+      console.log(`[VariantIQ] Swatch click: field=${swatchField?.label}, value=${value}, styleId=${swatchStyleId}`);
       if (swatchStyleId) {
         this.fetchSSInventoryForStyle(swatchStyleId);
       }
@@ -1212,7 +1213,17 @@ class VariantIQFields {
   }
 
   applySSInventoryRules() {
-    if (!this.ssInventory || this.ssInventory.length === 0) return;
+    if (!this.ssInventory || this.ssInventory.length === 0) {
+      console.log('[VariantIQ] applySSInventoryRules: no inventory data, skipping');
+      // Still try to render auto-size field (hidden state)
+      const autoSizeField = this.findAutoSizeField();
+      if (autoSizeField) {
+        const sizeEl = this.container.querySelector(`[data-field-id="${autoSizeField.id}"]`);
+        if (sizeEl) sizeEl.style.display = 'none';
+      }
+      return;
+    }
+    console.log(`[VariantIQ] applySSInventoryRules: ${this.ssInventory.length} inventory items`);
 
     const { fields } = this.templateData.template;
     const colorField = fields.find(f => this.isColorField(f));
@@ -1318,6 +1329,7 @@ class VariantIQFields {
 
     // Apply to size buttons — for auto-size fields, dynamically show/hide with Adult/Youth groups
     const autoSizeField = this.findAutoSizeField();
+    console.log(`[VariantIQ] applySSInventoryRules: autoSizeField=${autoSizeField?.label}, sizeField=${sizeField?.label}, selectedColor=${resolvedSelectedColor}`);
     if (autoSizeField) {
       this.renderAutoSizeField(autoSizeField, resolvedSelectedColor, resolveColorName, resolveSizeName);
     } else if (sizeField) {
