@@ -84,15 +84,30 @@ export async function loader({ request }: LoaderFunctionArgs) {
       localInventory = link.localInventoryJson as Record<string, number> | null;
     }
 
-    // Fetch from S&S Activewear
-    const ssUrl = `https://api.ssactivewear.com/v2/products/?partnumber=${encodeURIComponent(ssStyleId)}`;
+    // Fetch from S&S Activewear - products + styles in parallel
+    const ssProductsUrl = `https://api.ssactivewear.com/v2/products/?partnumber=${encodeURIComponent(ssStyleId)}`;
+    const ssStylesUrl = `https://api.ssactivewear.com/v2/styles/?partnumber=${encodeURIComponent(ssStyleId)}`;
     const auth = Buffer.from(`${ssApiUsername}:${ssApiKey}`).toString('base64');
+    const authHeaders = { "Authorization": `Basic ${auth}` };
 
-    const response = await fetch(ssUrl, {
-      headers: {
-        "Authorization": `Basic ${auth}`,
-      },
-    });
+    const [response, stylesResponse] = await Promise.all([
+      fetch(ssProductsUrl, { headers: authHeaders }),
+      fetch(ssStylesUrl, { headers: authHeaders }).catch(() => null),
+    ]);
+
+    // Try to extract the full title from the styles endpoint
+    let styleFullTitle = '';
+    if (stylesResponse && stylesResponse.ok) {
+      try {
+        const stylesData = await stylesResponse.json();
+        if (Array.isArray(stylesData) && stylesData.length > 0) {
+          styleFullTitle = stylesData[0].title || stylesData[0].baseCategory || '';
+          console.log("[S&S Styles API] Title:", styleFullTitle, "Keys:", Object.keys(stylesData[0]).join(', '));
+        }
+      } catch (e) {
+        console.warn("[S&S Styles API] Parse error:", e);
+      }
+    }
 
     if (!response.ok) {
       const errorBody = await response.text().catch(() => "(no body)");
@@ -173,7 +188,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     // Extract style/brand/title from first raw data item for display
     const styleName = items.length > 0 ? items[0].styleName : '';
     const brandName = items.length > 0 ? items[0].brandName : '';
-    const styleTitle = data.length > 0 ? (data[0].title || data[0].styleName || '') : '';
+    const styleTitle = styleFullTitle || (data.length > 0 ? (data[0].title || data[0].styleName || '') : '');
 
     // Add local inventory overrides
     if (localInventory) {
