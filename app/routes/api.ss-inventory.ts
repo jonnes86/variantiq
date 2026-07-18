@@ -118,14 +118,17 @@ export async function loader({ request }: LoaderFunctionArgs) {
     // Sanitize and format data
     // The S&S API returns an array of variants for the style
     // Log first item keys for debugging
+    let rawSample: any = null;
     if (data.length > 0) {
       console.log("[S&S API] Sample item keys:", Object.keys(data[0]).join(', '));
-      console.log("[S&S API] Sample brand/style:", JSON.stringify({
-        brandName: data[0].brandName, styleName: data[0].styleName,
-        brand: data[0].brand, style: data[0].style,
-        styleNumber: data[0].styleNumber, title: data[0].title,
-        brandId: data[0].brandId, styleId: data[0].styleId,
-      }));
+      // Capture a subset of raw fields for debugging
+      rawSample = {};
+      for (const key of Object.keys(data[0])) {
+        const val = data[0][key];
+        if (typeof val === 'string' || typeof val === 'number' || typeof val === 'boolean' || val === null) {
+          rawSample[key] = val;
+        }
+      }
     }
     let items = data
       // Filter out drop-ship only items
@@ -195,7 +198,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       items = items.filter((item: any) => allowed.has(item.color));
     }
 
-    return json({ items, styleName, brandName, styleTitle }, { headers: corsHeaders });
+    return json({ items, styleName, brandName, styleTitle, rawSample }, { headers: corsHeaders });
 
   } catch (error: any) {
     console.error("[S&S Inventory API] Error:", error);
