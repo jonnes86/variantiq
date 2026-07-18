@@ -837,10 +837,20 @@ export async function action({ request, params }: ActionFunctionArgs) {
   // S&S Import: create a single field per S&S product (colors as options, sizes embedded)
   if (intent === "ssImportFields") {
     const colors: string[] = JSON.parse(String(form.get("colors") || "[]"));
-    const sizes: string[] = JSON.parse(String(form.get("sizes") || "[]"));
+    let sizes: string[] = JSON.parse(String(form.get("sizes") || "[]"));
     const priceAdjustments: Record<string, string> = JSON.parse(String(form.get("priceAdjustments") || "{}"));
     const productName = String(form.get("productName") || "");
     const styleId = String(form.get("styleId") || "");
+
+    // Auto-detect youth products and prefix sizes
+    const isYouthProduct = /youth|kids|toddler|infant|child/i.test(productName);
+    if (isYouthProduct) {
+      const youthSizeMap: Record<string, string> = {
+        'XS': 'Youth XS', 'S': 'Youth S', 'M': 'Youth M',
+        'L': 'Youth L', 'XL': 'Youth XL', '2XL': 'Youth 2XL',
+      };
+      sizes = sizes.map(s => youthSizeMap[s] || `Youth ${s}`);
+    }
 
     if (!productName) return json({ error: "Product name required" }, { status: 400 });
     if (colors.length === 0) return json({ error: "No colors selected" }, { status: 400 });
@@ -911,7 +921,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
     // Auto-create or update a Size field with sizes from this S&S import
     if (sizes.length > 0) {
-      const sizeOrder = ['XS','S','M','L','XL','2XL','3XL','4XL','5XL','6XL','YXS','YS','YM','YL','YXL'];
+      const sizeOrder = ['XS','S','M','L','XL','2XL','3XL','4XL','5XL','6XL','Youth XS','Youth S','Youth M','Youth L','Youth XL','Youth 2XL','YXS','YS','YM','YL','YXL'];
       const sortSize = (a: string, b: string) => {
         const ai = sizeOrder.indexOf(a); const bi = sizeOrder.indexOf(b);
         if (ai !== -1 && bi !== -1) return ai - bi;

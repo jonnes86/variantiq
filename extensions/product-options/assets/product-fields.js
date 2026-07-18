@@ -1254,11 +1254,15 @@ class VariantIQFields {
       return { ssName: null, matchType: 'none' };
     };
 
-    // Helper: resolve size name (simpler — exact then fuzzy)
+    // Helper: resolve size name (simpler — exact then fuzzy, with Youth prefix stripping)
     const resolveSizeName = (localName) => {
       const exactMatch = this.ssInventory.find(item => item.size === localName);
       if (exactMatch) return localName;
-      const lowerLocal = localName.toLowerCase();
+      // Strip "Youth " prefix for matching (S&S returns "S" not "Youth S")
+      const stripped = localName.startsWith('Youth ') ? localName.replace('Youth ', '') : localName;
+      const strippedMatch = this.ssInventory.find(item => item.size === stripped);
+      if (strippedMatch) return strippedMatch.size;
+      const lowerLocal = stripped.toLowerCase();
       const fuzzyMatch = this.ssInventory.find(item => item.size.toLowerCase() === lowerLocal);
       if (fuzzyMatch) return fuzzyMatch.size;
       return null;
@@ -1370,8 +1374,8 @@ class VariantIQFields {
     if (allSizes.length === 0) return;
 
     // Determine which sizes are available/in-stock
-    const sizeOrder = ['XS','S','M','L','XL','2XL','3XL','4XL','5XL','6XL','YXS','YS','YM','YL','YXL'];
-    const isYouthSize = (s) => s.startsWith('Y') && s !== 'Yellow';
+    const sizeOrder = ['XS','S','M','L','XL','2XL','3XL','4XL','5XL','6XL','Youth XS','Youth S','Youth M','Youth L','Youth XL','Youth 2XL','YXS','YS','YM','YL','YXL'];
+    const isYouthSize = (s) => s.startsWith('Youth ') || (s.startsWith('Y') && s !== 'Yellow' && !s.startsWith('Youth'));
     const availableSizes = [];
 
     allSizes.forEach(size => {
