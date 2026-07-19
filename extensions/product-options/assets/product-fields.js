@@ -31,6 +31,7 @@ class VariantIQFields {
         fieldCount: this.templateData?.template?.fields?.length,
         ruleCount: this.templateData?.template?.rules?.length,
       }));
+      this.detectThemeStyles();
       this.render();
       this.attachEventListeners();
     } catch (error) {
@@ -54,6 +55,75 @@ class VariantIQFields {
         this.basePrice = parseFloat(match[0].replace(/,/g, ''));
       }
     }
+  }
+
+  detectThemeStyles() {
+    // Find the Shopify theme's native variant/option buttons and read their styles
+    const themeBtn = document.querySelector('.product-form__input label, .product-form__input .swatch-input label, variant-radios label, .variant-picker label, .variant-input label');
+    if (themeBtn) {
+      const cs = window.getComputedStyle(themeBtn);
+      this.themeBtn = {
+        borderRadius: cs.borderRadius || '0px',
+        borderWidth: cs.borderWidth || '1px',
+        borderStyle: cs.borderStyle || 'solid',
+        borderColor: cs.borderColor || '#e5e7eb',
+        padding: cs.padding || '8px 16px',
+        fontSize: cs.fontSize || '14px',
+        fontFamily: cs.fontFamily || 'inherit',
+        fontWeight: cs.fontWeight || 'normal',
+        letterSpacing: cs.letterSpacing || 'normal',
+        textTransform: cs.textTransform || 'none',
+        background: cs.backgroundColor || '#ffffff',
+        color: cs.color || '#1a1a1a',
+        minWidth: cs.minWidth || 'auto',
+        minHeight: cs.minHeight || 'auto',
+        lineHeight: cs.lineHeight || '1.3',
+      };
+      console.log('[VariantIQ] Detected theme button styles:', this.themeBtn);
+    } else {
+      // Fallback defaults
+      this.themeBtn = {
+        borderRadius: '0px',
+        borderWidth: '1px',
+        borderStyle: 'solid',
+        borderColor: '#e5e7eb',
+        padding: '8px 16px',
+        fontSize: '14px',
+        fontFamily: 'inherit',
+        fontWeight: 'normal',
+        letterSpacing: 'normal',
+        textTransform: 'none',
+        background: '#ffffff',
+        color: '#1a1a1a',
+        minWidth: 'auto',
+        minHeight: 'auto',
+        lineHeight: '1.3',
+      };
+      console.log('[VariantIQ] No theme buttons found, using defaults');
+    }
+    // Also detect the active/selected state by finding a checked variant
+    const activeLabel = document.querySelector('.product-form__input input:checked + label, variant-radios input:checked + label, .variant-picker input:checked + label');
+    if (activeLabel) {
+      const acs = window.getComputedStyle(activeLabel);
+      this.themeBtnActive = {
+        borderColor: acs.borderColor || '#1a1a1a',
+        background: acs.backgroundColor || '#f3f4f6',
+        fontWeight: acs.fontWeight || '600',
+        color: acs.color || '#1a1a1a',
+      };
+    } else {
+      this.themeBtnActive = {
+        borderColor: '#1a1a1a',
+        background: '#f3f4f6',
+        fontWeight: '600',
+        color: '#1a1a1a',
+      };
+    }
+  }
+
+  getThemeBtnStyle() {
+    const t = this.themeBtn;
+    return `display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:${t.padding};border-radius:${t.borderRadius};cursor:pointer;border:${t.borderWidth} ${t.borderStyle} ${t.borderColor};background:${t.background};font-size:${t.fontSize};font-family:${t.fontFamily};font-weight:${t.fontWeight};letter-spacing:${t.letterSpacing};text-transform:${t.textTransform};line-height:${t.lineHeight};color:${t.color};min-width:${t.minWidth};min-height:${t.minHeight};outline:none;transition:all 0.15s;white-space:nowrap;box-sizing:border-box;`;
   }
 
   async fetchTemplate() {
@@ -274,7 +344,7 @@ class VariantIQFields {
           class="variantiq-pill-btn"
           data-field-id="${field.id}"
           data-value="${option}"
-          style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:9999px;cursor:pointer;border:2px solid #e5e7eb;background:#ffffff;font-size:14px;line-height:1.3;color:#1a1a1a;outline:none;transition:all 0.15s;white-space:nowrap;"
+          style="${this.getThemeBtnStyle()}"
           aria-label="${option}"
         ><span>${option}${optionPrice}</span></button>
       `;
@@ -478,10 +548,13 @@ class VariantIQFields {
       if (hidden) hidden.value = value;
 
       // Toggle active style on pills
+      const ta = this.themeBtnActive;
+      const t = this.themeBtn;
       fieldEl.querySelectorAll('.variantiq-pill-btn').forEach(b => {
-        b.style.borderColor = b === btn ? '#1a1a1a' : '#e5e7eb';
-        b.style.background = b === btn ? '#f3f4f6' : '#ffffff';
-        b.style.fontWeight = b === btn ? '600' : 'normal';
+        b.style.borderColor = b === btn ? ta.borderColor : t.borderColor;
+        b.style.background = b === btn ? ta.background : t.background;
+        b.style.fontWeight = b === btn ? ta.fontWeight : t.fontWeight;
+        b.style.color = b === btn ? ta.color : t.color;
       });
 
       // Store value and re-evaluate
@@ -1420,8 +1493,8 @@ class VariantIQFields {
       sizes.forEach(({ size, inStock }) => {
         const isActive = currentValue === size;
         const activeStyle = isActive
-          ? 'border-color:#1a1a1a;background:#f3f4f6;font-weight:600;'
-          : 'border-color:#e5e7eb;background:#fff;font-weight:normal;';
+          ? `border-color:${this.themeBtnActive.borderColor};background:${this.themeBtnActive.background};font-weight:${this.themeBtnActive.fontWeight};color:${this.themeBtnActive.color};`
+          : `border-color:${this.themeBtn.borderColor};background:${this.themeBtn.background};font-weight:${this.themeBtn.fontWeight};color:${this.themeBtn.color};`;
         const stockStyle = inStock
           ? `opacity:1;cursor:pointer;`
           : `opacity:0.3;cursor:not-allowed;text-decoration:line-through;`;
@@ -1431,7 +1504,7 @@ class VariantIQFields {
             data-field-id="${sizeField.id}"
             data-value="${size}"
             ${!inStock ? 'disabled' : ''}
-            style="padding:6px 14px;border:2px solid;border-radius:6px;font-size:13px;outline:none;transition:border-color 0.15s,background 0.15s;${activeStyle}${stockStyle}"
+            style="display:inline-flex;align-items:center;justify-content:center;padding:${this.themeBtn.padding};border-radius:${this.themeBtn.borderRadius};border:${this.themeBtn.borderWidth} ${this.themeBtn.borderStyle} ${this.themeBtn.borderColor};font-size:${this.themeBtn.fontSize};font-family:${this.themeBtn.fontFamily};letter-spacing:${this.themeBtn.letterSpacing};text-transform:${this.themeBtn.textTransform};line-height:${this.themeBtn.lineHeight};min-width:${this.themeBtn.minWidth};min-height:${this.themeBtn.minHeight};outline:none;transition:all 0.15s;box-sizing:border-box;${activeStyle}${stockStyle}"
           >${size}</button>`;
       });
       groupHtml += `</div></div>`;
