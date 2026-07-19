@@ -59,7 +59,20 @@ class VariantIQFields {
 
   detectThemeStyles() {
     // Find the Shopify theme's native variant/option buttons and read their styles
-    const themeBtn = document.querySelector('.product-form__input label, .product-form__input .swatch-input label, variant-radios label, .variant-picker label, .variant-input label');
+    // Covers: Dawn, Debut, Prestige, Turbo, Empire, Warehouse, and most other themes
+    const themeBtnSelectors = [
+      'variant-radios label',
+      '.product-form__input label',
+      '.variant-picker label',
+      '.variant-input label',
+      '.swatch-element label',
+      '.variant-picker__option label',
+      '.SingleOptionSelector + label',
+      '.product-option label',
+      'fieldset.product-form__input label',
+      '.selector-wrapper label.swatch',
+    ];
+    const themeBtn = document.querySelector(themeBtnSelectors.join(', '));
     if (themeBtn) {
       const cs = window.getComputedStyle(themeBtn);
       this.themeBtn = {
@@ -102,7 +115,14 @@ class VariantIQFields {
       console.log('[VariantIQ] No theme buttons found, using defaults');
     }
     // Also detect the active/selected state by finding a checked variant
-    const activeLabel = document.querySelector('.product-form__input input:checked + label, variant-radios input:checked + label, .variant-picker input:checked + label');
+    const activeLabelSelectors = [
+      'variant-radios input:checked + label',
+      '.product-form__input input:checked + label',
+      '.variant-picker input:checked + label',
+      '.variant-input input:checked + label',
+      '.swatch-element input:checked + label',
+    ];
+    const activeLabel = document.querySelector(activeLabelSelectors.join(', '));
     if (activeLabel) {
       const acs = window.getComputedStyle(activeLabel);
       this.themeBtnActive = {
