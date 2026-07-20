@@ -60,17 +60,15 @@ class VariantIQFields {
   detectThemeStyles() {
     // Find the Shopify theme's native variant/option buttons and read their styles
     // Covers: Dawn, Debut, Prestige, Turbo, Empire, Warehouse, and most other themes
+    // IMPORTANT: Target UNCHECKED labels to get the normal/unselected style
+    // Using plain 'label' could match a SELECTED variant's label (black bg)
     const themeBtnSelectors = [
-      'variant-radios label',
-      '.product-form__input label',
-      '.variant-picker label',
-      '.variant-input label',
-      '.swatch-element label',
-      '.variant-picker__option label',
-      '.SingleOptionSelector + label',
-      '.product-option label',
-      'fieldset.product-form__input label',
-      '.selector-wrapper label.swatch',
+      'variant-radios input:not(:checked) + label',
+      '.product-form__input input:not(:checked) + label',
+      '.variant-picker input:not(:checked) + label',
+      '.variant-input input:not(:checked) + label',
+      '.swatch-element input:not(:checked) + label',
+      '.variant-picker__option input:not(:checked) + label',
     ];
     const themeBtn = document.querySelector(themeBtnSelectors.join(', '));
     if (themeBtn) {
