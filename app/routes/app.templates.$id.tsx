@@ -954,7 +954,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
           where: { id: existingSizeField.id },
           data: {
             optionsJson: merged,
-            ssStyleMappingJson: { _autoSize: true },
+            ssStyleMappingJson: { _autoSize: true, _styleId: styleId },
           },
         });
       } else {
@@ -970,7 +970,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
             displayStyle: 'default',
             required: true,
             sort: updatedMaxSort + 1,
-            ssStyleMappingJson: { _autoSize: true },
+            ssStyleMappingJson: { _autoSize: true, _styleId: styleId },
           },
         });
       }

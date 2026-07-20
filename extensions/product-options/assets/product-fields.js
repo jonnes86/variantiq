@@ -196,11 +196,23 @@ class VariantIQFields {
   // Get the _styleId for an S&S field when any option is selected
   // Handles both formats: { _styleId: "00708" } (import) and { "OptionA": "00708" } (manual)
   getSSStyleIdForSelection(field, selectedValue) {
-    if (!field.ssStyleMappingJson) return null;
-    // Import format: _styleId applies to ALL options on this field
-    if (field.ssStyleMappingJson._styleId) return field.ssStyleMappingJson._styleId;
-    // Manual format: each option maps to a different style
-    if (field.ssStyleMappingJson[selectedValue]) return field.ssStyleMappingJson[selectedValue];
+    if (field.ssStyleMappingJson) {
+      // Import format: _styleId applies to ALL options on this field
+      if (field.ssStyleMappingJson._styleId) return field.ssStyleMappingJson._styleId;
+      // Manual format: each option maps to a different style
+      if (field.ssStyleMappingJson[selectedValue]) return field.ssStyleMappingJson[selectedValue];
+    }
+    // Fallback: if this field doesn't have a mapping, check if ANY other field
+    // on the template has a _styleId (handles legacy imports where mapping wasn't saved on the color field)
+    if (this.templateData && this.templateData.template) {
+      const otherField = this.templateData.template.fields.find(f =>
+        f.id !== field.id && f.ssStyleMappingJson && f.ssStyleMappingJson._styleId
+      );
+      if (otherField) {
+        console.log(`[VariantIQ] getSSStyleIdForSelection: fallback from "${field.label}" to "${otherField.label}" styleId=${otherField.ssStyleMappingJson._styleId}`);
+        return otherField.ssStyleMappingJson._styleId;
+      }
+    }
     return null;
   }
 
