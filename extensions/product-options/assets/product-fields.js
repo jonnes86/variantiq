@@ -583,14 +583,15 @@ class VariantIQFields {
       const hidden = fieldEl.querySelector('.variantiq-pill-input');
       if (hidden) hidden.value = value;
 
-      // Toggle active style on pills
+      // Toggle active style on pills (use data-value for reliable comparison)
       const ta = this.themeBtnActive;
       const t = this.themeBtn;
       fieldEl.querySelectorAll('.variantiq-pill-btn').forEach(b => {
-        b.style.borderColor = b === btn ? ta.borderColor : t.borderColor;
-        b.style.background = b === btn ? ta.background : t.background;
-        b.style.fontWeight = b === btn ? ta.fontWeight : t.fontWeight;
-        b.style.color = b === btn ? ta.color : t.color;
+        const isActive = b.dataset.value === value;
+        b.style.borderColor = isActive ? ta.borderColor : t.borderColor;
+        b.style.background = isActive ? ta.background : t.background;
+        b.style.fontWeight = isActive ? ta.fontWeight : t.fontWeight;
+        b.style.color = isActive ? ta.color : t.color;
       });
 
       // Store value and re-evaluate
