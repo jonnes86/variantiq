@@ -556,13 +556,17 @@ class VariantIQFields {
       this.evaluateRules();
 
       // Check if this field has S&S style mapping — if so, fetch inventory for the selected style
+      // But skip if this is the auto-size field (only color fields should trigger inventory fetch)
       const swatchField = this.templateData.template.fields.find(f => f.id === fieldId);
-      const swatchStyleId = swatchField ? this.getSSStyleIdForSelection(swatchField, value) : null;
-      console.log(`[VariantIQ] Swatch click: field=${swatchField?.label}, value=${value}, styleId=${swatchStyleId}`);
+      const isAutoSizeField = swatchField && swatchField.ssStyleMappingJson && swatchField.ssStyleMappingJson._autoSize;
+      const swatchStyleId = (!isAutoSizeField && swatchField) ? this.getSSStyleIdForSelection(swatchField, value) : null;
+      console.log(`[VariantIQ] Swatch click: field=${swatchField?.label}, value=${value}, styleId=${swatchStyleId}, isAutoSize=${!!isAutoSizeField}`);
       if (swatchStyleId) {
         this.fetchSSInventoryForStyle(swatchStyleId);
       }
-      this.applySSInventoryRules();
+      if (!isAutoSizeField) {
+        this.applySSInventoryRules();
+      }
       this.updateProgressBar();
     });
 
@@ -594,12 +598,16 @@ class VariantIQFields {
       this.evaluateRules();
 
       // Check if this field has S&S style mapping — if so, fetch inventory for the selected style
+      // But skip if this is the auto-size field (only color fields should trigger inventory fetch)
       const pillField = this.templateData.template.fields.find(f => f.id === fieldId);
-      const pillStyleId = pillField ? this.getSSStyleIdForSelection(pillField, value) : null;
+      const isPillAutoSize = pillField && pillField.ssStyleMappingJson && pillField.ssStyleMappingJson._autoSize;
+      const pillStyleId = (!isPillAutoSize && pillField) ? this.getSSStyleIdForSelection(pillField, value) : null;
       if (pillStyleId) {
         this.fetchSSInventoryForStyle(pillStyleId);
       }
-      this.applySSInventoryRules();
+      if (!isPillAutoSize) {
+        this.applySSInventoryRules();
+      }
       this.updateProgressBar();
     });
 
