@@ -1,6 +1,6 @@
 import { json, redirect } from "@remix-run/node";
-import type { LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
-import { useLoaderData, Form, useNavigation, Link } from "@remix-run/react";
+import type { LoaderFunctionArgs } from "@remix-run/node";
+import { useLoaderData } from "@remix-run/react";
 import {
   Page,
   Card,
@@ -17,8 +17,8 @@ import {
 import { authenticate } from "../shopify.server";
 import { detectPlan, isPro } from "../billing.server";
 
-const APP_URL =
-  process.env.SHOPIFY_APP_URL || "https://variantiq.saasyllama.com";
+// App handle from the Shopify admin URL (admin.shopify.com/store/{shop}/apps/{handle})
+const APP_HANDLE = "variantiq-3";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const { admin, session } = await authenticate.admin(request);
@@ -31,92 +31,17 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   const url = new URL(request.url);
   const error = url.searchParams.get("error");
-  return json({ error });
-}
 
-export async function action({ request }: ActionFunctionArgs) {
-  const { admin } = await authenticate.admin(request);
-  const form = await request.formData();
-  const planType = String(form.get("planType") || "monthly");
-  const isAnnual = planType === "annual";
-  const returnUrl = `${APP_URL}/app/billing/callback`;
+  // Build the managed pricing URL for the merchant's store
+  // Extract shop handle from session.shop (e.g., "mystore.myshopify.com" → "mystore")
+  const shopHandle = session.shop.replace(".myshopify.com", "");
+  const pricingUrl = `https://admin.shopify.com/store/${shopHandle}/charges/${APP_HANDLE}/pricing_plans`;
 
-  try {
-    const response = await admin.graphql(
-      `#graphql
-      mutation CreateSubscription(
-        $name: String!
-        $lineItems: [AppSubscriptionLineItemInput!]!
-        $returnUrl: URL!
-        $trialDays: Int
-      ) {
-        appSubscriptionCreate(
-          name: $name
-          lineItems: $lineItems
-          returnUrl: $returnUrl
-          trialDays: $trialDays
-          test: false
-        ) {
-          appSubscription { id status }
-          confirmationUrl
-          userErrors { field message }
-        }
-      }`,
-      {
-        variables: {
-          name: isAnnual
-            ? "VariantIQ Pro (Annual)"
-            : "VariantIQ Pro (Monthly)",
-          returnUrl,
-          trialDays: 14,
-          lineItems: [
-            {
-              plan: {
-                appRecurringPricingDetails: {
-                  price: {
-                    amount: isAnnual ? "99.99" : "9.99",
-                    currencyCode: "USD",
-                  },
-                  interval: isAnnual ? "ANNUAL" : "EVERY_30_DAYS",
-                },
-              },
-            },
-          ],
-        },
-      }
-    );
-
-    const data = await response.json();
-    const result = data?.data?.appSubscriptionCreate;
-
-    if (result?.userErrors?.length > 0) {
-      const errorMsg = result.userErrors
-        .map((e: any) => e.message)
-        .join(", ");
-      return redirect(
-        `/app/billing?error=${encodeURIComponent(errorMsg)}`
-      );
-    }
-
-    if (result?.confirmationUrl) {
-      return redirect(result.confirmationUrl);
-    }
-
-    return redirect(
-      "/app/billing?error=Could+not+create+subscription.+Please+try+again."
-    );
-  } catch (err) {
-    console.error("[VariantIQ] Billing action error:", err);
-    return redirect(
-      "/app/billing?error=An+unexpected+error+occurred.+Please+try+again."
-    );
-  }
+  return json({ error, pricingUrl });
 }
 
 export default function BillingPage() {
-  const { error } = useLoaderData<typeof loader>();
-  const navigation = useNavigation();
-  const isSubmitting = navigation.state !== "idle";
+  const { error, pricingUrl } = useLoaderData<typeof loader>();
 
   return (
     <Page
@@ -175,17 +100,14 @@ export default function BillingPage() {
                 <List.Item>Webhook integrations (Zapier, Make, etc.)</List.Item>
               </List>
 
-              <Form method="post">
-                <input type="hidden" name="planType" value="monthly" />
-                <Button
-                  submit
-                  variant="primary"
-                  fullWidth
-                  loading={isSubmitting}
-                >
-                  Start Free Trial — Monthly
-                </Button>
-              </Form>
+              <Button
+                variant="primary"
+                fullWidth
+                url={pricingUrl}
+                target="_top"
+              >
+                Start Free Trial — Monthly
+              </Button>
             </BlockStack>
           </Card>
 
@@ -220,18 +142,15 @@ export default function BillingPage() {
                 <List.Item>Priority support</List.Item>
               </List>
 
-              <Form method="post">
-                <input type="hidden" name="planType" value="annual" />
-                <Button
-                  submit
-                  variant="primary"
-                  tone="success"
-                  fullWidth
-                  loading={isSubmitting}
-                >
-                  Start Free Trial — Annual
-                </Button>
-              </Form>
+              <Button
+                variant="primary"
+                tone="success"
+                fullWidth
+                url={pricingUrl}
+                target="_top"
+              >
+                Start Free Trial — Annual
+              </Button>
             </BlockStack>
           </Card>
         </InlineGrid>
