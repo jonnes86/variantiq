@@ -39,6 +39,7 @@ const shopify = shopifyApp({
   future: {
     unstable_newEmbeddedAuthStrategy: true,
     removeRest: true,
+    expiringOfflineAccessTokens: true,
   },
 
   ...(process.env.SHOP_CUSTOM_DOMAIN

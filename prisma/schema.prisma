@@ -15,6 +15,7 @@ model Session {
   scope         String?
   expires       DateTime?
   accessToken   String   @default("")
+  refreshToken  String?
   userId        BigInt?
   firstName     String?
   lastName      String?
@@ -80,6 +81,7 @@ model Field {
   variantMappingJson Json?
   swatchesJson       Json?
   displayStyle       String   @default("default")
+  ssStyleMappingJson Json?
   required    Boolean  @default(false)
   sort        Int      @default(0)
   template    Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
